@@ -58,6 +58,9 @@ function sendFile(res, filePath, download = false) {
   const ext = path.extname(filePath);
   const headers = { "Content-Type": MIME_TYPES[ext] || "application/octet-stream" };
   if (download) headers["Content-Disposition"] = `attachment; filename="${path.basename(filePath)}"`;
+  if ([".html", ".css", ".js"].includes(ext)) {
+    headers["Cache-Control"] = "no-store, max-age=0";
+  }
   res.writeHead(200, headers);
   fs.createReadStream(filePath).pipe(res);
 }
