@@ -18,10 +18,10 @@ const state = {
 
 const activities = [
   {
-    title: "Sleep",
+    title: "Sleep and Awake",
     key: "sleep",
     icon: "moon",
-    helper: "Track asleep and awake moments.",
+    helper: "Baby is awaking.",
     actions: [
       { label: "Asleep", icon: "asleep", payload: { type: "sleep", status: "asleep" } },
       { label: "Awake", icon: "awake", payload: { type: "sleep", status: "awake" } }
@@ -174,11 +174,11 @@ function renderAll() {
 function renderActivities() {
   const visibleActivities = activities.filter((activity) => state.visibleCards.includes(activity.key));
   document.getElementById("activity-grid").innerHTML = visibleActivities.map((activity) => `
-    <article class="activity-card" style="--card-image: url('/assets/activity/header-${activity.key}.png')">
+    <article class="activity-card" data-activity-card="${activity.key}" style="--card-image: url('/assets/activity/header-${activity.key}.png')">
       <div class="card-top card-header">
         <div>
-          <h3>${activity.title}</h3>
-          <p>${activity.helper}</p>
+          <h3 data-card-title="${activity.key}">${activity.title}</h3>
+          <p data-card-subtitle="${activity.key}">${activity.helper}</p>
         </div>
         <button class="card-more" type="button" data-more-card="${activity.key}" aria-label="Show today's ${activity.title} logs">
           <span></span><span></span><span></span>
@@ -565,6 +565,7 @@ function startTicker() {
 
 function renderActivityStats() {
   const stats = getActivityStats();
+  updateSleepHeader();
   Object.entries(stats).forEach(([key, stat]) => {
     const element = document.querySelector(`[data-card-info="${key}"]`);
     if (!element) return;
@@ -576,6 +577,19 @@ function renderActivityStats() {
       `}
     `;
   });
+}
+
+function updateSleepHeader() {
+  const card = document.querySelector('[data-activity-card="sleep"]');
+  const subtitle = document.querySelector('[data-card-subtitle="sleep"]');
+  if (!card || !subtitle) return;
+
+  const sleep = getCurrentState("sleep");
+  const isSleeping = sleep.status === "asleep";
+  card.style.setProperty("--card-image", `url('/assets/activity/header-sleep-${isSleeping ? "asleep" : "awake"}.png')`);
+  card.classList.toggle("sleeping-header", isSleeping);
+  card.classList.toggle("awake-header", !isSleeping);
+  subtitle.textContent = isSleeping ? "Baby is sleeping." : "Baby is awaking.";
 }
 
 function updateActivityButtons() {
