@@ -626,10 +626,11 @@ function formatDuration(value) {
 }
 
 function formatTotalDuration(value) {
-  const totalMinutes = Math.max(0, Math.floor(value / 60000));
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return `${String(hours).padStart(2, "0")} hrs ${String(minutes).padStart(2, "0")}min`;
+  const totalSeconds = Math.max(0, Math.floor(value / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(hours).padStart(2, "0")} hrs ${String(minutes).padStart(2, "0")}min ${String(seconds).padStart(2, "0")}sec`;
 }
 
 function formatSince(log) {
