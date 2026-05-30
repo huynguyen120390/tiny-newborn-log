@@ -174,7 +174,7 @@ function renderAll() {
 function renderActivities() {
   const visibleActivities = activities.filter((activity) => state.visibleCards.includes(activity.key));
   document.getElementById("activity-grid").innerHTML = visibleActivities.map((activity) => `
-    <article class="activity-card" data-activity-card="${activity.key}" style="--card-image: url('/assets/activity/header-${activity.key}.png')">
+    <article class="activity-card" data-activity-card="${activity.key}" style="--card-image: url('${cardHeaderImage(activity.key)}')">
       <div class="card-top card-header">
         <div>
           <h3 data-card-title="${activity.key}">${activity.title}</h3>
@@ -255,6 +255,13 @@ function openActivityLogs(cardKey) {
   });
 
   if (!dialog.open) dialog.showModal();
+}
+
+function cardHeaderImage(key) {
+  const versions = {
+    boobie: "20260530-boobie-baby"
+  };
+  return `/assets/activity/header-${key}.png${versions[key] ? `?v=${versions[key]}` : ""}`;
 }
 
 function renderActivityLogRow(log, cardKey) {
