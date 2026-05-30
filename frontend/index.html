@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Phương Nam Cu Tí</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">PN</span>
+          <div>
+            <h1>Phương Nam Cu Tí</h1>
+            <p>Newborn logbook</p>
+          </div>
+        </div>
+        <nav class="tabs" aria-label="Main views">
+          <button class="tab active" data-tab="log">Log</button>
+          <button class="tab" data-tab="today">Today</button>
+          <button class="tab" data-tab="history">History</button>
+          <button class="tab" data-tab="exports">Export</button>
+        </nav>
+      </header>
+
+      <main>
+        <section id="log" class="panel active">
+          <div class="hero-band">
+            <div>
+              <h2>Phương Nam Cu Tí</h2>
+              <p id="baby-summary">Loading profile...</p>
+            </div>
+          </div>
+
+          <div class="activity-grid" id="activity-grid"></div>
+        </section>
+
+        <section id="today" class="panel">
+          <div class="page-title">
+            <h2>Today</h2>
+            <p>A quick snapshot of what has been logged today.</p>
+          </div>
+          <div class="metric-grid" id="today-metrics"></div>
+          <div class="recent-panel">
+            <h3>Recent Info</h3>
+            <div id="recent-list" class="recent-list"></div>
+          </div>
+        </section>
+
+        <section id="history" class="panel">
+          <div class="page-title">
+            <h2>History</h2>
+            <p>Newest activity first.</p>
+          </div>
+          <div id="history-list" class="list dense"></div>
+        </section>
+
+        <section id="exports" class="panel">
+          <div class="page-title">
+            <h2>Export</h2>
+            <p>Download local reports for backup or pediatrician visits.</p>
+          </div>
+          <div id="export-panel" class="export-panel"></div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="bottle-dialog" class="modal">
+      <form method="dialog" id="bottle-form">
+        <div class="modal-title">
+          <h3>Bottle amount</h3>
+          <strong><span id="bottle-value">3.0</span> oz</strong>
+        </div>
+        <input id="bottle-slider" name="ounces" type="range" min="0" max="8" step="0.25" value="3">
+        <div class="modal-actions">
+          <button type="button" class="ghost" data-close-dialog>Cancel</button>
+          <button type="submit" class="primary">Log bottle</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="reaction" class="reaction" role="status" aria-live="polite" aria-hidden="true">
+      <div class="reaction-card">
+        <img src="/assets/activity/icon-success.png" alt="">
+        <div>
+          <strong id="reaction-title">Logged</strong>
+          <span id="reaction-message">Nice tap.</span>
+        </div>
+      </div>
+    </div>
+
+    <template id="export-controls-template">
+      <form class="export-controls">
+        <label>
+          Report
+          <select name="reportType">
+            <option value="pdf">PDF report</option>
+            <option value="pediatrician-report">Pediatrician PDF</option>
+            <option value="xlsx">Excel / XLSX</option>
+            <option value="csv">CSV raw logs</option>
+            <option value="json">JSON backup</option>
+          </select>
+        </label>
+        <label>
+          Range
+          <select name="rangeType">
+            <option value="weekly">Weekly</option>
+            <option value="daily">Daily</option>
+            <option value="monthly">Monthly</option>
+            <option value="custom">Custom</option>
+            <option value="last7">Last 7 days</option>
+            <option value="last30">Last 30 days</option>
+          </select>
+        </label>
+        <label>
+          Start date
+          <input type="date" name="startDate">
+        </label>
+        <label>
+          End date
+          <input type="date" name="endDate">
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" name="includeCharts" checked>
+          Include chart tables
+        </label>
+        <button class="primary" type="submit">Download</button>
+        <p class="export-status" aria-live="polite"></p>
+      </form>
+    </template>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

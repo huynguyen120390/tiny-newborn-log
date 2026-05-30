@@ -1,0 +1,11 @@
+{
+  "name": "phuong-nam-logbook",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local newborn activity logger for Phuong Nam.",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js"
+  },
+  "dependencies": {}
+}

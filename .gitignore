@@ -1,0 +1,6 @@
+data/*.json
+backend/exports/*
+!backend/exports/.gitkeep
+node_modules/
+*.log
+.env
