@@ -93,6 +93,10 @@ document.querySelector("[data-close-dialog]").addEventListener("click", () => {
   document.getElementById("bottle-dialog").close();
 });
 
+document.querySelector("[data-close-activity-logs]").addEventListener("click", () => {
+  document.getElementById("activity-logs-dialog").close();
+});
+
 document.getElementById("bottle-slider").addEventListener("input", (event) => {
   document.getElementById("bottle-value").textContent = Number(event.target.value).toFixed(2).replace(/0$/, "");
 });
@@ -163,6 +167,9 @@ function renderActivities() {
           <h3>${activity.title}</h3>
           <p>${activity.helper}</p>
         </div>
+        <button class="card-more" type="button" data-more-card="${activity.key}" aria-label="Show today's ${activity.title} logs">
+          <span></span><span></span><span></span>
+        </button>
       </div>
       <div class="card-info" data-card-info="${activity.key}"></div>
       <div class="button-row">
@@ -190,6 +197,45 @@ function renderActivities() {
       await createLog(action.payload, action.reminder);
     });
   });
+
+  document.querySelectorAll(".card-more").forEach((button) => {
+    button.addEventListener("click", () => openActivityLogs(button.dataset.moreCard));
+  });
+}
+
+function openActivityLogs(cardKey) {
+  const activity = activities.find((item) => item.key === cardKey);
+  const dialog = document.getElementById("activity-logs-dialog");
+  const list = document.getElementById("activity-logs-list");
+  document.getElementById("activity-logs-title").textContent = `${activity?.title || "Activity"} today`;
+
+  const logs = logsForActivityCard(cardKey)
+    .filter((log) => log.date === todayString())
+    .sort((a, b) => logTime(b) - logTime(a));
+
+  list.innerHTML = logs.length ? logs.map((log) => `
+    <div class="activity-log-row">
+      <span>${formatLogClock(log)}</span>
+      <strong>${escapeHtml(labelForLog(log))}</strong>
+      ${log.notes ? `<small>${escapeHtml(log.notes)}</small>` : ""}
+    </div>
+  `).join("") : `<p class="empty-state">No logs today.</p>`;
+
+  dialog.showModal();
+}
+
+function logsForActivityCard(cardKey) {
+  const filters = {
+    sleep: (log) => log.type === "sleep",
+    boobie: (log) => log.type === "feeding" && log.method === "breast",
+    bottle: (log) => log.type === "bottle",
+    diaper: (log) => log.type === "diaper",
+    bath: (log) => log.type === "bath",
+    tummy: (log) => log.type === "tummy_time",
+    gym: (log) => log.type === "baby_gym"
+  };
+  const matches = filters[cardKey] || (() => false);
+  return state.logs.filter(matches);
 }
 
 function setupSettingsPanel() {
@@ -650,6 +696,12 @@ function formatSinceTime(log) {
   const dayLabel = date.toDateString() === new Date().toDateString() ? "today" : "yesterday";
   const time = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return `${time} ${dayLabel}`;
+}
+
+function formatLogClock(log) {
+  const date = new Date(logTime(log));
+  if (Number.isNaN(date.getTime())) return log.time || "--:--";
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
 }
 
 function renderTodaySummary() {
