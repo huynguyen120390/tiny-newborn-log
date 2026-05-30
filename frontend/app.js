@@ -188,6 +188,12 @@ function renderActivities() {
 
 async function createLog(payload, reminder) {
   try {
+    const conflict = transitionConflict(payload);
+    if (conflict) {
+      showToast(conflict);
+      return;
+    }
+
     const result = await fetchJson("/api/logs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -275,7 +281,7 @@ function getActivityStats() {
 
   return {
     sleep: {
-      label: `${sleepLabel} ${formatDuration(elapsedSince(sleep.log))}${formatSince(sleep.log)}`,
+      label: `${sleepLabel} ${formatDuration(elapsedTodaySince(sleep.log))}${formatSince(sleep.log)}`,
       value: formatTotalDuration(totalToday("sleep", "asleep", "awake")),
       helper: "Total sleep today"
     },
@@ -298,12 +304,12 @@ function getActivityStats() {
       `
     },
     bath: {
-      label: `${bathLabel} ${formatDuration(elapsedSince(bath.log))}${formatSince(bath.log)}`,
+      label: `${bathLabel} ${formatDuration(elapsedTodaySince(bath.log))}${formatSince(bath.log)}`,
       value: formatTotalDuration(totalToday("bath", "start", "end")),
       helper: `Sound ${state.bathSoundEnabled ? "on" : "off"}`
     },
     tummy: {
-      label: `${tummyLabel} ${formatDuration(elapsedSince(tummy.log))}${formatSince(tummy.log)}`,
+      label: `${tummyLabel} ${formatDuration(elapsedTodaySince(tummy.log))}${formatSince(tummy.log)}`,
       value: formatTotalDuration(totalToday("tummy_time", "start", "end")),
       helper: "Total tummy time today"
     },
@@ -337,6 +343,54 @@ function getCurrentState(type) {
   const log = events[0] || null;
   const fallback = type === "sleep" ? "awake" : "end";
   return { status: log?.status || fallback, log };
+}
+
+function pairedConfig(type) {
+  const configs = {
+    sleep: { start: "asleep", end: "awake", startLabel: "asleep", endLabel: "awake" },
+    tummy_time: { start: "start", end: "end", startLabel: "started", endLabel: "ended" },
+    bath: { start: "start", end: "end", startLabel: "started", endLabel: "stopped" }
+  };
+  return configs[type] || null;
+}
+
+function transitionConflict(input, excludeId) {
+  const config = pairedConfig(input.type);
+  if (!config || !input.status) return "";
+
+  const eventTime = input.date && input.time
+    ? logTime({ date: input.date, time: input.time })
+    : Date.now();
+  const activeBefore = isActiveAt(input.type, eventTime, excludeId);
+  const isStart = input.status === config.start;
+  const isEnd = input.status === config.end;
+
+  if (isStart && activeBefore) return `Already ${config.startLabel}. Stop first to avoid overlapping time.`;
+  if (isEnd && !activeBefore) return `Already ${config.endLabel}. Start first before stopping.`;
+
+  const next = nextTimedStatus(input.type, eventTime, excludeId);
+  if (next && isStart && next.status === config.start) return `This would overlap with another ${config.startLabel} time.`;
+  if (next && isEnd && next.status === config.end) return `This would create two stop events in a row.`;
+  return "";
+}
+
+function isActiveAt(type, atTime, excludeId) {
+  const config = pairedConfig(type);
+  let active = false;
+  state.logs
+    .filter((log) => log.id !== excludeId && log.type === type && log.status && logTime(log) < atTime)
+    .sort((a, b) => logTime(a) - logTime(b))
+    .forEach((log) => {
+      if (log.status === config.start) active = true;
+      if (log.status === config.end) active = false;
+    });
+  return active;
+}
+
+function nextTimedStatus(type, atTime, excludeId) {
+  return state.logs
+    .filter((log) => log.id !== excludeId && log.type === type && log.status && logTime(log) > atTime)
+    .sort((a, b) => logTime(a) - logTime(b))[0] || null;
 }
 
 function lastLogOfType(type) {
@@ -388,28 +442,48 @@ function numberWords(value) {
 }
 
 function totalToday(type, startStatus, endStatus) {
-  let activeStart = null;
+  const { start: dayStart, end: dayEnd } = todayBounds();
+  const now = Date.now();
+  const clipEnd = Math.min(dayEnd, now);
   let totalMs = 0;
+  let activeStart = null;
 
-  todayLogs()
+  state.logs
     .filter((log) => log.type === type)
     .sort((a, b) => logTime(a) - logTime(b))
     .forEach((log) => {
-      if (Number(log.minutes)) totalMs += Number(log.minutes) * 60 * 1000;
+      if (log.date === todayString() && Number(log.minutes)) totalMs += Number(log.minutes) * 60 * 1000;
       if (log.status === startStatus && !activeStart) activeStart = logTime(log);
       if (log.status === endStatus && activeStart) {
-        totalMs += Math.max(0, logTime(log) - activeStart);
+        totalMs += clippedDuration(activeStart, logTime(log), dayStart, clipEnd);
         activeStart = null;
       }
     });
 
-  if (activeStart) totalMs += Math.max(0, Date.now() - activeStart);
+  if (activeStart) totalMs += clippedDuration(activeStart, clipEnd, dayStart, clipEnd);
   return totalMs;
 }
 
 function elapsedSince(log) {
   if (!log) return 0;
   return Math.max(0, Date.now() - logTime(log));
+}
+
+function elapsedTodaySince(log) {
+  if (!log) return 0;
+  const { start: dayStart } = todayBounds();
+  return Math.max(0, Date.now() - Math.max(logTime(log), dayStart));
+}
+
+function todayBounds() {
+  const startDate = new Date(`${todayString()}T00:00:00`);
+  const endDate = new Date(startDate);
+  endDate.setDate(endDate.getDate() + 1);
+  return { start: startDate.getTime(), end: endDate.getTime() };
+}
+
+function clippedDuration(start, end, clipStart, clipEnd) {
+  return Math.max(0, Math.min(end, clipEnd) - Math.max(start, clipStart));
 }
 
 function todayLogs() {
@@ -621,6 +695,12 @@ async function saveHistoryCorrection(event) {
   const form = event.currentTarget;
   const status = form.querySelector(".history-status");
   const data = Object.fromEntries(new FormData(form).entries());
+  const current = state.logs.find((log) => log.id === form.dataset.logId);
+  const conflict = current ? transitionConflict({ ...current, ...data }, current.id) : "";
+  if (conflict) {
+    status.textContent = conflict;
+    return;
+  }
   status.textContent = "Saving...";
 
   try {

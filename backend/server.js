@@ -107,6 +107,63 @@ function cleanNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function pairedConfig(type) {
+  const configs = {
+    sleep: { start: "asleep", end: "awake", startLabel: "asleep", endLabel: "awake" },
+    tummy_time: { start: "start", end: "end", startLabel: "started", endLabel: "ended" },
+    bath: { start: "start", end: "end", startLabel: "started", endLabel: "stopped" }
+  };
+  return configs[type] || null;
+}
+
+function logTime(log) {
+  const [hour = "00", minute = "00"] = String(log.time || "00:00").split(":");
+  const local = new Date(`${log.date || nowParts().date}T${hour.padStart(2, "0")}:${minute.padStart(2, "0")}:00`);
+  if (Number.isFinite(local.getTime())) return local.getTime();
+  if (log.createdAt) {
+    const created = new Date(log.createdAt).getTime();
+    if (Number.isFinite(created)) return created;
+  }
+  return 0;
+}
+
+function isActiveAt(logs, type, atTime, excludeId) {
+  const config = pairedConfig(type);
+  let active = false;
+  logs
+    .filter((log) => log.id !== excludeId && log.type === type && log.status && logTime(log) < atTime)
+    .sort((a, b) => logTime(a) - logTime(b))
+    .forEach((log) => {
+      if (log.status === config.start) active = true;
+      if (log.status === config.end) active = false;
+    });
+  return active;
+}
+
+function nextTimedStatus(logs, type, atTime, excludeId) {
+  return logs
+    .filter((log) => log.id !== excludeId && log.type === type && log.status && logTime(log) > atTime)
+    .sort((a, b) => logTime(a) - logTime(b))[0] || null;
+}
+
+function validatePairedTransition(logs, candidate, excludeId) {
+  const config = pairedConfig(candidate.type);
+  if (!config || !candidate.status) return "";
+
+  const atTime = logTime(candidate);
+  const activeBefore = isActiveAt(logs, candidate.type, atTime, excludeId);
+  const isStart = candidate.status === config.start;
+  const isEnd = candidate.status === config.end;
+
+  if (isStart && activeBefore) return `Already ${config.startLabel}. Stop first to avoid overlapping time.`;
+  if (isEnd && !activeBefore) return `Already ${config.endLabel}. Start first before stopping.`;
+
+  const next = nextTimedStatus(logs, candidate.type, atTime, excludeId);
+  if (next && isStart && next.status === config.start) return `This would overlap with another ${config.startLabel} time.`;
+  if (next && isEnd && next.status === config.end) return "This would create two stop events in a row.";
+  return "";
+}
+
 function buildLog(input) {
   const stamp = nowParts();
   const base = {
@@ -255,6 +312,11 @@ async function handlePostLog(req, res) {
   const log = buildLog(input);
 
   data.baby_log = Array.isArray(data.baby_log) ? data.baby_log : [];
+  const conflict = validatePairedTransition(data.baby_log, log);
+  if (conflict) {
+    sendJson(res, 409, { error: conflict });
+    return;
+  }
   data.baby_log.push(log);
 
   const nextRecent = updateRecent(recent, log);
@@ -308,6 +370,12 @@ async function handleUpdateLog(req, res, id) {
       next.pee = input.kind === "pee";
       next.poop = input.kind === "poop";
     }
+  }
+
+  const conflict = validatePairedTransition(data.baby_log, next, current.id);
+  if (conflict) {
+    sendJson(res, 409, { error: conflict });
+    return;
   }
 
   data.baby_log[index] = next;
