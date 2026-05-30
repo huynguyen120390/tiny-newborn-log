@@ -160,6 +160,8 @@ function validatePairedTransition(logs, candidate, excludeId) {
   if (!config || !candidate.status) return "";
 
   const atTime = logTime(candidate);
+  if (atTime > Date.now() + 30 * 1000) return "Time cannot be in the future.";
+
   const activeBefore = isActiveAt(logs, candidate.type, atTime, excludeId);
   const isStart = candidate.status === config.start;
   const isEnd = candidate.status === config.end;

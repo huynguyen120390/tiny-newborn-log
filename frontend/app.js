@@ -289,6 +289,11 @@ async function saveActivityLogEdit(event, log, cardKey) {
   const form = event.currentTarget.closest("form") || event.currentTarget.form;
   const status = form.querySelector(".activity-log-edit-status");
   const data = Object.fromEntries(new FormData(form).entries());
+  const conflict = transitionConflict({ ...log, ...data }, log.id);
+  if (conflict) {
+    status.textContent = conflict;
+    return;
+  }
   status.textContent = "Saving...";
 
   try {
@@ -586,8 +591,10 @@ function summarizeLogsToday() {
 }
 
 function getCurrentState(type) {
+  const now = Date.now();
   const events = state.logs
     .filter((log) => log.type === type && log.status)
+    .filter((log) => logTime(log) <= now)
     .sort((a, b) => logTime(b) - logTime(a));
   const log = events[0] || null;
   const fallback = type === "sleep" ? "awake" : "end";
@@ -610,6 +617,8 @@ function transitionConflict(input, excludeId) {
   const eventTime = input.date && input.time
     ? logTime({ date: input.date, time: input.time })
     : Date.now();
+  if (eventTime > Date.now() + 30 * 1000) return "Time cannot be in the future.";
+
   const activeBefore = isActiveAt(input.type, eventTime, excludeId);
   const isStart = input.status === config.start;
   const isEnd = input.status === config.end;
@@ -699,6 +708,7 @@ function totalToday(type, startStatus, endStatus) {
 
   state.logs
     .filter((log) => log.type === type)
+    .filter((log) => logTime(log) <= clipEnd)
     .sort((a, b) => logTime(a) - logTime(b))
     .forEach((log) => {
       if (log.date === todayString() && Number(log.minutes)) totalMs += Number(log.minutes) * 60 * 1000;
