@@ -447,8 +447,12 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const updateMatch = url.pathname.match(/^\/api\/logs\/([^/]+)$/);
-    if (req.method === "PUT" && updateMatch) {
+    const updateMatch = url.pathname.match(/^\/api\/logs\/([^/]+)\/?$/);
+    if (updateMatch) {
+      if (req.method !== "PUT") {
+        sendJson(res, 405, { error: `Use PUT to update a log. Received ${req.method}.` });
+        return;
+      }
       await handleUpdateLog(req, res, decodeURIComponent(updateMatch[1]));
       return;
     }

@@ -135,7 +135,16 @@ async function refreshData() {
 
 async function fetchJson(url, options) {
   const response = await fetch(url, options);
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) {
+    const text = await response.text();
+    try {
+      const payload = JSON.parse(text);
+      throw new Error(payload.error || text);
+    } catch (error) {
+      if (error instanceof SyntaxError) throw new Error(text);
+      throw error;
+    }
+  }
   return response.json();
 }
 
@@ -268,11 +277,16 @@ function startActivityLogEdit(logId, cardKey) {
 
   row.querySelector("[data-cancel-log-edit]").addEventListener("click", () => openActivityLogs(cardKey));
   row.querySelector("form").addEventListener("submit", (event) => saveActivityLogEdit(event, log, cardKey));
+  row.querySelector("[type='submit']").addEventListener("click", (event) => {
+    event.preventDefault();
+    saveActivityLogEdit(event, log, cardKey);
+  });
 }
 
 async function saveActivityLogEdit(event, log, cardKey) {
   event.preventDefault();
-  const form = event.currentTarget;
+  event.stopPropagation();
+  const form = event.currentTarget.closest("form") || event.currentTarget.form;
   const status = form.querySelector(".activity-log-edit-status");
   const data = Object.fromEntries(new FormData(form).entries());
   status.textContent = "Saving...";
