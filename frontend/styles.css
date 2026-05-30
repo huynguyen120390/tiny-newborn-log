@@ -333,6 +333,95 @@ main {
   transform: translateY(1px) scale(0.98);
 }
 
+.sound-toggle {
+  position: absolute;
+  top: 56px;
+  right: 12px;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: 0 8px 18px rgba(18, 36, 34, 0.16);
+  cursor: pointer;
+  transition: transform 140ms ease, background 140ms ease, box-shadow 140ms ease;
+  backdrop-filter: blur(10px);
+}
+
+.sound-toggle:hover {
+  background: #fff;
+  box-shadow: 0 10px 22px rgba(18, 36, 34, 0.2);
+  transform: translateY(-2px) scale(1.04);
+}
+
+.sound-toggle:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+.speaker-icon {
+  position: relative;
+  width: 20px;
+  height: 18px;
+}
+
+.speaker-icon::before {
+  position: absolute;
+  left: 1px;
+  top: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  background: #8f9a94;
+  clip-path: polygon(0 28%, 36% 28%, 100% 0, 100% 100%, 36% 72%, 0 72%);
+  content: "";
+}
+
+.speaker-icon::after {
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  width: 14px;
+  height: 14px;
+  border-right: 3px solid #8f9a94;
+  border-radius: 50%;
+  content: "";
+  transform: scaleX(0.8);
+  opacity: 0;
+}
+
+.sound-toggle:not(.sound-on) .speaker-icon {
+  transform: rotate(-1deg);
+}
+
+.sound-toggle:not(.sound-on) .speaker-icon::after {
+  right: -1px;
+  top: -1px;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(45deg, transparent 43%, #7e8580 44%, #7e8580 56%, transparent 57%);
+  opacity: 1;
+  transform: none;
+}
+
+.sound-toggle.sound-on {
+  border-color: rgba(36, 117, 111, 0.3);
+  background: linear-gradient(180deg, #ffffff, #dff5ef);
+  box-shadow: 0 8px 18px rgba(36, 117, 111, 0.18);
+}
+
+.sound-toggle.sound-on .speaker-icon::before {
+  background: var(--primary);
+}
+
+.sound-toggle.sound-on .speaker-icon::after {
+  border-color: var(--sky);
+  opacity: 1;
+}
+
 .card-header::before {
   position: absolute;
   inset: 0;

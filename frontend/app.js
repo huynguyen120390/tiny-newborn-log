@@ -59,8 +59,7 @@ const activities = [
     helper: "Start and stop splash time.",
     actions: [
       { label: "Start", icon: "bath", payload: { type: "bath", status: "start" } },
-      { label: "Stop", icon: "bath", payload: { type: "bath", status: "end" } },
-      { label: "Sound", icon: "success", soundToggle: true }
+      { label: "Stop", icon: "bath", payload: { type: "bath", status: "end" } }
     ]
   },
   {
@@ -180,6 +179,11 @@ function renderActivities() {
         <button class="card-more" type="button" data-more-card="${activity.key}" aria-label="Show today's ${activity.title} logs">
           <span></span><span></span><span></span>
         </button>
+        ${activity.key === "bath" ? `
+          <button class="sound-toggle" type="button" data-bath-sound-toggle aria-label="Bath sound is off">
+            <span class="speaker-icon" aria-hidden="true"></span>
+          </button>
+        ` : ""}
       </div>
       <div class="card-info" data-card-info="${activity.key}"></div>
       <div class="button-row">
@@ -196,10 +200,6 @@ function renderActivities() {
   document.querySelectorAll(".action-button").forEach((button) => {
     button.addEventListener("click", async () => {
       const action = JSON.parse(button.dataset.action);
-      if (action.soundToggle) {
-        toggleBathSound();
-        return;
-      }
       if (action.dialog === "bottle") {
         openBottleDialog();
         return;
@@ -210,6 +210,10 @@ function renderActivities() {
 
   document.querySelectorAll(".card-more").forEach((button) => {
     button.addEventListener("click", () => openActivityLogs(button.dataset.moreCard));
+  });
+
+  document.querySelectorAll("[data-bath-sound-toggle]").forEach((button) => {
+    button.addEventListener("click", toggleBathSound);
   });
 }
 
@@ -520,7 +524,12 @@ function updateActivityButtons() {
 
     button.disabled = shouldDisable;
     button.setAttribute("aria-disabled", shouldDisable ? "true" : "false");
-    button.classList.toggle("sound-on", card === "bath" && label === "Sound" && state.bathSoundEnabled);
+  });
+
+  document.querySelectorAll("[data-bath-sound-toggle]").forEach((button) => {
+    button.classList.toggle("sound-on", state.bathSoundEnabled);
+    button.setAttribute("aria-label", `Bath sound is ${state.bathSoundEnabled ? "on" : "off"}`);
+    button.setAttribute("aria-pressed", state.bathSoundEnabled ? "true" : "false");
   });
 }
 
