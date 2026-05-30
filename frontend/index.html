@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Phương Nam Cu Tí</title>
-    <link rel="stylesheet" href="/styles.css?v=20260530-bath-sound-toggle">
+    <link rel="stylesheet" href="/styles.css?v=20260530-bath-reminder-setting">
   </head>
   <body>
     <div class="app-shell">
@@ -90,6 +90,18 @@
               </div>
               <div id="category-settings" class="category-settings"></div>
             </div>
+
+            <form id="bath-reminder-form" class="settings-card">
+              <div>
+                <h3>Bath Reminder</h3>
+                <p>Voice reminder interval while bath sound is on.</p>
+              </div>
+              <label>
+                Every
+                <input id="bath-reminder-seconds" name="seconds" type="number" min="5" max="3600" step="1">
+              </label>
+              <button class="primary" type="submit">Save reminder</button>
+            </form>
 
             <div class="settings-card danger-zone">
               <div>
@@ -179,6 +191,6 @@
       </form>
     </template>
 
-    <script src="/app.js?v=20260530-bath-sound-toggle"></script>
+    <script src="/app.js?v=20260530-bath-reminder-setting"></script>
   </body>
 </html>

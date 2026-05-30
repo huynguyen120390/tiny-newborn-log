@@ -9,7 +9,8 @@ const state = {
   ticker: null,
   currentDate: todayString(),
   bathSoundEnabled: false,
-  lastBathAnnouncementMinute: 0
+  bathReminderSeconds: loadBathReminderSeconds(),
+  lastBathAnnouncementStep: 0
 };
 
 const activities = [
@@ -353,12 +354,16 @@ function logsForActivityCard(cardKey) {
 
 function setupSettingsPanel() {
   document.getElementById("profile-form").addEventListener("submit", saveProfile);
+  document.getElementById("bath-reminder-form").addEventListener("submit", saveBathReminder);
   document.getElementById("clear-data-button").addEventListener("click", clearData);
 }
 
 function renderSettings() {
   const birthdayInput = document.getElementById("birthday-input");
   if (birthdayInput && document.activeElement !== birthdayInput) birthdayInput.value = state.profile.birthday || "";
+
+  const reminderInput = document.getElementById("bath-reminder-seconds");
+  if (reminderInput && document.activeElement !== reminderInput) reminderInput.value = state.bathReminderSeconds;
 
   const container = document.getElementById("category-settings");
   if (!container) return;
@@ -382,6 +387,23 @@ function renderSettings() {
       showSettingsStatus("Category cards updated.");
     });
   });
+}
+
+function saveBathReminder(event) {
+  event.preventDefault();
+  const input = document.getElementById("bath-reminder-seconds");
+  const seconds = Math.round(Number(input.value));
+  if (!Number.isFinite(seconds) || seconds < 5) {
+    showSettingsStatus("Bath reminder must be at least 5 seconds.");
+    return;
+  }
+
+  state.bathReminderSeconds = Math.min(3600, seconds);
+  state.lastBathAnnouncementStep = 0;
+  saveBathReminderSeconds();
+  renderAll();
+  showSettingsStatus(`Bath reminder saved: every ${formatReminderPeriod(state.bathReminderSeconds)}.`);
+  showReaction("Bath reminder saved", `Every ${formatReminderPeriod(state.bathReminderSeconds)}`);
 }
 
 async function saveProfile(event) {
@@ -442,6 +464,15 @@ function loadVisibleCards() {
 
 function saveVisibleCards() {
   localStorage.setItem("visibleCards", JSON.stringify(state.visibleCards));
+}
+
+function loadBathReminderSeconds() {
+  const saved = Number(localStorage.getItem("bathReminderSeconds"));
+  return Number.isFinite(saved) && saved >= 5 ? Math.min(3600, Math.round(saved)) : 120;
+}
+
+function saveBathReminderSeconds() {
+  localStorage.setItem("bathReminderSeconds", String(state.bathReminderSeconds));
 }
 
 async function createLog(payload, reminder) {
@@ -569,7 +600,7 @@ function getActivityStats() {
     bath: {
       label: `${bathLabel} ${formatDuration(elapsedTodaySince(bath.log))}${formatSince(bath.log)}`,
       value: formatTotalDuration(totalToday("bath", "start", "end")),
-      helper: `Sound ${state.bathSoundEnabled ? "on" : "off"}`
+      helper: `Sound ${state.bathSoundEnabled ? "on" : "off"} · every ${formatReminderPeriod(state.bathReminderSeconds)}`
     },
     tummy: {
       label: `${tummyLabel} ${formatDuration(elapsedTodaySince(tummy.log))}${formatSince(tummy.log)}`,
@@ -668,10 +699,10 @@ function lastLogOfType(type) {
 
 function toggleBathSound() {
   state.bathSoundEnabled = !state.bathSoundEnabled;
-  state.lastBathAnnouncementMinute = 0;
+  state.lastBathAnnouncementStep = 0;
   updateActivityButtons();
   renderActivityStats();
-  showReaction(state.bathSoundEnabled ? "Bath sound on" : "Bath sound off", "Two-minute voice updates");
+  showReaction(state.bathSoundEnabled ? "Bath sound on" : "Bath sound off", `Every ${formatReminderPeriod(state.bathReminderSeconds)}`);
 }
 
 function announceBathProgress() {
@@ -679,15 +710,17 @@ function announceBathProgress() {
 
   const bath = getCurrentState("bath");
   if (bath.status !== "start" || !bath.log) {
-    state.lastBathAnnouncementMinute = 0;
+    state.lastBathAnnouncementStep = 0;
     return;
   }
 
-  const minutes = Math.floor(elapsedSince(bath.log) / 60000);
-  if (minutes < 2 || minutes % 2 !== 0 || minutes === state.lastBathAnnouncementMinute) return;
+  const seconds = Math.floor(elapsedSince(bath.log) / 1000);
+  const step = Math.floor(seconds / state.bathReminderSeconds);
+  if (step < 1 || step === state.lastBathAnnouncementStep) return;
 
-  state.lastBathAnnouncementMinute = minutes;
-  const utterance = new SpeechSynthesisUtterance(`${numberWords(minutes)} minutes`);
+  state.lastBathAnnouncementStep = step;
+  const elapsedSeconds = step * state.bathReminderSeconds;
+  const utterance = new SpeechSynthesisUtterance(formatSpokenReminder(elapsedSeconds));
   const voices = window.speechSynthesis.getVoices();
   const voice = voices.find((item) => /female|girl|zira|samantha|jenny|aria/i.test(`${item.name} ${item.voiceURI}`));
   if (voice) utterance.voice = voice;
@@ -697,15 +730,35 @@ function announceBathProgress() {
   window.speechSynthesis.speak(utterance);
 }
 
+function formatSpokenReminder(seconds) {
+  if (seconds % 60 === 0) {
+    const minutes = seconds / 60;
+    return `${numberWords(minutes)} ${minutes === 1 ? "minute" : "minutes"}`;
+  }
+  return `${numberWords(seconds)} ${seconds === 1 ? "second" : "seconds"}`;
+}
+
+function formatReminderPeriod(seconds) {
+  if (seconds % 60 === 0) {
+    const minutes = seconds / 60;
+    return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+  }
+  return `${seconds} seconds`;
+}
+
 function numberWords(value) {
+  if (value >= 1000) return String(value);
   const words = {
     0: "zero", 1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine",
     10: "ten", 11: "eleven", 12: "twelve", 13: "thirteen", 14: "fourteen", 15: "fifteen", 16: "sixteen",
-    17: "seventeen", 18: "eighteen", 19: "nineteen", 20: "twenty", 30: "thirty", 40: "forty", 50: "fifty"
+    17: "seventeen", 18: "eighteen", 19: "nineteen", 20: "twenty", 30: "thirty", 40: "forty", 50: "fifty",
+    60: "sixty", 70: "seventy", 80: "eighty", 90: "ninety"
   };
   if (words[value]) return words[value];
-  if (value < 60) return `${words[Math.floor(value / 10) * 10]} ${words[value % 10]}`;
-  return String(value);
+  if (value < 100) return `${words[Math.floor(value / 10) * 10]} ${words[value % 10]}`;
+  const hundreds = Math.floor(value / 100);
+  const remainder = value % 100;
+  return `${words[hundreds]} hundred${remainder ? ` ${numberWords(remainder)}` : ""}`;
 }
 
 function totalToday(type, startStatus, endStatus) {

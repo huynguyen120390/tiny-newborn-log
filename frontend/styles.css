@@ -895,7 +895,8 @@ main {
   font-weight: 800;
 }
 
-.settings-card input[type="date"] {
+.settings-card input[type="date"],
+.settings-card input[type="number"] {
   width: min(260px, 100%);
   min-height: 42px;
   border: 1px solid var(--line);
