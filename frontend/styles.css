@@ -242,6 +242,7 @@ main {
 .metric,
 .recent-panel,
 .export-panel,
+.settings-panel,
 .list-item {
   background: rgba(255, 253, 248, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.72);
@@ -625,7 +626,8 @@ main {
 }
 
 .recent-panel,
-.export-panel {
+.export-panel,
+.settings-panel {
   margin-top: 14px;
   padding: 18px;
 }
@@ -744,6 +746,94 @@ main {
 .export-status {
   grid-column: 1 / -1;
   min-height: 20px;
+}
+
+.settings-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(221, 228, 220, 0.84);
+  border-radius: var(--radius);
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.settings-card label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.settings-card input[type="date"] {
+  width: min(260px, 100%);
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--ink);
+}
+
+.category-settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.category-toggle {
+  display: flex !important;
+  gap: 9px !important;
+  align-items: center;
+  min-height: 44px;
+  border: 1px solid rgba(36, 117, 111, 0.18);
+  border-radius: var(--radius);
+  padding: 0 12px;
+  background: linear-gradient(180deg, #ffffff, #eff8f3);
+  color: var(--primary-dark) !important;
+}
+
+.category-toggle input {
+  accent-color: var(--primary);
+}
+
+.danger-zone {
+  border-color: rgba(245, 111, 117, 0.28);
+  background: rgba(255, 244, 244, 0.72);
+}
+
+.danger-button {
+  position: relative;
+  width: fit-content;
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--radius);
+  padding: 0 16px;
+  background: linear-gradient(135deg, #b73535, #f56f75);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 850;
+  box-shadow: 0 6px 0 #7e2525, 0 14px 24px rgba(183, 53, 53, 0.16);
+  transition: transform 120ms ease, box-shadow 160ms ease;
+}
+
+.danger-button:hover {
+  transform: translateY(-2px);
+}
+
+.danger-button:active {
+  transform: translateY(3px) scale(0.99);
+  box-shadow: 0 2px 0 rgba(31, 41, 38, 0.18), 0 8px 14px rgba(31, 41, 38, 0.08);
+}
+
+.settings-status {
+  min-height: 20px;
+  font-weight: 800;
 }
 
 .modal {
@@ -920,7 +1010,7 @@ input[type="range"] {
 
   .tabs {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     width: 100%;
   }
 

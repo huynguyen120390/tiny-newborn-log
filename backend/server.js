@@ -119,7 +119,13 @@ function pairedConfig(type) {
 function logTime(log) {
   const [hour = "00", minute = "00"] = String(log.time || "00:00").split(":");
   const local = new Date(`${log.date || nowParts().date}T${hour.padStart(2, "0")}:${minute.padStart(2, "0")}:00`);
-  if (Number.isFinite(local.getTime())) return local.getTime();
+  if (Number.isFinite(local.getTime())) {
+    const created = log.createdAt ? new Date(log.createdAt) : null;
+    const offset = created && Number.isFinite(created.getTime())
+      ? created.getSeconds() * 1000 + created.getMilliseconds()
+      : 0;
+    return local.getTime() + offset;
+  }
   if (log.createdAt) {
     const created = new Date(log.createdAt).getTime();
     if (Number.isFinite(created)) return created;
@@ -249,7 +255,7 @@ function rebuildRecent(data) {
 
 function summarizeToday(data) {
   const today = nowParts().date;
-  const logs = data.baby_log.filter((log) => log.date === today);
+  const logs = (data.baby_log || []).filter((log) => log.date === today);
   const count = (predicate) => logs.filter(predicate).length;
   const sum = (predicate, field) => logs.filter(predicate).reduce((total, log) => total + Number(log[field] || 0), 0);
 
@@ -266,6 +272,27 @@ function summarizeToday(data) {
     tummyTimeEvents: count((log) => log.type === "tummy_time"),
     babyGymEvents: count((log) => log.type === "baby_gym")
   };
+}
+
+async function handleUpdateProfile(req, res) {
+  const input = await readBody(req);
+  const data = readJson(DATA_PATH, {});
+  data.baby_profile = data.baby_profile || {};
+  data.baby_profile.birthday = typeof input.birthday === "string" ? input.birthday : data.baby_profile.birthday || "";
+  writeJson(DATA_PATH, data);
+  sendJson(res, 200, { profile: data.baby_profile });
+}
+
+async function handleClearLogs(req, res) {
+  const data = readJson(DATA_PATH, {});
+  data.baby_log = [];
+  const recent = rebuildRecent(data);
+  writeJson(DATA_PATH, data);
+  writeJson(RECENT_PATH, recent);
+  sendJson(res, 200, {
+    recent,
+    todaySummary: summarizeToday(data)
+  });
 }
 
 function exportResponse(res, filePath) {
@@ -415,6 +442,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "DELETE" && url.pathname === "/api/logs") {
+      await handleClearLogs(req, res);
+      return;
+    }
+
     const updateMatch = url.pathname.match(/^\/api\/logs\/([^/]+)$/);
     if (req.method === "PUT" && updateMatch) {
       await handleUpdateLog(req, res, decodeURIComponent(updateMatch[1]));
@@ -423,6 +455,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/recent") {
       sendJson(res, 200, loadRecent());
+      return;
+    }
+
+    if (req.method === "PUT" && url.pathname === "/api/profile") {
+      await handleUpdateProfile(req, res);
       return;
     }
 

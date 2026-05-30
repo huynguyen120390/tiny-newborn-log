@@ -4,6 +4,7 @@ const state = {
   summary: {},
   profile: {},
   activeTab: "log",
+  visibleCards: [],
   ticker: null,
   currentDate: todayString(),
   bathSoundEnabled: false,
@@ -82,6 +83,8 @@ const activities = [
   }
 ];
 
+state.visibleCards = loadVisibleCards();
+
 document.querySelectorAll(".tab").forEach((button) => {
   button.addEventListener("click", () => activateTab(button.dataset.tab));
 });
@@ -105,6 +108,7 @@ init();
 
 async function init() {
   renderActivities();
+  setupSettingsPanel();
   setupExportPanel("export-panel");
   await refreshData();
 }
@@ -143,6 +147,7 @@ function renderAll() {
   renderTodaySummary();
   renderRecent();
   renderHistory();
+  renderSettings();
   renderActivityStats();
   updateActivityButtons();
   updateBottleDefaults();
@@ -150,7 +155,8 @@ function renderAll() {
 }
 
 function renderActivities() {
-  document.getElementById("activity-grid").innerHTML = activities.map((activity) => `
+  const visibleActivities = activities.filter((activity) => state.visibleCards.includes(activity.key));
+  document.getElementById("activity-grid").innerHTML = visibleActivities.map((activity) => `
     <article class="activity-card" style="--card-image: url('/assets/activity/header-${activity.key}.png')">
       <div class="card-top card-header">
         <div>
@@ -184,6 +190,99 @@ function renderActivities() {
       await createLog(action.payload, action.reminder);
     });
   });
+}
+
+function setupSettingsPanel() {
+  document.getElementById("profile-form").addEventListener("submit", saveProfile);
+  document.getElementById("clear-data-button").addEventListener("click", clearData);
+}
+
+function renderSettings() {
+  const birthdayInput = document.getElementById("birthday-input");
+  if (birthdayInput && document.activeElement !== birthdayInput) birthdayInput.value = state.profile.birthday || "";
+
+  const container = document.getElementById("category-settings");
+  if (!container) return;
+
+  container.innerHTML = activities.map((activity) => `
+    <label class="category-toggle">
+      <input type="checkbox" value="${activity.key}" ${state.visibleCards.includes(activity.key) ? "checked" : ""}>
+      <span>${activity.title}</span>
+    </label>
+  `).join("");
+
+  container.querySelectorAll("input").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const selected = Array.from(container.querySelectorAll("input:checked")).map((input) => input.value);
+      state.visibleCards = selected.length ? selected : activities.map((activity) => activity.key);
+      saveVisibleCards();
+      renderActivities();
+      renderActivityStats();
+      updateActivityButtons();
+      renderSettings();
+      showSettingsStatus("Category cards updated.");
+    });
+  });
+}
+
+async function saveProfile(event) {
+  event.preventDefault();
+  const birthday = document.getElementById("birthday-input").value;
+  showSettingsStatus("Saving birthday...");
+
+  try {
+    const result = await fetchJson("/api/profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ birthday })
+    });
+    state.profile = result.profile || {};
+    renderAll();
+    showSettingsStatus("Birthday saved.");
+    showReaction("Profile saved", birthday || "Birthday cleared");
+  } catch (error) {
+    showSettingsStatus(`Save failed: ${error.message}`);
+  }
+}
+
+async function clearData() {
+  if (!confirm("Clear all logs? This resets cards, history, today totals, and recent info.")) return;
+  showSettingsStatus("Clearing data...");
+
+  try {
+    const result = await fetchJson("/api/logs", { method: "DELETE" });
+    state.logs = [];
+    state.recent = result.recent || {};
+    state.summary = result.todaySummary || {};
+    renderAll();
+    showSettingsStatus("All logs cleared.");
+    showReaction("Data cleared", "Fresh start ready.");
+  } catch (error) {
+    showSettingsStatus(`Clear failed: ${error.message}`);
+  }
+}
+
+function showSettingsStatus(message) {
+  const element = document.getElementById("settings-status");
+  if (element) element.textContent = message;
+}
+
+function loadVisibleCards() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("visibleCards") || "[]");
+    if (Array.isArray(saved) && saved.length) {
+      const validKeys = new Set(activities.map((activity) => activity.key));
+      const filtered = saved.filter((key) => validKeys.has(key));
+      if (filtered.length) return filtered;
+    }
+  } catch {
+    return activities.map((activity) => activity.key);
+  }
+  return activities.map((activity) => activity.key);
+}
+
+function saveVisibleCards() {
+  localStorage.setItem("visibleCards", JSON.stringify(state.visibleCards));
 }
 
 async function createLog(payload, reminder) {
@@ -502,7 +601,13 @@ function todayString() {
 function logTime(log) {
   const [hour = "00", minute = "00"] = String(log.time || "00:00").split(":");
   const local = new Date(`${log.date || todayString()}T${hour.padStart(2, "0")}:${minute.padStart(2, "0")}:00`);
-  if (Number.isFinite(local.getTime())) return local.getTime();
+  if (Number.isFinite(local.getTime())) {
+    const created = log.createdAt ? new Date(log.createdAt) : null;
+    const offset = created && Number.isFinite(created.getTime())
+      ? created.getSeconds() * 1000 + created.getMilliseconds()
+      : 0;
+    return local.getTime() + offset;
+  }
 
   if (log.createdAt) {
     const created = new Date(log.createdAt).getTime();
@@ -586,7 +691,7 @@ function renderRecent() {
 }
 
 function renderHistory() {
-  document.getElementById("history-list").innerHTML = state.logs.slice().reverse().slice(0, 80).map((log) => `
+  document.getElementById("history-list").innerHTML = state.logs.slice().sort((a, b) => logTime(b) - logTime(a)).slice(0, 80).map((log) => `
     <form class="list-item history-editor" data-log-id="${escapeAttr(log.id)}">
       <label>
         Date
