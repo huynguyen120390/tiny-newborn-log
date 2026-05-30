@@ -10,7 +10,10 @@ const state = {
   currentDate: todayString(),
   bathSoundEnabled: false,
   bathReminderSeconds: loadBathReminderSeconds(),
-  lastBathAnnouncementStep: 0
+  lastBathAnnouncementStep: 0,
+  tummySoundEnabled: false,
+  tummyReminderSeconds: loadTummyReminderSeconds(),
+  lastTummyAnnouncementStep: 0
 };
 
 const activities = [
@@ -180,8 +183,8 @@ function renderActivities() {
         <button class="card-more" type="button" data-more-card="${activity.key}" aria-label="Show today's ${activity.title} logs">
           <span></span><span></span><span></span>
         </button>
-        ${activity.key === "bath" ? `
-          <button class="sound-toggle" type="button" data-bath-sound-toggle aria-label="Bath sound is off">
+        ${["bath", "tummy"].includes(activity.key) ? `
+          <button class="sound-toggle" type="button" data-${activity.key}-sound-toggle aria-label="${activity.title} sound is off">
             <span class="speaker-icon" aria-hidden="true"></span>
           </button>
         ` : ""}
@@ -215,6 +218,10 @@ function renderActivities() {
 
   document.querySelectorAll("[data-bath-sound-toggle]").forEach((button) => {
     button.addEventListener("click", toggleBathSound);
+  });
+
+  document.querySelectorAll("[data-tummy-sound-toggle]").forEach((button) => {
+    button.addEventListener("click", toggleTummySound);
   });
 }
 
@@ -355,6 +362,7 @@ function logsForActivityCard(cardKey) {
 function setupSettingsPanel() {
   document.getElementById("profile-form").addEventListener("submit", saveProfile);
   document.getElementById("bath-reminder-form").addEventListener("submit", saveBathReminder);
+  document.getElementById("tummy-reminder-form").addEventListener("submit", saveTummyReminder);
   document.getElementById("clear-data-button").addEventListener("click", clearData);
 }
 
@@ -364,6 +372,9 @@ function renderSettings() {
 
   const reminderInput = document.getElementById("bath-reminder-seconds");
   if (reminderInput && document.activeElement !== reminderInput) reminderInput.value = state.bathReminderSeconds;
+
+  const tummyReminderInput = document.getElementById("tummy-reminder-seconds");
+  if (tummyReminderInput && document.activeElement !== tummyReminderInput) tummyReminderInput.value = state.tummyReminderSeconds;
 
   const container = document.getElementById("category-settings");
   if (!container) return;
@@ -404,6 +415,23 @@ function saveBathReminder(event) {
   renderAll();
   showSettingsStatus(`Bath reminder saved: every ${formatReminderPeriod(state.bathReminderSeconds)}.`);
   showReaction("Bath reminder saved", `Every ${formatReminderPeriod(state.bathReminderSeconds)}`);
+}
+
+function saveTummyReminder(event) {
+  event.preventDefault();
+  const input = document.getElementById("tummy-reminder-seconds");
+  const seconds = Math.round(Number(input.value));
+  if (!Number.isFinite(seconds) || seconds < 5) {
+    showSettingsStatus("Tummy reminder must be at least 5 seconds.");
+    return;
+  }
+
+  state.tummyReminderSeconds = Math.min(3600, seconds);
+  state.lastTummyAnnouncementStep = 0;
+  saveTummyReminderSeconds();
+  renderAll();
+  showSettingsStatus(`Tummy reminder saved: every ${formatReminderPeriod(state.tummyReminderSeconds)}.`);
+  showReaction("Tummy reminder saved", `Every ${formatReminderPeriod(state.tummyReminderSeconds)}`);
 }
 
 async function saveProfile(event) {
@@ -475,6 +503,15 @@ function saveBathReminderSeconds() {
   localStorage.setItem("bathReminderSeconds", String(state.bathReminderSeconds));
 }
 
+function loadTummyReminderSeconds() {
+  const saved = Number(localStorage.getItem("tummyReminderSeconds"));
+  return Number.isFinite(saved) && saved >= 5 ? Math.min(3600, Math.round(saved)) : 120;
+}
+
+function saveTummyReminderSeconds() {
+  localStorage.setItem("tummyReminderSeconds", String(state.tummyReminderSeconds));
+}
+
 async function createLog(payload, reminder) {
   try {
     const conflict = transitionConflict(payload);
@@ -522,6 +559,7 @@ function startTicker() {
     renderActivityStats();
     updateActivityButtons();
     announceBathProgress();
+    announceTummyProgress();
   }, 1000);
 }
 
@@ -562,6 +600,12 @@ function updateActivityButtons() {
     button.setAttribute("aria-label", `Bath sound is ${state.bathSoundEnabled ? "on" : "off"}`);
     button.setAttribute("aria-pressed", state.bathSoundEnabled ? "true" : "false");
   });
+
+  document.querySelectorAll("[data-tummy-sound-toggle]").forEach((button) => {
+    button.classList.toggle("sound-on", state.tummySoundEnabled);
+    button.setAttribute("aria-label", `Tummy Time sound is ${state.tummySoundEnabled ? "on" : "off"}`);
+    button.setAttribute("aria-pressed", state.tummySoundEnabled ? "true" : "false");
+  });
 }
 
 function getActivityStats() {
@@ -600,12 +644,12 @@ function getActivityStats() {
     bath: {
       label: `${bathLabel} ${formatDuration(elapsedTodaySince(bath.log))}${formatSince(bath.log)}`,
       value: formatTotalDuration(totalToday("bath", "start", "end")),
-      helper: `Sound ${state.bathSoundEnabled ? "on" : "off"} · every ${formatReminderPeriod(state.bathReminderSeconds)}`
+      helper: `Sound ${state.bathSoundEnabled ? "on" : "off"} - every ${formatReminderPeriod(state.bathReminderSeconds)}`
     },
     tummy: {
       label: `${tummyLabel} ${formatDuration(elapsedTodaySince(tummy.log))}${formatSince(tummy.log)}`,
       value: formatTotalDuration(totalToday("tummy_time", "start", "end")),
-      helper: "Total tummy time today"
+      helper: `Sound ${state.tummySoundEnabled ? "on" : "off"} - every ${formatReminderPeriod(state.tummyReminderSeconds)}`
     },
     gym: {
       label: "Baby gym",
@@ -705,6 +749,14 @@ function toggleBathSound() {
   showReaction(state.bathSoundEnabled ? "Bath sound on" : "Bath sound off", `Every ${formatReminderPeriod(state.bathReminderSeconds)}`);
 }
 
+function toggleTummySound() {
+  state.tummySoundEnabled = !state.tummySoundEnabled;
+  state.lastTummyAnnouncementStep = 0;
+  updateActivityButtons();
+  renderActivityStats();
+  showReaction(state.tummySoundEnabled ? "Tummy sound on" : "Tummy sound off", `Every ${formatReminderPeriod(state.tummyReminderSeconds)}`);
+}
+
 function announceBathProgress() {
   if (!state.bathSoundEnabled || !("speechSynthesis" in window)) return;
 
@@ -720,6 +772,31 @@ function announceBathProgress() {
 
   state.lastBathAnnouncementStep = step;
   const elapsedSeconds = step * state.bathReminderSeconds;
+  const utterance = new SpeechSynthesisUtterance(formatSpokenReminder(elapsedSeconds));
+  const voices = window.speechSynthesis.getVoices();
+  const voice = voices.find((item) => /female|girl|zira|samantha|jenny|aria/i.test(`${item.name} ${item.voiceURI}`));
+  if (voice) utterance.voice = voice;
+  utterance.pitch = 1.18;
+  utterance.rate = 0.92;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utterance);
+}
+
+function announceTummyProgress() {
+  if (!state.tummySoundEnabled || !("speechSynthesis" in window)) return;
+
+  const tummy = getCurrentState("tummy_time");
+  if (tummy.status !== "start" || !tummy.log) {
+    state.lastTummyAnnouncementStep = 0;
+    return;
+  }
+
+  const seconds = Math.floor(elapsedSince(tummy.log) / 1000);
+  const step = Math.floor(seconds / state.tummyReminderSeconds);
+  if (step < 1 || step === state.lastTummyAnnouncementStep) return;
+
+  state.lastTummyAnnouncementStep = step;
+  const elapsedSeconds = step * state.tummyReminderSeconds;
   const utterance = new SpeechSynthesisUtterance(formatSpokenReminder(elapsedSeconds));
   const voices = window.speechSynthesis.getVoices();
   const voice = voices.find((item) => /female|girl|zira|samantha|jenny|aria/i.test(`${item.name} ${item.voiceURI}`));

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Phương Nam Cu Tí</title>
-    <link rel="stylesheet" href="/styles.css?v=20260530-bath-reminder-setting">
+    <link rel="stylesheet" href="/styles.css?v=20260530-tummy-reminder-setting">
   </head>
   <body>
     <div class="app-shell">
@@ -103,6 +103,18 @@
               <button class="primary" type="submit">Save reminder</button>
             </form>
 
+            <form id="tummy-reminder-form" class="settings-card">
+              <div>
+                <h3>Tummy Reminder</h3>
+                <p>Voice reminder interval while tummy sound is on.</p>
+              </div>
+              <label>
+                Every
+                <input id="tummy-reminder-seconds" name="seconds" type="number" min="5" max="3600" step="1">
+              </label>
+              <button class="primary" type="submit">Save reminder</button>
+            </form>
+
             <div class="settings-card danger-zone">
               <div>
                 <h3>Data</h3>
@@ -191,6 +203,6 @@
       </form>
     </template>
 
-    <script src="/app.js?v=20260530-bath-reminder-setting"></script>
+    <script src="/app.js?v=20260530-tummy-reminder-setting"></script>
   </body>
 </html>
