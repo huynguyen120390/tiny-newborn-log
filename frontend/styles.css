@@ -430,35 +430,66 @@ main {
   background: var(--card-image) center / cover no-repeat;
   filter: saturate(1.08) contrast(1.02);
   transform: scale(1.01);
+  transform-origin: center;
 }
 
 .sleeping-header .card-header::before {
-  animation: sleep-header-dream 8s ease-in-out infinite alternate;
+  animation: sleep-header-dream 6s ease-in-out infinite alternate;
 }
 
 .awake-header .card-header::before {
-  animation: awake-header-run 5s ease-in-out infinite alternate;
+  animation: awake-header-run 3.6s ease-in-out infinite alternate;
+}
+
+.sleeping-header .card-header::after {
+  animation: sleep-header-glow 4.8s ease-in-out infinite alternate;
+}
+
+.awake-header .card-header::after {
+  animation: awake-header-glow 2.4s ease-in-out infinite alternate;
 }
 
 @keyframes sleep-header-dream {
   0% {
-    transform: scale(1.02) translate3d(-4px, 0, 0);
-    filter: saturate(1.02) contrast(1.02) brightness(0.98);
+    transform: scale(1.06) translate3d(-16px, 6px, 0) rotate(-0.3deg);
+    filter: saturate(1.02) contrast(1.02) brightness(0.96);
   }
   100% {
-    transform: scale(1.07) translate3d(7px, -4px, 0);
-    filter: saturate(1.14) contrast(1.04) brightness(1.06);
+    transform: scale(1.16) translate3d(18px, -8px, 0) rotate(0.4deg);
+    filter: saturate(1.16) contrast(1.04) brightness(1.08);
   }
 }
 
 @keyframes awake-header-run {
   0% {
-    transform: scale(1.02) translate3d(-10px, 0, 0);
+    transform: scale(1.06) translate3d(-22px, 5px, 0) rotate(-0.4deg);
     filter: saturate(1.08) contrast(1.03) brightness(1);
   }
+  45% {
+    transform: scale(1.13) translate3d(8px, -8px, 0) rotate(0.2deg);
+    filter: saturate(1.2) contrast(1.04) brightness(1.08);
+  }
   100% {
-    transform: scale(1.08) translate3d(12px, -3px, 0);
-    filter: saturate(1.22) contrast(1.04) brightness(1.08);
+    transform: scale(1.18) translate3d(28px, 2px, 0) rotate(0.5deg);
+    filter: saturate(1.28) contrast(1.05) brightness(1.12);
+  }
+}
+
+@keyframes sleep-header-glow {
+  0% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0.72;
+  }
+}
+
+@keyframes awake-header-glow {
+  0% {
+    opacity: 0.82;
+  }
+  100% {
+    opacity: 0.58;
   }
 }
 
