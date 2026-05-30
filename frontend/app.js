@@ -5,6 +5,7 @@ const state = {
   profile: {},
   activeTab: "log",
   visibleCards: [],
+  activeLogsCard: null,
   ticker: null,
   currentDate: todayString(),
   bathSoundEnabled: false,
@@ -204,6 +205,7 @@ function renderActivities() {
 }
 
 function openActivityLogs(cardKey) {
+  state.activeLogsCard = cardKey;
   const activity = activities.find((item) => item.key === cardKey);
   const dialog = document.getElementById("activity-logs-dialog");
   const list = document.getElementById("activity-logs-list");
@@ -214,14 +216,102 @@ function openActivityLogs(cardKey) {
     .sort((a, b) => logTime(b) - logTime(a));
 
   list.innerHTML = logs.length ? logs.map((log) => `
-    <div class="activity-log-row">
-      <span>${formatLogClock(log)}</span>
-      <strong>${escapeHtml(labelForLog(log))}</strong>
-      ${log.notes ? `<small>${escapeHtml(log.notes)}</small>` : ""}
-    </div>
+    ${renderActivityLogRow(log, cardKey)}
   `).join("") : `<p class="empty-state">No logs today.</p>`;
 
-  dialog.showModal();
+  list.querySelectorAll("[data-edit-log]").forEach((button) => {
+    button.addEventListener("click", () => startActivityLogEdit(button.dataset.editLog, cardKey));
+  });
+
+  if (!dialog.open) dialog.showModal();
+}
+
+function renderActivityLogRow(log, cardKey) {
+  return `
+    <div class="activity-log-row" data-log-row="${escapeAttr(log.id)}">
+      <img class="activity-log-icon" src="${activityIconForLog(log, cardKey)}" alt="">
+      <div class="activity-log-body">
+        <span>${formatLogClock(log)}</span>
+        <strong>${escapeHtml(labelForLog(log))}</strong>
+        ${log.notes ? `<small>${escapeHtml(log.notes)}</small>` : ""}
+      </div>
+      <button class="log-edit-button" type="button" data-edit-log="${escapeAttr(log.id)}" aria-label="Edit ${escapeAttr(labelForLog(log))}">
+        Edit
+      </button>
+    </div>
+  `;
+}
+
+function startActivityLogEdit(logId, cardKey) {
+  const log = state.logs.find((item) => item.id === logId);
+  const row = Array.from(document.querySelectorAll("[data-log-row]")).find((item) => item.dataset.logRow === logId);
+  if (!log || !row) return;
+
+  row.innerHTML = `
+    <img class="activity-log-icon" src="${activityIconForLog(log, cardKey)}" alt="">
+    <form class="activity-log-edit-form" data-log-edit-form="${escapeAttr(log.id)}">
+      <label>
+        Time
+        <input name="time" type="time" value="${escapeAttr(log.time || "")}">
+      </label>
+      <label>
+        Notes
+        <input name="notes" type="text" value="${escapeAttr(log.notes || "")}">
+      </label>
+      <div class="activity-log-edit-actions">
+        <button class="ghost" type="button" data-cancel-log-edit="${escapeAttr(log.id)}">Cancel</button>
+        <button class="primary" type="submit">Done</button>
+      </div>
+      <p class="activity-log-edit-status" aria-live="polite"></p>
+    </form>
+  `;
+
+  row.querySelector("[data-cancel-log-edit]").addEventListener("click", () => openActivityLogs(cardKey));
+  row.querySelector("form").addEventListener("submit", (event) => saveActivityLogEdit(event, log, cardKey));
+}
+
+async function saveActivityLogEdit(event, log, cardKey) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const status = form.querySelector(".activity-log-edit-status");
+  const data = Object.fromEntries(new FormData(form).entries());
+  status.textContent = "Saving...";
+
+  try {
+    const result = await fetchJson(`/api/logs/${encodeURIComponent(log.id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ time: data.time, notes: data.notes })
+    });
+
+    const index = state.logs.findIndex((item) => item.id === result.log.id);
+    if (index !== -1) state.logs[index] = result.log;
+    state.recent = result.recent;
+    state.summary = result.todaySummary;
+    renderAll();
+    openActivityLogs(cardKey);
+    showReaction("Log updated", labelForLog(result.log));
+  } catch (error) {
+    status.textContent = `Save failed: ${error.message}`;
+  }
+}
+
+function activityIconForLog(log, cardKey) {
+  const icons = {
+    sleep: log.status === "awake" ? "awake" : "asleep",
+    feeding: log.side === "right" ? "right" : "left",
+    bottle: "bottle",
+    diaper: log.poop ? "poop" : "pee",
+    bath: "bath",
+    tummy_time: log.status === "end" ? "tummy-end" : "tummy-start",
+    baby_gym: "gym"
+  };
+  const fallbackByCard = {
+    boobie: "left",
+    gym: "gym",
+    tummy: "tummy-start"
+  };
+  return `/assets/activity/icon-${icons[log.type] || fallbackByCard[cardKey] || "success"}.png`;
 }
 
 function logsForActivityCard(cardKey) {

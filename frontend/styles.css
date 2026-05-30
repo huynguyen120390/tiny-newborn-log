@@ -918,8 +918,10 @@ input[type="range"] {
   width: min(520px, calc(100% - 28px));
 }
 
-.activity-logs-modal form {
+.activity-logs-shell {
+  display: grid;
   gap: 16px;
+  padding: 22px;
 }
 
 .icon-close {
@@ -947,11 +949,27 @@ input[type="range"] {
 
 .activity-log-row {
   display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
   gap: 4px;
+  align-items: center;
   border: 1px solid rgba(221, 228, 220, 0.86);
   border-radius: var(--radius);
   padding: 11px 12px;
   background: rgba(255, 255, 255, 0.72);
+}
+
+.activity-log-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  object-fit: cover;
+  box-shadow: 0 4px 10px rgba(31, 41, 38, 0.12);
+}
+
+.activity-log-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
 }
 
 .activity-log-row span,
@@ -964,6 +982,67 @@ input[type="range"] {
 
 .activity-log-row strong {
   color: var(--primary-dark);
+}
+
+.log-edit-button {
+  min-height: 34px;
+  border: 1px solid rgba(36, 117, 111, 0.2);
+  border-radius: 999px;
+  padding: 0 12px;
+  background: linear-gradient(180deg, #ffffff, #e9f7f0);
+  color: var(--primary-dark);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 850;
+  box-shadow: 0 4px 0 #c6ddd5, 0 10px 16px rgba(31, 41, 38, 0.06);
+}
+
+.log-edit-button:hover {
+  transform: translateY(-1px);
+}
+
+.activity-log-edit-form {
+  display: grid;
+  grid-column: 2 / -1;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: end;
+}
+
+.activity-log-edit-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.activity-log-edit-form input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0 9px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--ink);
+}
+
+.activity-log-edit-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.activity-log-edit-actions .primary,
+.activity-log-edit-actions .ghost {
+  min-height: 38px;
+  padding: 0 12px;
+}
+
+.activity-log-edit-status {
+  grid-column: 1 / -1;
+  min-height: 18px;
+  font-size: 12px;
+  font-weight: 750;
 }
 
 .empty-state {
@@ -1133,9 +1212,14 @@ input[type="range"] {
   .metric-grid,
   .recent-list,
   .export-controls,
+  .activity-log-edit-form,
   .history-editor,
   .dense .list-item {
     grid-template-columns: 1fr;
+  }
+
+  .activity-log-edit-form {
+    grid-column: 1 / -1;
   }
 
   .hero-band {
