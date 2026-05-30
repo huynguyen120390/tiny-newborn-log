@@ -297,6 +297,12 @@ main {
   isolation: isolate;
 }
 
+.card-header > div:not(.sleep-motion),
+.card-more,
+.sound-toggle {
+  z-index: 3;
+}
+
 .card-more {
   position: absolute;
   top: 12px;
@@ -449,6 +455,144 @@ main {
   animation: awake-header-glow 2.4s ease-in-out infinite alternate;
 }
 
+.sleep-motion {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.star-field,
+.cloud-field {
+  position: absolute;
+  display: block;
+  opacity: 0;
+}
+
+.star-field {
+  width: 2px;
+  height: 2px;
+  border-radius: 999px;
+  background: #fff7ca;
+  box-shadow:
+    28px 16px 0 0 #fff,
+    58px 42px 0 1px rgba(255, 247, 202, 0.9),
+    96px 20px 0 0 rgba(255, 255, 255, 0.86),
+    136px 64px 0 1px rgba(255, 247, 202, 0.82),
+    188px 30px 0 0 rgba(255, 255, 255, 0.88),
+    238px 76px 0 1px rgba(255, 247, 202, 0.78),
+    290px 24px 0 0 rgba(255, 255, 255, 0.8),
+    346px 52px 0 1px rgba(255, 247, 202, 0.78);
+}
+
+.star-field::before,
+.star-field::after {
+  position: absolute;
+  width: 96px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), #fff, rgba(255, 230, 146, 0.82), rgba(255, 255, 255, 0));
+  content: "";
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.75));
+  transform: rotate(-22deg);
+}
+
+.star-field::after {
+  width: 62px;
+  opacity: 0.75;
+}
+
+.sleeping-header .star-field {
+  opacity: 1;
+}
+
+.sleeping-header .star-field:nth-child(1) {
+  left: -130px;
+  top: 18px;
+  animation: shooting-stars-a 2.6s linear infinite;
+}
+
+.sleeping-header .star-field:nth-child(1)::before {
+  left: 22px;
+  top: 22px;
+}
+
+.sleeping-header .star-field:nth-child(1)::after {
+  left: 180px;
+  top: 76px;
+}
+
+.sleeping-header .star-field:nth-child(2) {
+  left: -180px;
+  top: -2px;
+  animation: shooting-stars-b 3.4s 0.7s linear infinite;
+}
+
+.sleeping-header .star-field:nth-child(2)::before {
+  left: 56px;
+  top: 54px;
+}
+
+.sleeping-header .star-field:nth-child(2)::after {
+  left: 270px;
+  top: 26px;
+}
+
+.sleeping-header .star-field:nth-child(3) {
+  left: -220px;
+  top: 36px;
+  animation: shooting-stars-c 4s 1.2s linear infinite;
+}
+
+.sleeping-header .star-field:nth-child(3)::before {
+  left: 88px;
+  top: 18px;
+}
+
+.sleeping-header .star-field:nth-child(3)::after {
+  left: 344px;
+  top: 80px;
+}
+
+.cloud-field {
+  width: 70px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  filter: blur(0.2px);
+  box-shadow:
+    20px -10px 0 4px rgba(255, 255, 255, 0.7),
+    42px -2px 0 2px rgba(255, 255, 255, 0.72),
+    96px 8px 0 1px rgba(255, 255, 255, 0.46),
+    128px -6px 0 4px rgba(255, 255, 255, 0.36);
+}
+
+.awake-header .cloud-field {
+  opacity: 0.85;
+}
+
+.awake-header .cloud-field:nth-child(4) {
+  left: -150px;
+  top: 24px;
+  transform: scale(0.82);
+  animation: floating-clouds 9s linear infinite;
+}
+
+.awake-header .cloud-field:nth-child(5) {
+  left: -210px;
+  top: 68px;
+  transform: scale(1.12);
+  animation: floating-clouds 12s 1.7s linear infinite;
+}
+
+.awake-header .cloud-field:nth-child(6) {
+  left: -120px;
+  top: 100px;
+  transform: scale(0.66);
+  animation: floating-clouds 8s 3s linear infinite;
+}
+
 @keyframes sleep-header-dream {
   0% {
     transform: scale(1.06) translate3d(-16px, 6px, 0) rotate(-0.3deg);
@@ -472,6 +616,74 @@ main {
   100% {
     transform: scale(1.18) translate3d(28px, 2px, 0) rotate(0.5deg);
     filter: saturate(1.28) contrast(1.05) brightness(1.12);
+  }
+}
+
+@keyframes shooting-stars-a {
+  0% {
+    transform: translate3d(-20px, -16px, 0);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(650px, 116px, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes shooting-stars-b {
+  0% {
+    transform: translate3d(-20px, -4px, 0);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  78% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(720px, 92px, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes shooting-stars-c {
+  0% {
+    transform: translate3d(-10px, -24px, 0);
+    opacity: 0;
+  }
+  14% {
+    opacity: 1;
+  }
+  76% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(760px, 130px, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes floating-clouds {
+  0% {
+    margin-left: 0;
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.86;
+  }
+  82% {
+    opacity: 0.86;
+  }
+  100% {
+    margin-left: calc(100% + 260px);
+    opacity: 0;
   }
 }
 

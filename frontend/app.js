@@ -180,6 +180,16 @@ function renderActivities() {
           <h3 data-card-title="${activity.key}">${activity.title}</h3>
           <p data-card-subtitle="${activity.key}">${activity.helper}</p>
         </div>
+        ${activity.key === "sleep" ? `
+          <div class="sleep-motion" aria-hidden="true">
+            <span class="star-field"></span>
+            <span class="star-field"></span>
+            <span class="star-field"></span>
+            <span class="cloud-field"></span>
+            <span class="cloud-field"></span>
+            <span class="cloud-field"></span>
+          </div>
+        ` : ""}
         <button class="card-more" type="button" data-more-card="${activity.key}" aria-label="Show today's ${activity.title} logs">
           <span></span><span></span><span></span>
         </button>
