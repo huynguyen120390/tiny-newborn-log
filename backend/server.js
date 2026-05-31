@@ -306,8 +306,18 @@ async function handleUpdateSoundSettings(req, res) {
 
 async function handleUpdateMilestone(req, res, id) {
   const input = await readBody(req);
-  const statuses = new Set(["Upcoming", "Practicing", "Achieved"]);
-  if (!statuses.has(input.status)) {
+  const legacyStatuses = {
+    Upcoming: "Not Yet",
+    Achieved: "Confirmed",
+    practicing: "Practicing",
+    achieved: "Confirmed",
+    "not-yet": "Not Yet",
+    maybe: "Maybe",
+    confirmed: "Confirmed"
+  };
+  const statuses = new Set(["Not Yet", "Maybe", "Practicing", "Confirmed"]);
+  const nextState = statuses.has(input.state) ? input.state : (statuses.has(input.status) ? input.status : legacyStatuses[input.status]);
+  if (!statuses.has(nextState)) {
     sendJson(res, 400, { error: "Invalid milestone status" });
     return;
   }
@@ -315,7 +325,10 @@ async function handleUpdateMilestone(req, res, id) {
   const data = readJson(DATA_PATH, {});
   data.milestone_progress = objectMap(data.milestone_progress);
   data.milestone_progress[id] = {
-    status: input.status,
+    milestoneId: id,
+    state: nextState,
+    status: nextState,
+    changedDate: typeof input.changedDate === "string" ? input.changedDate : new Date().toISOString(),
     achievedDate: typeof input.achievedDate === "string" ? input.achievedDate : null,
     confirmedAt: typeof input.confirmedAt === "string" ? input.confirmedAt : null,
     notes: typeof input.notes === "string" ? input.notes : data.milestone_progress[id]?.notes || ""
@@ -327,12 +340,14 @@ async function handleUpdateMilestone(req, res, id) {
 async function handleClearLogs(req, res) {
   const data = readJson(DATA_PATH, {});
   data.baby_log = [];
+  data.milestone_progress = {};
   const recent = rebuildRecent(data);
   writeJson(DATA_PATH, data);
   writeJson(RECENT_PATH, recent);
   sendJson(res, 200, {
     recent,
-    todaySummary: summarizeToday(data)
+    todaySummary: summarizeToday(data),
+    milestone_progress: data.milestone_progress
   });
 }
 
@@ -458,6 +473,28 @@ async function handleUpdateLog(req, res, id) {
   });
 }
 
+async function handleDeleteLog(req, res, id) {
+  const data = readJson(DATA_PATH, {});
+  data.baby_log = Array.isArray(data.baby_log) ? data.baby_log : [];
+
+  const nextLogs = data.baby_log.filter((log) => log.id !== id);
+  if (nextLogs.length === data.baby_log.length) {
+    sendJson(res, 404, { error: "Log not found" });
+    return;
+  }
+
+  data.baby_log = nextLogs;
+  const recent = rebuildRecent(data);
+  writeJson(DATA_PATH, data);
+  writeJson(RECENT_PATH, recent);
+
+  sendJson(res, 200, {
+    deletedId: id,
+    recent,
+    todaySummary: summarizeToday(data)
+  });
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -490,11 +527,16 @@ const server = http.createServer(async (req, res) => {
 
     const updateMatch = url.pathname.match(/^\/api\/logs\/([^/]+)\/?$/);
     if (updateMatch) {
-      if (req.method !== "PUT") {
-        sendJson(res, 405, { error: `Use PUT to update a log. Received ${req.method}.` });
+      const id = decodeURIComponent(updateMatch[1]);
+      if (req.method === "PUT") {
+        await handleUpdateLog(req, res, id);
         return;
       }
-      await handleUpdateLog(req, res, decodeURIComponent(updateMatch[1]));
+      if (req.method === "DELETE") {
+        await handleDeleteLog(req, res, id);
+        return;
+      }
+      sendJson(res, 405, { error: `Use PUT or DELETE for a log. Received ${req.method}.` });
       return;
     }
 

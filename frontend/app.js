@@ -5,6 +5,11 @@ const state = {
   profile: {},
   activeTab: "log",
   visibleCards: [],
+  historyFilters: {
+    startDate: "",
+    endDate: "",
+    types: ["all"]
+  },
   activeLogsCard: null,
   milestoneProgress: {},
   selectedMilestoneId: null,
@@ -89,6 +94,17 @@ const activities = [
       { label: "Log gym time", icon: "gym", payload: { type: "baby_gym" } }
     ]
   }
+];
+
+const historyEventTypes = [
+  { value: "all", label: "All" },
+  { value: "sleep", label: "Sleep" },
+  { value: "feeding", label: "Boobie" },
+  { value: "bottle", label: "Bottle" },
+  { value: "diaper", label: "Diaper" },
+  { value: "bath", label: "Bath" },
+  { value: "tummy_time", label: "Tummy" },
+  { value: "baby_gym", label: "Gym" }
 ];
 
 const milestoneDefinitions = [
@@ -218,6 +234,61 @@ const exerciseLibrary = [
   }
 ];
 
+const milestoneStates = ["Not Yet", "Maybe", "Practicing", "Confirmed"];
+
+const milestoneStateMessages = {
+  "Not Yet": "Not started yet.",
+  Maybe: "Parent may have seen this skill, but is not certain yet.",
+  Practicing: "Baby can sometimes do this skill and is building consistency.",
+  Confirmed: "Parent is confident baby consistently demonstrates this skill."
+};
+
+const legacyMilestoneStatus = {
+  Upcoming: "Not Yet",
+  Achieved: "Confirmed",
+  practicing: "Practicing",
+  achieved: "Confirmed",
+  "not-yet": "Not Yet",
+  maybe: "Maybe",
+  confirmed: "Confirmed"
+};
+
+const milestoneBehaviorDescriptions = {
+  "first-smile": ["Smiles in response to a familiar face or voice.", "Makes eye contact during warm interaction.", "Shows brighter facial expression during social play."],
+  "reaching-grabbing": ["Brings hands toward toys at midline.", "Opens hands and bats at nearby objects.", "Begins to hold a soft toy briefly."],
+  "rolling-over": ["Rolls from tummy to back or back to tummy.", "Reaches across the body.", "Uses body rotation intentionally."],
+  "army-crawling": ["Pushes through forearms during tummy play.", "Shifts weight to reach for toys.", "Pulls or scoots the body forward on the floor."],
+  "sitting-up": ["Sits with minimal support.", "Maintains balance while reaching for toys.", "Uses hands for support and begins to recover balance."],
+  crawling: ["Gets onto hands and knees.", "Rocks forward and backward.", "Moves with alternating arms and legs or an emerging crawl pattern."],
+  "first-syllables": ["Babbles repeated consonant sounds.", "Uses voice to get attention.", "Copies simple sounds or takes turns vocalizing."],
+  walking: ["Pulls to stand and cruises along furniture.", "Stands briefly without support.", "Takes independent steps with improving balance."],
+  "tracks-faces": ["Watches a caregiver's face at close range.", "Follows a face or high-contrast object briefly.", "Turns eyes or head toward gentle movement."],
+  "hands-to-mouth": ["Brings hands toward mouth during calm awake time.", "Explores fingers by sucking or mouthing.", "Keeps hands more open and active at midline."],
+  "responds-to-name": ["Looks toward caregiver when name is called.", "Pauses activity after hearing familiar voice.", "Shows recognition through eye contact, smile, or vocal response."],
+  "transfers-toy-hand-to-hand": ["Moves a toy from one hand to the other.", "Uses both hands together at midline.", "Looks at and manipulates toys with growing control."],
+  "peekaboo-understanding": ["Anticipates a hidden face or toy returning.", "Smiles, laughs, or looks for a covered object.", "Shows early understanding that people and objects still exist when hidden."],
+  "waves-bye-bye": ["Copies a simple wave.", "Uses a hand gesture during greetings or goodbyes.", "Pairs gesture with eye contact or vocalizing."],
+  "claps-hands": ["Brings hands together repeatedly.", "Copies clapping during songs or games.", "Uses clapping to show excitement."],
+  "finger-feeding": ["Picks up safe soft foods with fingers.", "Brings food to mouth with improving accuracy.", "Uses raking grasp or early pincer grasp."],
+  "drinks-from-cup": ["Accepts small sips from an open cup with help.", "Brings lips to cup edge.", "Swallows small amounts with caregiver support."],
+  "points-with-finger": ["Extends index finger toward objects of interest.", "Points to request or share attention.", "Looks between caregiver and the object."],
+  "eats-solids": ["Shows interest in food and opens mouth for spoon.", "Moves purees or soft solids in the mouth.", "Sits with appropriate support during feeding."]
+};
+
+const supportingMilestoneExercises = {
+  "tracks-faces": ["Slow face tracking", "High-contrast card play", "Baby floor gym watching"],
+  "hands-to-mouth": ["Midline hand play", "Gentle hand-to-mouth guidance", "Baby floor gym reaching"],
+  "responds-to-name": ["Name games", "Call-and-pause play", "Face-to-face talking"],
+  "transfers-toy-hand-to-hand": ["Offer toys at midline", "Hand-to-hand toy transfer practice", "Baby floor gym reaching"],
+  "peekaboo-understanding": ["Peek-a-boo with cloth", "Hide-and-reveal toys", "Pause before revealing"],
+  "waves-bye-bye": ["Goodbye routine", "Model waving slowly", "Take-turn gesture games"],
+  "claps-hands": ["Pat-a-cake", "Song clapping", "Hand-over-hand clapping"],
+  "finger-feeding": ["Safe soft finger foods", "Tray exploration", "Practice pincer grasp with soft pieces"],
+  "drinks-from-cup": ["Tiny open-cup sips", "Model cup drinking", "Supported seated practice"],
+  "points-with-finger": ["Point-and-name objects", "Book pointing", "Choice games"],
+  "eats-solids": ["Supported seated meals", "Responsive spoon feeding", "Texture exploration when developmentally ready"]
+};
+
 state.visibleCards = loadVisibleCards();
 
 document.querySelectorAll(".tab").forEach((button) => {
@@ -259,9 +330,11 @@ init().catch((error) => {
 
 async function init() {
   renderActivities();
+  setupHistoryFilters();
   setupSettingsPanel();
   setupExportPanel("export-panel");
   setupSpeechVoices();
+  updateClock();
   await refreshData();
 }
 
@@ -306,10 +379,9 @@ function activateTab(tab) {
 
 function renderAll() {
   
-  const name = state.profile.name || "Cutie Pie";
   const birthday = state.profile.birthday || "";
   const age = formatBabyAge(birthday);
-  document.getElementById("baby-summary").textContent = `${name}, ${age}.`;
+  document.getElementById("baby-summary").textContent = `${age}.`;
   renderTodaySummary();
   renderRecent();
   renderHistory();
@@ -394,16 +466,19 @@ function renderMilestones() {
   if (nextCard) nextCard.innerHTML = renderNextMilestone(next);
 
   const major = document.getElementById("major-milestones");
-  if (major) major.innerHTML = milestoneRecords(1).map((milestone) => renderMilestoneCard(milestone, next?.id)).join("");
+  if (major) major.innerHTML = milestoneRecords(1).map((milestone, index, list) => renderMilestoneCard(milestone, next?.id, index, list.length)).join("");
 
   const supporting = document.getElementById("supporting-milestones");
-  if (supporting) supporting.innerHTML = milestoneRecords(2).map((milestone) => renderMilestoneCard(milestone, next?.id)).join("");
+  if (supporting) supporting.innerHTML = milestoneRecords(2).map((milestone, index, list) => renderMilestoneCard(milestone, next?.id, index, list.length)).join("");
 
   const exerciseContainer = document.getElementById("exercise-library");
   if (exerciseContainer) exerciseContainer.innerHTML = exerciseLibrary.map(renderExerciseCard).join("");
 
   document.querySelectorAll("[data-milestone-id]").forEach((button) => {
     button.addEventListener("click", () => openMilestoneDialog(button.dataset.milestoneId));
+  });
+  document.querySelectorAll("[data-exercise-card]").forEach((card) => {
+    card.addEventListener("click", () => card.classList.remove("spotlight"));
   });
 }
 
@@ -416,31 +491,35 @@ function milestoneRecords(level) {
 
 function mergeMilestoneProgress(milestone) {
   const progress = state.milestoneProgress[milestone.id] || {};
+  const status = normalizeMilestoneStatus(progress.state || progress.status || defaultMilestoneStatus(milestone));
   return {
     ...milestone,
-    status: progress.status || defaultMilestoneStatus(milestone),
+    state: status,
+    status,
     achievedDate: progress.achievedDate || null,
     confirmedAt: progress.confirmedAt || null,
+    changedDate: progress.changedDate || progress.confirmedAt || progress.achievedDate || null,
     notes: progress.notes || ""
   };
 }
 
 function defaultMilestoneStatus(milestone) {
-  const ageWeeks = babyAgeWeeks();
-  return Number.isFinite(ageWeeks) && ageWeeks >= milestone.ageStartWeeks ? "Practicing" : "Upcoming";
+  return "Not Yet";
 }
 
-function renderMilestoneCard(milestone, nextId) {
+function renderMilestoneCard(milestone, nextId, index = 0, count = 1) {
   const isNext = milestone.id === nextId;
+  const isFirst = index === 0;
+  const isLast = index === count - 1;
   return `
-    <button class="milestone-card ${statusClass(milestone.status)} ${isNext ? "next" : ""}" type="button" data-milestone-id="${escapeAttr(milestone.id)}">
+    <button class="milestone-card ${statusClass(milestone.status)} ${isNext ? "next" : ""} ${isFirst ? "first" : ""} ${isLast ? "last" : ""}" type="button" data-milestone-id="${escapeAttr(milestone.id)}" aria-label="${escapeAttr(`${milestone.name}, ${displayAgeLabel(milestone)}, ${milestone.status}`)}">
       <span class="milestone-icon-wrap">
         <img src="${milestoneIconPath(milestone)}" alt="">
-        ${milestone.status === "Achieved" ? `<span class="milestone-check" aria-hidden="true">✓</span>` : ""}
+        ${milestone.status === "Confirmed" ? `<span class="milestone-check" aria-hidden="true">&#10003;</span>` : ""}
       </span>
       <span class="milestone-card-copy">
         <strong>${escapeHtml(milestone.name)}</strong>
-        <small>${escapeHtml(milestone.ageLabel)}</small>
+        <small>${escapeHtml(displayAgeLabel(milestone))}</small>
         <span class="status-pill ${statusClass(milestone.status)}">${escapeHtml(milestone.status)}</span>
       </span>
     </button>
@@ -459,8 +538,8 @@ function renderNextMilestone(milestone) {
       <span>
         <small>Next Expected Milestone</small>
         <strong>${escapeHtml(milestone.name)}</strong>
-        <em>${escapeHtml(milestone.ageLabel)}</em>
-        <span>${recommendations.length ? escapeHtml(recommendations.join(", ")) : "Practice through everyday play."}</span>
+        <em>${escapeHtml(displayAgeLabel(milestone))}</em>
+        <span>${recommendations.length ? escapeHtml(recommendations.map((exercise) => exercise.name).join(", ")) : "Practice through everyday play."}</span>
       </span>
     </button>
   `;
@@ -468,7 +547,7 @@ function renderNextMilestone(milestone) {
 
 function renderExerciseCard(exercise) {
   return `
-    <article class="exercise-card">
+    <article class="exercise-card" id="exercise-${escapeAttr(exercise.id)}" data-exercise-card="${escapeAttr(exercise.id)}" tabindex="-1">
       <h4>${escapeHtml(exercise.name)}</h4>
       ${renderExerciseGroup("Purpose", exercise.purpose)}
       ${renderExerciseGroup("Timing", exercise.timing)}
@@ -491,22 +570,7 @@ function renderExerciseGroup(label, items) {
 }
 
 function nextExpectedMilestone() {
-  const milestones = milestoneDefinitions.map(mergeMilestoneProgress).filter((milestone) => milestone.status !== "Achieved");
-  if (!milestones.length) return null;
-
-  const ageWeeks = babyAgeWeeks();
-  if (!Number.isFinite(ageWeeks)) {
-    return milestones.sort((a, b) => a.ageStartWeeks - b.ageStartWeeks)[0];
-  }
-
-  return milestones
-    .map((milestone) => {
-      const inRange = ageWeeks >= milestone.ageStartWeeks && (milestone.ageEndWeeks === null || ageWeeks <= milestone.ageEndWeeks);
-      const futureDistance = Math.max(0, milestone.ageStartWeeks - ageWeeks);
-      const overdueDistance = ageWeeks > (milestone.ageEndWeeks || milestone.ageStartWeeks) ? ageWeeks - (milestone.ageEndWeeks || milestone.ageStartWeeks) : 0;
-      return { milestone, score: inRange ? 0 : futureDistance ? futureDistance : 1000 + overdueDistance };
-    })
-    .sort((a, b) => a.score - b.score || a.milestone.ageStartWeeks - b.milestone.ageStartWeeks)[0].milestone;
+  return milestoneDefinitions.map(mergeMilestoneProgress).find((milestone) => milestone.status !== "Confirmed") || null;
 }
 
 function openMilestoneDialog(id) {
@@ -520,44 +584,60 @@ function openMilestoneDialog(id) {
   dialog.querySelectorAll("[data-milestone-action]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.preventDefault();
-      updateMilestoneStatus(milestone.id, button.dataset.milestoneAction);
+      updateMilestoneStatus(milestone.id, button.dataset.milestoneAction, dialog.querySelector("[data-milestone-notes]")?.value || "");
     });
+  });
+  dialog.querySelectorAll("[data-exercise-open]").forEach((button) => {
+    button.addEventListener("click", () => openExerciseEntry(button.dataset.exerciseOpen));
   });
   if (!dialog.open) dialog.showModal();
 }
 
 function renderMilestoneDialog(milestone) {
   const recommendations = recommendedExercisesForMilestone(milestone);
+  const behavior = milestoneBehaviorDescriptions[milestone.id] || [];
+  const exercises = milestoneExercises(milestone);
   return `
     <div class="milestone-dialog-hero">
       <img src="${milestoneIconPath(milestone)}" alt="">
       <div>
         <span class="status-pill ${statusClass(milestone.status)}">${escapeHtml(milestone.status)}</span>
         <h3>${escapeHtml(milestone.name)}</h3>
-        <p>Level ${milestone.level} • ${escapeHtml(milestone.ageLabel)}</p>
+        <p>Level ${milestone.level} &bull; ${escapeHtml(displayAgeLabel(milestone))}</p>
       </div>
     </div>
     <div class="milestone-dialog-body">
-      ${milestone.exercises.length ? renderExerciseGroup("Activities", milestone.exercises) : ""}
-      ${recommendations.length ? renderExerciseGroup("Exercise Library", recommendations) : ""}
-      ${milestone.achievedDate ? `<p class="achieved-note">Achieved on ${escapeHtml(milestone.achievedDate)}</p>` : ""}
+      <div>
+        <strong>Milestone Information</strong>
+        <p>${escapeHtml(milestoneStateMessages[milestone.status] || "")}</p>
+      </div>
+      ${behavior.length ? renderExerciseGroup("Baby Behavior Description", behavior) : ""}
+      ${exercises.length ? renderExerciseGroup("Exercises", exercises) : ""}
+      ${recommendations.length ? renderExerciseLinks("Exercise Library", recommendations) : ""}
+      ${milestone.changedDate ? `<p class="achieved-note">Last changed on ${escapeHtml(formatDisplayDate(milestone.changedDate))}</p>` : ""}
+      <label class="milestone-notes">
+        <strong>Notes</strong>
+        <textarea data-milestone-notes rows="3" placeholder="Optional parent notes">${escapeHtml(milestone.notes)}</textarea>
+      </label>
     </div>
     <div class="modal-actions milestone-actions">
-      ${milestone.status === "Achieved" ? `
-        <button class="primary" type="button" data-milestone-action="practicing">Mark as Practicing</button>
-      ` : `
-        <button class="primary" type="button" data-milestone-action="achieved">Confirm Achieved</button>
-        <button class="ghost" type="button" data-milestone-action="not-yet">Not Yet</button>
-      `}
+      ${milestoneStates.map((stateName) => `<button class="${stateName === milestone.status ? "primary" : "ghost"}" type="button" data-milestone-action="${escapeAttr(stateName)}">${escapeHtml(stateName)}</button>`).join("")}
     </div>
   `;
 }
 
-async function updateMilestoneStatus(id, action) {
+async function updateMilestoneStatus(id, action, notes = "") {
   const now = new Date().toISOString();
-  const payload = action === "achieved"
-    ? { status: "Achieved", achievedDate: todayString(), confirmedAt: now, notes: "" }
-    : { status: "Practicing", achievedDate: null, confirmedAt: action === "practicing" ? now : null, notes: "" };
+  const stateName = normalizeMilestoneStatus(action);
+  const payload = {
+    milestoneId: id,
+    state: stateName,
+    status: stateName,
+    changedDate: now,
+    achievedDate: stateName === "Confirmed" ? todayString() : null,
+    confirmedAt: stateName === "Confirmed" ? now : null,
+    notes
+  };
 
   try {
     const result = await fetchJson(`/api/milestones/${encodeURIComponent(id)}`, {
@@ -568,7 +648,7 @@ async function updateMilestoneStatus(id, action) {
     state.milestoneProgress = result.milestone_progress || result.milestones || {};
     document.getElementById("milestone-dialog").close();
     renderMilestones();
-    showReaction(payload.status === "Achieved" ? "Milestone achieved" : "Practice saved", milestoneName(id));
+    showReaction(payload.status === "Confirmed" ? "Milestone confirmed" : "Milestone saved", milestoneName(id));
   } catch (error) {
     showToast(`Could not save milestone: ${error.message}`);
   }
@@ -577,9 +657,37 @@ async function updateMilestoneStatus(id, action) {
 function recommendedExercisesForMilestone(milestone) {
   return exerciseLibrary
     .filter((exercise) => exercise.supportsMilestones.includes(milestone.name))
-    .map((exercise) => exercise.name)
-    .concat(milestone.exercises.slice(0, 3))
     .slice(0, 4);
+}
+
+function milestoneExercises(milestone) {
+  return (milestone.exercises.length ? milestone.exercises : supportingMilestoneExercises[milestone.id] || []).slice(0, 5);
+}
+
+function renderExerciseLinks(label, exercises) {
+  return `
+    <div>
+      <strong>${escapeHtml(label)}</strong>
+      <div class="exercise-link-list">
+        ${exercises.map((exercise) => `<button type="button" data-exercise-open="${escapeAttr(exercise.id)}">${escapeHtml(exercise.name)}</button>`).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function openExerciseEntry(id) {
+  const dialog = document.getElementById("milestone-dialog");
+  if (dialog.open) dialog.close();
+  const card = document.getElementById(`exercise-${id}`);
+  if (!card) return;
+  card.classList.add("spotlight");
+  card.scrollIntoView({ behavior: "smooth", block: "center" });
+  card.focus({ preventScroll: true });
+}
+
+function normalizeMilestoneStatus(status) {
+  if (milestoneStates.includes(status)) return status;
+  return legacyMilestoneStatus[status] || "Not Yet";
 }
 
 function babyAgeWeeks() {
@@ -588,6 +696,17 @@ function babyAgeWeeks() {
   const birth = new Date(`${birthday}T00:00:00`);
   if (Number.isNaN(birth.getTime())) return NaN;
   return Math.floor((Date.now() - birth.getTime()) / (7 * 24 * 60 * 60 * 1000));
+}
+
+function displayAgeLabel(milestone) {
+  return String(milestone.ageLabel || "").replaceAll("â€“", "-").replaceAll("–", "-");
+}
+
+function formatDisplayDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
 }
 
 function milestoneIconPath(milestone) {
@@ -599,7 +718,7 @@ function milestoneName(id) {
 }
 
 function statusClass(status) {
-  return status.toLowerCase();
+  return normalizeMilestoneStatus(status).toLowerCase().replace(/\s+/g, "-");
 }
 
 function openActivityLogs(cardKey) {
@@ -619,6 +738,9 @@ function openActivityLogs(cardKey) {
 
   list.querySelectorAll("[data-edit-log]").forEach((button) => {
     button.addEventListener("click", () => startActivityLogEdit(button.dataset.editLog, cardKey));
+  });
+  list.querySelectorAll("[data-delete-log]").forEach((button) => {
+    button.addEventListener("click", () => deleteLog(button.dataset.deleteLog, cardKey));
   });
 
   if (!dialog.open) dialog.showModal();
@@ -640,10 +762,27 @@ function renderActivityLogRow(log, cardKey) {
         <strong>${escapeHtml(labelForLog(log))}</strong>
         ${log.notes ? `<small>${escapeHtml(log.notes)}</small>` : ""}
       </div>
-      <button class="log-edit-button" type="button" data-edit-log="${escapeAttr(log.id)}" aria-label="Edit ${escapeAttr(labelForLog(log))}">
-        Edit
-      </button>
+      ${renderLogMenu(log, cardKey)}
     </div>
+  `;
+}
+
+function renderLogMenu(log, cardKey = "") {
+  const editAttr = cardKey
+    ? `data-edit-log="${escapeAttr(log.id)}" data-card-key="${escapeAttr(cardKey)}"`
+    : `data-history-edit="${escapeAttr(log.id)}"`;
+  const cardAttr = cardKey ? ` data-card-key="${escapeAttr(cardKey)}"` : "";
+  return `
+    <details class="log-row-menu">
+      <summary aria-label="Log actions">...</summary>
+      <div class="log-row-menu-panel">
+        <button type="button" ${editAttr}>Edit</button>
+        <button class="danger-menu-button" type="button" data-delete-log="${escapeAttr(log.id)}"${cardAttr}>
+          <span aria-hidden="true">&#128465;</span>
+          Delete
+        </button>
+      </div>
+    </details>
   `;
 }
 
@@ -659,19 +798,17 @@ function startActivityLogEdit(logId, cardKey) {
         Time
         <input name="time" type="time" value="${escapeAttr(log.time || "")}">
       </label>
-      <label>
+      <label class="activity-log-notes-field">
         Notes
         <input name="notes" type="text" value="${escapeAttr(log.notes || "")}">
       </label>
       <div class="activity-log-edit-actions">
-        <button class="ghost" type="button" data-cancel-log-edit="${escapeAttr(log.id)}">Cancel</button>
         <button class="primary" type="submit">Done</button>
       </div>
       <p class="activity-log-edit-status" aria-live="polite"></p>
     </form>
   `;
 
-  row.querySelector("[data-cancel-log-edit]").addEventListener("click", () => openActivityLogs(cardKey));
   row.querySelector("form").addEventListener("submit", (event) => saveActivityLogEdit(event, log, cardKey));
   row.querySelector("[type='submit']").addEventListener("click", (event) => {
     event.preventDefault();
@@ -741,6 +878,51 @@ function logsForActivityCard(cardKey) {
   };
   const matches = filters[cardKey] || (() => false);
   return state.logs.filter(matches);
+}
+
+function setupHistoryFilters() {
+  const form = document.getElementById("history-filters");
+  const typeContainer = document.getElementById("history-type-filters");
+  if (!form || !typeContainer) return;
+
+  typeContainer.innerHTML = historyEventTypes.map((type) => `
+    <label>
+      <input type="checkbox" value="${escapeAttr(type.value)}" ${type.value === "all" ? "checked" : ""}>
+      ${escapeHtml(type.label)}
+    </label>
+  `).join("");
+
+  document.getElementById("history-start-date").addEventListener("change", updateHistoryFilters);
+  document.getElementById("history-end-date").addEventListener("change", updateHistoryFilters);
+  typeContainer.addEventListener("change", updateHistoryFilters);
+}
+
+function updateHistoryFilters(event) {
+  const typeContainer = document.getElementById("history-type-filters");
+  const boxes = Array.from(typeContainer.querySelectorAll("input[type='checkbox']"));
+  const allBox = boxes.find((box) => box.value === "all");
+  let selected = boxes.filter((box) => box.checked).map((box) => box.value);
+
+  if (event?.target?.value === "all" && event.target.checked) {
+    boxes.forEach((box) => {
+      box.checked = box.value === "all";
+    });
+    selected = ["all"];
+  } else if (event?.target?.value !== "all") {
+    if (allBox) allBox.checked = false;
+    selected = boxes.filter((box) => box.checked && box.value !== "all").map((box) => box.value);
+    if (!selected.length && allBox) {
+      allBox.checked = true;
+      selected = ["all"];
+    }
+  }
+
+  state.historyFilters = {
+    startDate: document.getElementById("history-start-date")?.value || "",
+    endDate: document.getElementById("history-end-date")?.value || "",
+    types: selected.includes("all") ? ["all"] : selected
+  };
+  renderHistory();
 }
 
 function setupSettingsPanel() {
@@ -868,7 +1050,7 @@ async function saveProfile(event) {
 }
 
 async function clearData() {
-  if (!confirm("Clear all logs? This resets cards, history, today totals, and recent info.")) return;
+  if (!confirm("Clear all logs and milestones? This resets cards, history, today totals, milestone progress, and recent info.")) return;
   showSettingsStatus("Clearing data...");
 
   try {
@@ -876,11 +1058,30 @@ async function clearData() {
     state.logs = [];
     state.recent = result.recent || {};
     state.summary = result.todaySummary || {};
+    state.milestoneProgress = result.milestone_progress || {};
     renderAll();
-    showSettingsStatus("All logs cleared.");
-    showReaction("Data cleared", "Fresh start ready.");
+    showSettingsStatus("All logs and milestones cleared.");
+    showReaction("Data cleared", "Logs and milestones reset.");
   } catch (error) {
     showSettingsStatus(`Clear failed: ${error.message}`);
+  }
+}
+
+async function deleteLog(logId, cardKey = "") {
+  const log = state.logs.find((item) => item.id === logId);
+  if (!log) return;
+  if (!confirm(`Delete this log?\n\n${labelForLog(log)} at ${formatLogClock(log)}`)) return;
+
+  try {
+    const result = await fetchJson(`/api/logs/${encodeURIComponent(logId)}`, { method: "DELETE" });
+    state.logs = state.logs.filter((item) => item.id !== logId);
+    state.recent = result.recent || state.recent;
+    state.summary = result.todaySummary || state.summary;
+    renderAll();
+    if (cardKey) openActivityLogs(cardKey);
+    showReaction("Log deleted", labelForLog(log));
+  } catch (error) {
+    showToast(`Delete failed: ${error.message}`);
   }
 }
 
@@ -1002,6 +1203,7 @@ function updateBottleDefaults() {
 function startTicker() {
   if (state.ticker) return;
   state.ticker = setInterval(async () => {
+    updateClock();
     if (state.currentDate !== todayString()) {
       state.currentDate = todayString();
       await refreshData();
@@ -1012,6 +1214,21 @@ function startTicker() {
     announceBathProgress();
     announceTummyProgress();
   }, 1000);
+}
+
+function updateClock() {
+  const clock = document.getElementById("current-clock");
+  if (!clock) return;
+  const now = new Date();
+  clock.dateTime = now.toISOString();
+  clock.textContent = now.toLocaleString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit"
+  });
 }
 
 function renderActivityStats() {
@@ -1586,6 +1803,9 @@ function formatLogClock(log) {
 }
 
 function renderTodaySummary() {
+  const container = document.getElementById("today-metrics");
+  if (!container) return;
+
   const cards = [
     ["Logs", state.summary.totalLogs || 0, "All activities"],
     ["Breast", state.summary.breastFeeds || 0, "Feeds"],
@@ -1597,7 +1817,7 @@ function renderTodaySummary() {
     ["Tummy", state.summary.tummyTimeEvents || 0, "Start/end taps"]
   ];
 
-  document.getElementById("today-metrics").innerHTML = cards.map(([label, value, helper]) => `
+  container.innerHTML = cards.map(([label, value, helper]) => `
     <article class="metric">
       <p>${label}</p>
       <strong>${value}</strong>
@@ -1607,6 +1827,9 @@ function renderTodaySummary() {
 }
 
 function renderRecent() {
+  const container = document.getElementById("recent-list");
+  if (!container) return;
+
   const rows = [
     ["Next breast side", state.recent.nextBreastSide || "left"],
     ["Last bottle", formatSinceTime(lastLogOfType("bottle"))],
@@ -1616,7 +1839,7 @@ function renderRecent() {
     ["Last activity", formatWhen(state.recent.lastActivityAt)]
   ];
 
-  document.getElementById("recent-list").innerHTML = rows.map(([label, value]) => `
+  container.innerHTML = rows.map(([label, value]) => `
     <div class="recent-row">
       <span>${label}</span>
       <strong>${value}</strong>
@@ -1625,7 +1848,62 @@ function renderRecent() {
 }
 
 function renderHistory() {
-  document.getElementById("history-list").innerHTML = state.logs.slice().sort((a, b) => logTime(b) - logTime(a)).slice(0, 80).map((log) => `
+  const list = document.getElementById("history-list");
+  const logs = filteredHistoryLogs();
+  list.innerHTML = logs.length ? logs.map((log) => `
+    ${renderHistoryLogRow(log)}
+  `).join("") : `<p class="empty-state">No logs match these filters.</p>`;
+
+  list.querySelectorAll("[data-history-edit]").forEach((button) => {
+    button.addEventListener("click", () => startHistoryEdit(button.dataset.historyEdit));
+  });
+  list.querySelectorAll("[data-delete-log]").forEach((button) => {
+    button.addEventListener("click", () => deleteLog(button.dataset.deleteLog));
+  });
+}
+
+function filteredHistoryLogs() {
+  const filters = state.historyFilters || {};
+  const types = filters.types || ["all"];
+  return state.logs
+    .filter((log) => {
+      if (filters.startDate && log.date < filters.startDate) return false;
+      if (filters.endDate && log.date > filters.endDate) return false;
+      if (!types.includes("all") && !types.includes(log.type)) return false;
+      return true;
+    })
+    .sort((a, b) => logTime(b) - logTime(a))
+    .slice(0, 80);
+}
+
+function renderHistoryLogRow(log) {
+  return `
+    <div class="list-item history-log-row" data-history-row="${escapeAttr(log.id)}">
+      <img class="history-log-icon" src="${activityIconForLog(log)}" alt="">
+      <div>
+        <span>Date</span>
+        <strong>${escapeHtml(formatDisplayDate(log.date || ""))}</strong>
+      </div>
+      <div>
+        <span>Time</span>
+        <strong>${escapeHtml(formatLogClock(log))}</strong>
+      </div>
+      <div class="history-log-main">
+        <span>${escapeHtml(log.type || "Log")}</span>
+        <strong>${escapeHtml(labelForLog(log))}</strong>
+        ${log.notes ? `<small>${escapeHtml(log.notes)}</small>` : ""}
+      </div>
+      ${renderLogMenu(log)}
+    </div>
+  `;
+}
+
+function startHistoryEdit(logId) {
+  const log = state.logs.find((item) => item.id === logId);
+  const row = Array.from(document.querySelectorAll("[data-history-row]")).find((item) => item.dataset.historyRow === logId);
+  if (!log || !row) return;
+
+  row.outerHTML = `
     <form class="list-item history-editor" data-log-id="${escapeAttr(log.id)}">
       <label>
         Date
@@ -1641,13 +1919,14 @@ function renderHistory() {
         <input name="notes" type="text" value="${escapeAttr(log.notes || "")}">
       </label>
       <button class="primary history-save" type="submit">Save</button>
+      <button class="ghost history-cancel" type="button" data-history-cancel="${escapeAttr(log.id)}">Cancel</button>
       <p class="history-status" aria-live="polite">${escapeHtml(labelForLog(log))}</p>
     </form>
-  `).join("");
+  `;
 
-  document.querySelectorAll(".history-editor").forEach((form) => {
-    form.addEventListener("submit", saveHistoryCorrection);
-  });
+  const form = Array.from(document.querySelectorAll(".history-editor")).find((item) => item.dataset.logId === logId);
+  form.addEventListener("submit", saveHistoryCorrection);
+  form.querySelector("[data-history-cancel]").addEventListener("click", renderHistory);
 }
 
 function renderCorrectionField(log) {

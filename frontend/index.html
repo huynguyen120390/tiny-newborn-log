@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Phương Nam Cu Tí</title>
-    <link rel="stylesheet" href="/styles.css?v=20260530-milestones">
+    <link rel="stylesheet" href="/styles.css?v=20260530-milestone-timeline">
   </head>
   <body>
     <div class="app-shell">
@@ -18,12 +18,12 @@
         </div> -->
         <nav class="tabs" aria-label="Main views">
           <button class="tab active" data-tab="log">Log</button>
-          <button class="tab" data-tab="today">Today</button>
+          <button class="tab" data-tab="milestones">Milestones</button>
           <button class="tab" data-tab="history">History</button>
           <button class="tab" data-tab="exports">Export</button>
-          <button class="tab" data-tab="milestones">Milestones</button>
           <button class="tab" data-tab="settings">Settings</button>
         </nav>
+        <time id="current-clock" class="current-clock" aria-live="polite"></time>
       </header>
 
       <main>
@@ -38,23 +38,25 @@
           <div class="activity-grid" id="activity-grid"></div>
         </section>
 
-        <section id="today" class="panel">
-          <div class="page-title">
-            <h2>Today</h2>
-            <p>A quick snapshot of what has been logged today.</p>
-          </div>
-          <div class="metric-grid" id="today-metrics"></div>
-          <div class="recent-panel">
-            <h3>Recent Info</h3>
-            <div id="recent-list" class="recent-list"></div>
-          </div>
-        </section>
-
         <section id="history" class="panel">
           <div class="page-title">
             <h2>History</h2>
             <p>Newest activity first.</p>
           </div>
+          <form id="history-filters" class="history-filters">
+            <label>
+              From
+              <input id="history-start-date" type="date" name="startDate">
+            </label>
+            <label>
+              To
+              <input id="history-end-date" type="date" name="endDate">
+            </label>
+            <fieldset>
+              <legend>Event types</legend>
+              <div id="history-type-filters" class="history-type-filters"></div>
+            </fieldset>
+          </form>
           <div id="history-list" class="list dense"></div>
         </section>
 
@@ -162,7 +164,7 @@
             <div class="settings-card danger-zone">
               <div>
                 <h3>Data</h3>
-                <p>Clear all local logs and reset today totals.</p>
+                <p>Clear all local logs, milestone progress, and reset today totals.</p>
               </div>
               <button id="clear-data-button" class="danger-button" type="button">Clear data</button>
             </div>
@@ -254,6 +256,6 @@
       </form>
     </template>
 
-    <script src="/app.js?v=20260530-startup-fix"></script>
+    <script src="/app.js?v=20260530-milestone-timeline"></script>
   </body>
 </html>
