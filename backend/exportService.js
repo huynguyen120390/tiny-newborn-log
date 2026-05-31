@@ -19,7 +19,7 @@ function ensureExportDir() {
 }
 
 function loadData() {
-  return JSON.parse(fs.readFileSync(DATA_PATH, "utf8"));
+  return JSON.parse(fs.readFileSync(DATA_PATH, "utf8").replace(/^\uFEFF/, ""));
 }
 
 function todayIso() {

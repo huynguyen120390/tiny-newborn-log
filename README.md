@@ -54,6 +54,24 @@ http://192.168.1.25:3000
 
 Allow Node.js through Windows Firewall if another device cannot connect.
 
+Current home-network development address we are using right now:
+
+```text
+http://192.168.86.55:3002/
+```
+
+This is a local convenience note for the current setup, not a production deployment pattern.
+
+If the page stays on `Loading profile...`, check these endpoints from the desktop:
+
+```text
+http://127.0.0.1:3002/api/app-data
+http://127.0.0.1:3002/api/recent
+http://127.0.0.1:3002/api/today-summary
+```
+
+All three should return JSON. If they do, hard-refresh the phone/browser page so it fetches the latest `/app.js` cache-busted script.
+
 ## Friendly Local Name
 
 This desktop is configured to resolve:

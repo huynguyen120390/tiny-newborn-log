@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Phương Nam Cu Tí</title>
-    <link rel="stylesheet" href="/styles.css?v=20260530-boobie-baby">
+    <link rel="stylesheet" href="/styles.css?v=20260530-milestones">
   </head>
   <body>
     <div class="app-shell">
@@ -21,6 +21,7 @@
           <button class="tab" data-tab="today">Today</button>
           <button class="tab" data-tab="history">History</button>
           <button class="tab" data-tab="exports">Export</button>
+          <button class="tab" data-tab="milestones">Milestones</button>
           <button class="tab" data-tab="settings">Settings</button>
         </nav>
       </header>
@@ -65,6 +66,35 @@
           <div id="export-panel" class="export-panel"></div>
         </section>
 
+        <section id="milestones" class="panel">
+          <div class="page-title">
+            <h2>Milestones</h2>
+            <p>Track progress and choose simple exercises that support baby's next skills.</p>
+          </div>
+          <div id="next-milestone-card" class="next-milestone-card"></div>
+          <div class="milestone-section">
+            <div class="section-heading">
+              <h3>Level 1 Major Milestones</h3>
+              <p>Core skills in typical chronological order.</p>
+            </div>
+            <div id="major-milestones" class="milestone-timeline major"></div>
+          </div>
+          <div class="milestone-section">
+            <div class="section-heading">
+              <h3>Level 2 Supporting Milestones</h3>
+              <p>Smaller skills that support the larger journey.</p>
+            </div>
+            <div id="supporting-milestones" class="milestone-timeline compact"></div>
+          </div>
+          <div class="milestone-section">
+            <div class="section-heading">
+              <h3>Exercise Library</h3>
+              <p>Parent-guided activities matched to milestone practice.</p>
+            </div>
+            <div id="exercise-library" class="exercise-library"></div>
+          </div>
+        </section>
+
         <section id="settings" class="panel">
           <div class="page-title">
             <h2>Settings</h2>
@@ -89,6 +119,20 @@
                 <p>Choose which cards appear on the Log tab.</p>
               </div>
               <div id="category-settings" class="category-settings"></div>
+            </div>
+
+            <div class="settings-card">
+              <div>
+                <h3>Reminder Voice</h3>
+                <p>Choose the voice used by bath and tummy reminders on this device.</p>
+              </div>
+              <label>
+                Voice
+                <select id="reminder-voice-select" name="voice">
+                  <option value="">Device default</option>
+                </select>
+              </label>
+              <button id="test-reminder-voice" class="primary" type="button">Test voice</button>
             </div>
 
             <form id="bath-reminder-form" class="settings-card">
@@ -152,6 +196,13 @@
       </div>
     </dialog>
 
+    <dialog id="milestone-dialog" class="modal milestone-modal">
+      <div class="milestone-dialog-shell">
+        <button type="button" class="icon-close" data-close-milestone aria-label="Close milestone">×</button>
+        <div id="milestone-dialog-content"></div>
+      </div>
+    </dialog>
+
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <div id="reaction" class="reaction" role="status" aria-live="polite" aria-hidden="true">
       <div class="reaction-card">
@@ -203,6 +254,6 @@
       </form>
     </template>
 
-    <script src="/app.js?v=20260530-boobie-baby"></script>
+    <script src="/app.js?v=20260530-startup-fix"></script>
   </body>
 </html>

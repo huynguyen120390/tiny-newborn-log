@@ -6,6 +6,8 @@ const state = {
   activeTab: "log",
   visibleCards: [],
   activeLogsCard: null,
+  milestoneProgress: {},
+  selectedMilestoneId: null,
   ticker: null,
   currentDate: todayString(),
   bathSoundEnabled: false,
@@ -13,7 +15,9 @@ const state = {
   lastBathAnnouncementStep: 0,
   tummySoundEnabled: false,
   tummyReminderSeconds: loadTummyReminderSeconds(),
-  lastTummyAnnouncementStep: 0
+  lastTummyAnnouncementStep: 0,
+  reminderVoiceURI: loadReminderVoiceURI(),
+  audioContext: null
 };
 
 const activities = [
@@ -87,6 +91,133 @@ const activities = [
   }
 ];
 
+const milestoneDefinitions = [
+  {
+    id: "first-smile",
+    level: 1,
+    iconFile: "first-smile.png",
+    name: "First Smile",
+    ageStartWeeks: 6,
+    ageEndWeeks: 12,
+    ageLabel: "6–12 weeks",
+    exercises: ["Face-to-face talking", "Exaggerated smiles", "Singing", "Eye contact during feeding", "Mimic baby's facial expressions"]
+  },
+  {
+    id: "reaching-grabbing",
+    level: 1,
+    iconFile: "reaching-grabbing.png",
+    name: "Reaching & Grabbing",
+    ageStartWeeks: 13,
+    ageEndWeeks: 22,
+    ageLabel: "3–5 months",
+    exercises: ["Dangling toys", "Soft rattles", "Play gym", "Bring toys to midline", "Hand-to-hand toy transfer practice"]
+  },
+  {
+    id: "rolling-over",
+    level: 1,
+    iconFile: "rolling-over.png",
+    name: "Rolling Over",
+    ageStartWeeks: 17,
+    ageEndWeeks: 26,
+    ageLabel: "4–6 months",
+    exercises: ["Daily tummy time", "Place toys slightly to the side", "Encourage reaching across the body", "Side-lying play"]
+  },
+  {
+    id: "army-crawling",
+    level: 1,
+    iconFile: "army-crawling.png",
+    name: "Army Crawling / Scooting",
+    ageStartWeeks: 22,
+    ageEndWeeks: 35,
+    ageLabel: "5–8 months",
+    exercises: ["Extended tummy time", "Place favorite toy just out of reach", "Mirror play", "Encourage weight shifting on forearms"]
+  },
+  {
+    id: "sitting-up",
+    level: 1,
+    iconFile: "sitting-up.png",
+    name: "Sitting Up",
+    ageStartWeeks: 30,
+    ageEndWeeks: 39,
+    ageLabel: "7–9 months",
+    exercises: ["Supported sitting", "Sit between parent's legs", "Place toys around baby to encourage balance", "Tripod sitting hands forward"]
+  },
+  {
+    id: "crawling",
+    level: 1,
+    iconFile: "crawling.png",
+    name: "Crawling",
+    ageStartWeeks: 26,
+    ageEndWeeks: 43,
+    ageLabel: "6–10 months",
+    exercises: ["Tunnel games", "Toy just out of reach", "Obstacle pillows", "Encourage hands-and-knees rocking"]
+  },
+  {
+    id: "first-syllables",
+    level: 1,
+    iconFile: "first-syllables.png",
+    name: 'First Syllables ("ba", "ma", "da")',
+    ageStartWeeks: 39,
+    ageEndWeeks: 48,
+    ageLabel: "9–11 months",
+    exercises: ["Narrate daily activities", "Read books", "Imitate sounds", "Sing songs", "Pause and wait for baby to respond"]
+  },
+  {
+    id: "walking",
+    level: 1,
+    iconFile: "walking.png",
+    name: "Walking",
+    ageStartWeeks: 39,
+    ageEndWeeks: 65,
+    ageLabel: "9–15 months",
+    exercises: ["Cruise along furniture", "Push toys", "Stand-and-reach games", "Squat-and-stand play", "Barefoot time indoors"]
+  },
+  { id: "tracks-faces", level: 2, iconFile: "tracks-faces.png", name: "Tracks faces", ageStartWeeks: 4, ageEndWeeks: 9, ageLabel: "1–2 months", exercises: [] },
+  { id: "hands-to-mouth", level: 2, iconFile: "hands-to-mouth.png", name: "Hands to mouth", ageStartWeeks: 9, ageEndWeeks: 17, ageLabel: "2–4 months", exercises: [] },
+  { id: "responds-to-name", level: 2, iconFile: "responds-to-name.png", name: "Responds to name", ageStartWeeks: 26, ageEndWeeks: 39, ageLabel: "6–9 months", exercises: [] },
+  { id: "transfers-toy-hand-to-hand", level: 2, iconFile: "transfers-toy-hand-to-hand.png", name: "Transfers toy hand-to-hand", ageStartWeeks: 22, ageEndWeeks: 30, ageLabel: "5–7 months", exercises: [] },
+  { id: "peekaboo-understanding", level: 2, iconFile: "peekaboo-understanding.png", name: "Peek-a-boo understanding", ageStartWeeks: 30, ageEndWeeks: 43, ageLabel: "7–10 months", exercises: [] },
+  { id: "waves-bye-bye", level: 2, iconFile: "waves-bye-bye.png", name: "Waves bye-bye", ageStartWeeks: 35, ageEndWeeks: 52, ageLabel: "8–12 months", exercises: [] },
+  { id: "claps-hands", level: 2, iconFile: "claps-hands.png", name: "Claps hands", ageStartWeeks: 35, ageEndWeeks: 52, ageLabel: "8–12 months", exercises: [] },
+  { id: "finger-feeding", level: 2, iconFile: "finger-feeding.png", name: "Finger feeding", ageStartWeeks: 35, ageEndWeeks: 52, ageLabel: "8–12 months", exercises: [] },
+  { id: "drinks-from-cup", level: 2, iconFile: "drinks-from-cup.png", name: "Drinks from cup with help", ageStartWeeks: 26, ageEndWeeks: 52, ageLabel: "6–12 months", exercises: [] },
+  { id: "points-with-finger", level: 2, iconFile: "points-with-finger.png", name: "Points with finger", ageStartWeeks: 39, ageEndWeeks: 61, ageLabel: "9–14 months", exercises: [] },
+  { id: "eats-solids", level: 2, iconFile: "eats-solids.png", name: "Eats solids", ageStartWeeks: 17, ageEndWeeks: null, ageLabel: "4+ months", exercises: [] }
+];
+
+const exerciseLibrary = [
+  {
+    id: "tummy-time",
+    name: "Tummy Time",
+    purpose: ["Strengthens baby's neck, shoulder, back, and core muscles", "Helps prepare for rolling, sitting, army crawling, and crawling"],
+    timing: ["Start right after birth", "Continue until baby can sit up well"],
+    recommendedAmount: ["Newborn: a few minutes, a couple times per day", "2 months old: 10–15 minute sessions, total about 1 hour per day", "3 months old: 10–15 minute sessions, total about 1.5 hours per day"],
+    safety: ["Do not do right after feeding", "Always supervise", "Stop if baby is very upset"],
+    methods: ["Traditional tummy time: place baby on stomach on a safe flat surface", "Pillow tummy time: place baby over a U-shaped pillow, rolled blanket, or towel", "Tummy-to-tummy: parent reclines and baby lies on parent's chest"],
+    supportsMilestones: ["Rolling Over", "Army Crawling / Scooting", "Sitting Up", "Crawling"]
+  },
+  {
+    id: "baby-sit-ups",
+    name: "Baby Sit-ups",
+    purpose: ["Helps build neck strength, core strength, and trunk control"],
+    timing: [],
+    recommendedAmount: [],
+    safety: ["Only do this when baby has good head control", "Pull gently", "Never yank baby's arms", "Stop if baby looks uncomfortable"],
+    methods: ["Baby lies on back", "Gently hold baby's hands or arms", "Slowly pull baby upward", "Slowly lower baby down", "Pause when almost at the bottom"],
+    supportsMilestones: ["Sitting Up", "Crawling"]
+  },
+  {
+    id: "baby-floor-gym",
+    name: "Baby Floor Gym",
+    purpose: ["Supports visual tracking, reaching, grabbing, and hand-eye coordination"],
+    timing: [],
+    recommendedAmount: [],
+    safety: [],
+    methods: ["Let baby look at dangling toys", "Encourage baby to reach for toys", "Encourage baby to kick hanging toys", "Practice hand-to-hand toy transfer later"],
+    supportsMilestones: ["Reaching & Grabbing", "Tracks faces", "Hands to mouth", "Transfers toy hand-to-hand"]
+  }
+];
+
 state.visibleCards = loadVisibleCards();
 
 document.querySelectorAll(".tab").forEach((button) => {
@@ -101,6 +232,14 @@ document.querySelector("[data-close-activity-logs]").addEventListener("click", (
   document.getElementById("activity-logs-dialog").close();
 });
 
+document.querySelector("[data-close-milestone]").addEventListener("click", () => {
+  document.getElementById("milestone-dialog").close();
+});
+
+document.getElementById("milestone-dialog").addEventListener("click", (event) => {
+  if (event.target.id === "milestone-dialog") event.target.close();
+});
+
 document.getElementById("bottle-slider").addEventListener("input", (event) => {
   document.getElementById("bottle-value").textContent = Number(event.target.value).toFixed(2).replace(/0$/, "");
 });
@@ -112,12 +251,17 @@ document.getElementById("bottle-form").addEventListener("submit", async (event) 
   await createLog({ type: "bottle", ounces });
 });
 
-init();
+init().catch((error) => {
+  const summary = document.getElementById("baby-summary");
+  if (summary) summary.textContent = `Could not load profile: ${error.message}`;
+  showToast(`Could not load app data: ${error.message}`);
+});
 
 async function init() {
   renderActivities();
   setupSettingsPanel();
   setupExportPanel("export-panel");
+  setupSpeechVoices();
   await refreshData();
 }
 
@@ -132,6 +276,9 @@ async function refreshData() {
   state.logs = appData.baby_log || [];
   state.recent = recent;
   state.summary = summary;
+  state.bathSoundEnabled = Boolean(appData.sound_settings?.bathSoundEnabled);
+  state.tummySoundEnabled = Boolean(appData.sound_settings?.tummySoundEnabled);
+  state.milestoneProgress = appData.milestone_progress || (Array.isArray(appData.milestones) ? {} : appData.milestones || {});
 
   renderAll();
 }
@@ -166,6 +313,7 @@ function renderAll() {
   renderTodaySummary();
   renderRecent();
   renderHistory();
+  renderMilestones();
   renderSettings();
   renderActivityStats();
   updateActivityButtons();
@@ -238,6 +386,220 @@ function renderActivities() {
   document.querySelectorAll("[data-tummy-sound-toggle]").forEach((button) => {
     button.addEventListener("click", toggleTummySound);
   });
+}
+
+function renderMilestones() {
+  const next = nextExpectedMilestone();
+  const nextCard = document.getElementById("next-milestone-card");
+  if (nextCard) nextCard.innerHTML = renderNextMilestone(next);
+
+  const major = document.getElementById("major-milestones");
+  if (major) major.innerHTML = milestoneRecords(1).map((milestone) => renderMilestoneCard(milestone, next?.id)).join("");
+
+  const supporting = document.getElementById("supporting-milestones");
+  if (supporting) supporting.innerHTML = milestoneRecords(2).map((milestone) => renderMilestoneCard(milestone, next?.id)).join("");
+
+  const exerciseContainer = document.getElementById("exercise-library");
+  if (exerciseContainer) exerciseContainer.innerHTML = exerciseLibrary.map(renderExerciseCard).join("");
+
+  document.querySelectorAll("[data-milestone-id]").forEach((button) => {
+    button.addEventListener("click", () => openMilestoneDialog(button.dataset.milestoneId));
+  });
+}
+
+function milestoneRecords(level) {
+  return milestoneDefinitions
+    .filter((milestone) => milestone.level === level)
+    .sort((a, b) => a.ageStartWeeks - b.ageStartWeeks)
+    .map(mergeMilestoneProgress);
+}
+
+function mergeMilestoneProgress(milestone) {
+  const progress = state.milestoneProgress[milestone.id] || {};
+  return {
+    ...milestone,
+    status: progress.status || defaultMilestoneStatus(milestone),
+    achievedDate: progress.achievedDate || null,
+    confirmedAt: progress.confirmedAt || null,
+    notes: progress.notes || ""
+  };
+}
+
+function defaultMilestoneStatus(milestone) {
+  const ageWeeks = babyAgeWeeks();
+  return Number.isFinite(ageWeeks) && ageWeeks >= milestone.ageStartWeeks ? "Practicing" : "Upcoming";
+}
+
+function renderMilestoneCard(milestone, nextId) {
+  const isNext = milestone.id === nextId;
+  return `
+    <button class="milestone-card ${statusClass(milestone.status)} ${isNext ? "next" : ""}" type="button" data-milestone-id="${escapeAttr(milestone.id)}">
+      <span class="milestone-icon-wrap">
+        <img src="${milestoneIconPath(milestone)}" alt="">
+        ${milestone.status === "Achieved" ? `<span class="milestone-check" aria-hidden="true">✓</span>` : ""}
+      </span>
+      <span class="milestone-card-copy">
+        <strong>${escapeHtml(milestone.name)}</strong>
+        <small>${escapeHtml(milestone.ageLabel)}</small>
+        <span class="status-pill ${statusClass(milestone.status)}">${escapeHtml(milestone.status)}</span>
+      </span>
+    </button>
+  `;
+}
+
+function renderNextMilestone(milestone) {
+  if (!milestone) {
+    return `<div><h3>Next Expected Milestone</h3><p>All listed milestones are achieved.</p></div>`;
+  }
+
+  const recommendations = recommendedExercisesForMilestone(milestone);
+  return `
+    <button class="next-milestone-button" type="button" data-milestone-id="${escapeAttr(milestone.id)}">
+      <img src="${milestoneIconPath(milestone)}" alt="">
+      <span>
+        <small>Next Expected Milestone</small>
+        <strong>${escapeHtml(milestone.name)}</strong>
+        <em>${escapeHtml(milestone.ageLabel)}</em>
+        <span>${recommendations.length ? escapeHtml(recommendations.join(", ")) : "Practice through everyday play."}</span>
+      </span>
+    </button>
+  `;
+}
+
+function renderExerciseCard(exercise) {
+  return `
+    <article class="exercise-card">
+      <h4>${escapeHtml(exercise.name)}</h4>
+      ${renderExerciseGroup("Purpose", exercise.purpose)}
+      ${renderExerciseGroup("Timing", exercise.timing)}
+      ${renderExerciseGroup("Recommended amount", exercise.recommendedAmount)}
+      ${renderExerciseGroup("Safety", exercise.safety)}
+      ${renderExerciseGroup("Methods", exercise.methods)}
+      ${renderExerciseGroup("Supports milestones", exercise.supportsMilestones)}
+    </article>
+  `;
+}
+
+function renderExerciseGroup(label, items) {
+  if (!items.length) return "";
+  return `
+    <div>
+      <strong>${escapeHtml(label)}</strong>
+      <ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+    </div>
+  `;
+}
+
+function nextExpectedMilestone() {
+  const milestones = milestoneDefinitions.map(mergeMilestoneProgress).filter((milestone) => milestone.status !== "Achieved");
+  if (!milestones.length) return null;
+
+  const ageWeeks = babyAgeWeeks();
+  if (!Number.isFinite(ageWeeks)) {
+    return milestones.sort((a, b) => a.ageStartWeeks - b.ageStartWeeks)[0];
+  }
+
+  return milestones
+    .map((milestone) => {
+      const inRange = ageWeeks >= milestone.ageStartWeeks && (milestone.ageEndWeeks === null || ageWeeks <= milestone.ageEndWeeks);
+      const futureDistance = Math.max(0, milestone.ageStartWeeks - ageWeeks);
+      const overdueDistance = ageWeeks > (milestone.ageEndWeeks || milestone.ageStartWeeks) ? ageWeeks - (milestone.ageEndWeeks || milestone.ageStartWeeks) : 0;
+      return { milestone, score: inRange ? 0 : futureDistance ? futureDistance : 1000 + overdueDistance };
+    })
+    .sort((a, b) => a.score - b.score || a.milestone.ageStartWeeks - b.milestone.ageStartWeeks)[0].milestone;
+}
+
+function openMilestoneDialog(id) {
+  const definition = milestoneDefinitions.find((item) => item.id === id);
+  if (!definition) return;
+  const milestone = mergeMilestoneProgress(definition);
+
+  state.selectedMilestoneId = id;
+  const dialog = document.getElementById("milestone-dialog");
+  document.getElementById("milestone-dialog-content").innerHTML = renderMilestoneDialog(milestone);
+  dialog.querySelectorAll("[data-milestone-action]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      updateMilestoneStatus(milestone.id, button.dataset.milestoneAction);
+    });
+  });
+  if (!dialog.open) dialog.showModal();
+}
+
+function renderMilestoneDialog(milestone) {
+  const recommendations = recommendedExercisesForMilestone(milestone);
+  return `
+    <div class="milestone-dialog-hero">
+      <img src="${milestoneIconPath(milestone)}" alt="">
+      <div>
+        <span class="status-pill ${statusClass(milestone.status)}">${escapeHtml(milestone.status)}</span>
+        <h3>${escapeHtml(milestone.name)}</h3>
+        <p>Level ${milestone.level} • ${escapeHtml(milestone.ageLabel)}</p>
+      </div>
+    </div>
+    <div class="milestone-dialog-body">
+      ${milestone.exercises.length ? renderExerciseGroup("Activities", milestone.exercises) : ""}
+      ${recommendations.length ? renderExerciseGroup("Exercise Library", recommendations) : ""}
+      ${milestone.achievedDate ? `<p class="achieved-note">Achieved on ${escapeHtml(milestone.achievedDate)}</p>` : ""}
+    </div>
+    <div class="modal-actions milestone-actions">
+      ${milestone.status === "Achieved" ? `
+        <button class="primary" type="button" data-milestone-action="practicing">Mark as Practicing</button>
+      ` : `
+        <button class="primary" type="button" data-milestone-action="achieved">Confirm Achieved</button>
+        <button class="ghost" type="button" data-milestone-action="not-yet">Not Yet</button>
+      `}
+    </div>
+  `;
+}
+
+async function updateMilestoneStatus(id, action) {
+  const now = new Date().toISOString();
+  const payload = action === "achieved"
+    ? { status: "Achieved", achievedDate: todayString(), confirmedAt: now, notes: "" }
+    : { status: "Practicing", achievedDate: null, confirmedAt: action === "practicing" ? now : null, notes: "" };
+
+  try {
+    const result = await fetchJson(`/api/milestones/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    state.milestoneProgress = result.milestone_progress || result.milestones || {};
+    document.getElementById("milestone-dialog").close();
+    renderMilestones();
+    showReaction(payload.status === "Achieved" ? "Milestone achieved" : "Practice saved", milestoneName(id));
+  } catch (error) {
+    showToast(`Could not save milestone: ${error.message}`);
+  }
+}
+
+function recommendedExercisesForMilestone(milestone) {
+  return exerciseLibrary
+    .filter((exercise) => exercise.supportsMilestones.includes(milestone.name))
+    .map((exercise) => exercise.name)
+    .concat(milestone.exercises.slice(0, 3))
+    .slice(0, 4);
+}
+
+function babyAgeWeeks() {
+  const birthday = state.profile.birthday;
+  if (!birthday) return NaN;
+  const birth = new Date(`${birthday}T00:00:00`);
+  if (Number.isNaN(birth.getTime())) return NaN;
+  return Math.floor((Date.now() - birth.getTime()) / (7 * 24 * 60 * 60 * 1000));
+}
+
+function milestoneIconPath(milestone) {
+  return `/icons/milestones/${milestone.iconFile}?v=20260530-astronaut`;
+}
+
+function milestoneName(id) {
+  return milestoneDefinitions.find((milestone) => milestone.id === id)?.name || "Milestone";
+}
+
+function statusClass(status) {
+  return status.toLowerCase();
 }
 
 function openActivityLogs(cardKey) {
@@ -385,6 +747,8 @@ function setupSettingsPanel() {
   document.getElementById("profile-form").addEventListener("submit", saveProfile);
   document.getElementById("bath-reminder-form").addEventListener("submit", saveBathReminder);
   document.getElementById("tummy-reminder-form").addEventListener("submit", saveTummyReminder);
+  document.getElementById("reminder-voice-select").addEventListener("change", saveReminderVoice);
+  document.getElementById("test-reminder-voice").addEventListener("click", testReminderVoice);
   document.getElementById("clear-data-button").addEventListener("click", clearData);
 }
 
@@ -397,6 +761,8 @@ function renderSettings() {
 
   const tummyReminderInput = document.getElementById("tummy-reminder-seconds");
   if (tummyReminderInput && document.activeElement !== tummyReminderInput) tummyReminderInput.value = state.tummyReminderSeconds;
+
+  renderVoiceOptions();
 
   const container = document.getElementById("category-settings");
   if (!container) return;
@@ -420,6 +786,31 @@ function renderSettings() {
       showSettingsStatus("Category cards updated.");
     });
   });
+}
+
+function renderVoiceOptions() {
+  const select = document.getElementById("reminder-voice-select");
+  if (!select || document.activeElement === select) return;
+
+  const voices = loadSpeechVoices();
+  const current = state.reminderVoiceURI;
+  select.innerHTML = `
+    <option value="">Device default</option>
+    ${voices.map((voice) => `
+      <option value="${escapeAttr(voice.voiceURI)}">${escapeHtml(formatVoiceLabel(voice))}</option>
+    `).join("")}
+  `;
+  select.value = voices.some((voice) => voice.voiceURI === current) ? current : "";
+}
+
+function saveReminderVoice(event) {
+  state.reminderVoiceURI = event.target.value;
+  saveReminderVoiceURI();
+  showSettingsStatus(state.reminderVoiceURI ? "Reminder voice saved for this device." : "Reminder voice set to device default.");
+}
+
+function testReminderVoice() {
+  prepareReminderSound("Two minutes");
 }
 
 function saveBathReminder(event) {
@@ -500,7 +891,7 @@ function showSettingsStatus(message) {
 
 function loadVisibleCards() {
   try {
-    const saved = JSON.parse(localStorage.getItem("visibleCards") || "[]");
+    const saved = JSON.parse(storageGet("visibleCards") || "[]");
     if (Array.isArray(saved) && saved.length) {
       const validKeys = new Set(activities.map((activity) => activity.key));
       const filtered = saved.filter((key) => validKeys.has(key));
@@ -513,25 +904,63 @@ function loadVisibleCards() {
 }
 
 function saveVisibleCards() {
-  localStorage.setItem("visibleCards", JSON.stringify(state.visibleCards));
+  storageSet("visibleCards", JSON.stringify(state.visibleCards));
 }
 
 function loadBathReminderSeconds() {
-  const saved = Number(localStorage.getItem("bathReminderSeconds"));
+  const saved = Number(storageGet("bathReminderSeconds"));
   return Number.isFinite(saved) && saved >= 5 ? Math.min(3600, Math.round(saved)) : 120;
 }
 
 function saveBathReminderSeconds() {
-  localStorage.setItem("bathReminderSeconds", String(state.bathReminderSeconds));
+  storageSet("bathReminderSeconds", String(state.bathReminderSeconds));
 }
 
 function loadTummyReminderSeconds() {
-  const saved = Number(localStorage.getItem("tummyReminderSeconds"));
+  const saved = Number(storageGet("tummyReminderSeconds"));
   return Number.isFinite(saved) && saved >= 5 ? Math.min(3600, Math.round(saved)) : 120;
 }
 
 function saveTummyReminderSeconds() {
-  localStorage.setItem("tummyReminderSeconds", String(state.tummyReminderSeconds));
+  storageSet("tummyReminderSeconds", String(state.tummyReminderSeconds));
+}
+
+function loadReminderVoiceURI() {
+  return storageGet("reminderVoiceURI") || "";
+}
+
+function saveReminderVoiceURI() {
+  if (state.reminderVoiceURI) {
+    storageSet("reminderVoiceURI", state.reminderVoiceURI);
+  } else {
+    storageRemove("reminderVoiceURI");
+  }
+}
+
+function storageGet(key) {
+  try {
+    return window.localStorage?.getItem(key) || "";
+  } catch {
+    return "";
+  }
+}
+
+function storageSet(key, value) {
+  try {
+    window.localStorage?.setItem(key, value);
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+function storageRemove(key) {
+  try {
+    window.localStorage?.removeItem(key);
+  } catch {
+    return false;
+  }
+  return true;
 }
 
 async function createLog(payload, reminder) {
@@ -780,24 +1209,158 @@ function lastLogOfType(type) {
     .sort((a, b) => logTime(b) - logTime(a))[0] || null;
 }
 
-function toggleBathSound() {
+async function toggleBathSound() {
   state.bathSoundEnabled = !state.bathSoundEnabled;
   state.lastBathAnnouncementStep = 0;
+  if (state.bathSoundEnabled) prepareReminderSound("Bath sound on");
+  if (!state.bathSoundEnabled) stopReminderSound();
   updateActivityButtons();
   renderActivityStats();
   showReaction(state.bathSoundEnabled ? "Bath sound on" : "Bath sound off", `Every ${formatReminderPeriod(state.bathReminderSeconds)}`);
+  await saveSoundSettings();
 }
 
-function toggleTummySound() {
+async function toggleTummySound() {
   state.tummySoundEnabled = !state.tummySoundEnabled;
   state.lastTummyAnnouncementStep = 0;
+  if (state.tummySoundEnabled) prepareReminderSound("Tummy sound on");
+  if (!state.tummySoundEnabled) stopReminderSound();
   updateActivityButtons();
   renderActivityStats();
   showReaction(state.tummySoundEnabled ? "Tummy sound on" : "Tummy sound off", `Every ${formatReminderPeriod(state.tummyReminderSeconds)}`);
+  await saveSoundSettings();
+}
+
+async function saveSoundSettings() {
+  try {
+    const result = await fetchJson("/api/sound-settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        bathSoundEnabled: state.bathSoundEnabled,
+        tummySoundEnabled: state.tummySoundEnabled
+      })
+    });
+    state.bathSoundEnabled = Boolean(result.sound_settings?.bathSoundEnabled);
+    state.tummySoundEnabled = Boolean(result.sound_settings?.tummySoundEnabled);
+    updateActivityButtons();
+    renderActivityStats();
+  } catch (error) {
+    showToast(`Could not save sound setting: ${error.message}`);
+  }
+}
+
+function prepareReminderSound(message) {
+  loadSpeechVoices();
+  unlockReminderAudio();
+  speakReminder(message);
+}
+
+function setupSpeechVoices() {
+  loadSpeechVoices();
+  if (!("speechSynthesis" in window) || !("onvoiceschanged" in window.speechSynthesis)) return;
+  window.speechSynthesis.onvoiceschanged = () => {
+    renderVoiceOptions();
+  };
+}
+
+function loadSpeechVoices() {
+  if (!("speechSynthesis" in window)) return [];
+  return window.speechSynthesis.getVoices();
+}
+
+function formatVoiceLabel(voice) {
+  const parts = [voice.name];
+  if (voice.lang) parts.push(voice.lang);
+  if (voice.localService === false) parts.push("online");
+  return parts.join(" - ");
+}
+
+function unlockReminderAudio() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+
+  if (!state.audioContext) state.audioContext = new AudioContextClass();
+  if (state.audioContext.state === "suspended") state.audioContext.resume();
+}
+
+function stopReminderSound() {
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+}
+
+function speakReminder(message) {
+  if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
+    playReminderChime();
+    return;
+  }
+
+  let started = false;
+  const utterance = new SpeechSynthesisUtterance(message);
+  const voice = pickReminderVoice();
+  if (voice) utterance.voice = voice;
+  utterance.lang = voice?.lang || "en-US";
+  utterance.pitch = 1.18;
+  utterance.rate = 0.92;
+  utterance.volume = 1;
+  utterance.onstart = () => {
+    started = true;
+  };
+  utterance.onerror = () => {
+    if (!started) playReminderChime();
+  };
+
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utterance);
+  setTimeout(() => {
+    if (!started && !window.speechSynthesis.speaking) playReminderChime();
+  }, 900);
+}
+
+function pickReminderVoice() {
+  const voices = loadSpeechVoices();
+  const selected = voices.find((voice) => voice.voiceURI === state.reminderVoiceURI);
+  if (selected) return selected;
+
+  return (
+    voices.find((voice) => /samantha/i.test(`${voice.name} ${voice.voiceURI}`)) ||
+    voices.find((voice) => isGoogleUSEnglishVoice(voice)) ||
+    voices.find((voice) => /ava|allison|susan|karen|moira|tessa|zira|jenny|aria|female|girl/i.test(`${voice.name} ${voice.voiceURI}`)) ||
+    voices.find((voice) => /^en(-|_)/i.test(voice.lang)) ||
+    voices[0] ||
+    null
+  );
+}
+
+function isGoogleUSEnglishVoice(voice) {
+  const label = `${voice.name} ${voice.voiceURI} ${voice.lang}`.toLowerCase();
+  const isGoogle = label.includes("google");
+  const isUSEnglish = label.includes("us english") || /^en(-|_)us$/i.test(voice.lang || "");
+  return isGoogle && isUSEnglish;
+}
+
+function playReminderChime() {
+  unlockReminderAudio();
+  const audioContext = state.audioContext;
+  if (!audioContext) return;
+
+  const now = audioContext.currentTime;
+  [660, 880].forEach((frequency, index) => {
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    const start = now + index * 0.14;
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(frequency, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.18, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.18);
+    oscillator.connect(gain).connect(audioContext.destination);
+    oscillator.start(start);
+    oscillator.stop(start + 0.2);
+  });
 }
 
 function announceBathProgress() {
-  if (!state.bathSoundEnabled || !("speechSynthesis" in window)) return;
+  if (!state.bathSoundEnabled) return;
 
   const bath = getCurrentState("bath");
   if (bath.status !== "start" || !bath.log) {
@@ -811,18 +1374,11 @@ function announceBathProgress() {
 
   state.lastBathAnnouncementStep = step;
   const elapsedSeconds = step * state.bathReminderSeconds;
-  const utterance = new SpeechSynthesisUtterance(formatSpokenReminder(elapsedSeconds));
-  const voices = window.speechSynthesis.getVoices();
-  const voice = voices.find((item) => /female|girl|zira|samantha|jenny|aria/i.test(`${item.name} ${item.voiceURI}`));
-  if (voice) utterance.voice = voice;
-  utterance.pitch = 1.18;
-  utterance.rate = 0.92;
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(utterance);
+  speakReminder(formatSpokenReminder(elapsedSeconds));
 }
 
 function announceTummyProgress() {
-  if (!state.tummySoundEnabled || !("speechSynthesis" in window)) return;
+  if (!state.tummySoundEnabled) return;
 
   const tummy = getCurrentState("tummy_time");
   if (tummy.status !== "start" || !tummy.log) {
@@ -836,14 +1392,7 @@ function announceTummyProgress() {
 
   state.lastTummyAnnouncementStep = step;
   const elapsedSeconds = step * state.tummyReminderSeconds;
-  const utterance = new SpeechSynthesisUtterance(formatSpokenReminder(elapsedSeconds));
-  const voices = window.speechSynthesis.getVoices();
-  const voice = voices.find((item) => /female|girl|zira|samantha|jenny|aria/i.test(`${item.name} ${item.voiceURI}`));
-  if (voice) utterance.voice = voice;
-  utterance.pitch = 1.18;
-  utterance.rate = 0.92;
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(utterance);
+  speakReminder(formatSpokenReminder(elapsedSeconds));
 }
 
 function formatSpokenReminder(seconds) {

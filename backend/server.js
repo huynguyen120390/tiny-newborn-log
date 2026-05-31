@@ -36,6 +36,10 @@ function writeJson(filePath, value) {
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n");
 }
 
+function objectMap(value) {
+  return value && !Array.isArray(value) && typeof value === "object" ? value : {};
+}
+
 function loadRecent() {
   const data = readJson(DATA_PATH, {});
   return readJson(RECENT_PATH, {
@@ -288,6 +292,38 @@ async function handleUpdateProfile(req, res) {
   sendJson(res, 200, { profile: data.baby_profile });
 }
 
+async function handleUpdateSoundSettings(req, res) {
+  const input = await readBody(req);
+  const data = readJson(DATA_PATH, {});
+  const current = data.sound_settings || {};
+  data.sound_settings = {
+    bathSoundEnabled: typeof input.bathSoundEnabled === "boolean" ? input.bathSoundEnabled : Boolean(current.bathSoundEnabled),
+    tummySoundEnabled: typeof input.tummySoundEnabled === "boolean" ? input.tummySoundEnabled : Boolean(current.tummySoundEnabled)
+  };
+  writeJson(DATA_PATH, data);
+  sendJson(res, 200, { sound_settings: data.sound_settings });
+}
+
+async function handleUpdateMilestone(req, res, id) {
+  const input = await readBody(req);
+  const statuses = new Set(["Upcoming", "Practicing", "Achieved"]);
+  if (!statuses.has(input.status)) {
+    sendJson(res, 400, { error: "Invalid milestone status" });
+    return;
+  }
+
+  const data = readJson(DATA_PATH, {});
+  data.milestone_progress = objectMap(data.milestone_progress);
+  data.milestone_progress[id] = {
+    status: input.status,
+    achievedDate: typeof input.achievedDate === "string" ? input.achievedDate : null,
+    confirmedAt: typeof input.confirmedAt === "string" ? input.confirmedAt : null,
+    notes: typeof input.notes === "string" ? input.notes : data.milestone_progress[id]?.notes || ""
+  };
+  writeJson(DATA_PATH, data);
+  sendJson(res, 200, { milestone_progress: data.milestone_progress });
+}
+
 async function handleClearLogs(req, res) {
   const data = readJson(DATA_PATH, {});
   data.baby_log = [];
@@ -469,6 +505,21 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "PUT" && url.pathname === "/api/profile") {
       await handleUpdateProfile(req, res);
+      return;
+    }
+
+    if (req.method === "PUT" && url.pathname === "/api/sound-settings") {
+      await handleUpdateSoundSettings(req, res);
+      return;
+    }
+
+    const milestoneMatch = url.pathname.match(/^\/api\/milestones\/([^/]+)\/?$/);
+    if (milestoneMatch) {
+      if (!["PUT", "POST", "PATCH"].includes(req.method)) {
+        sendJson(res, 405, { error: `Use PUT, POST, or PATCH to update a milestone. Received ${req.method}.` });
+        return;
+      }
+      await handleUpdateMilestone(req, res, decodeURIComponent(milestoneMatch[1]));
       return;
     }
 
