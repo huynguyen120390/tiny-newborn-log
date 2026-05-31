@@ -158,9 +158,11 @@ function activateTab(tab) {
 }
 
 function renderAll() {
-  const name = state.profile.name || "Phương Nam Cu Tí";
+  
+  const name = state.profile.name || "Cutie Pie";
   const birthday = state.profile.birthday || "";
-  document.getElementById("baby-summary").textContent = `${name}${birthday ? `, born ${birthday}` : ""}. Ready for home-network logging.`;
+  const age = formatBabyAge(birthday);
+  document.getElementById("baby-summary").textContent = `${name}, ${age}.`;
   renderTodaySummary();
   renderRecent();
   renderHistory();
@@ -199,15 +201,18 @@ function renderActivities() {
           </button>
         ` : ""}
       </div>
-      <div class="card-info" data-card-info="${activity.key}"></div>
-      <div class="button-row">
-        ${activity.actions.map((action) => `
-          <button class="action-button" data-card="${activity.key}" data-action-label="${action.label}" data-action='${JSON.stringify(action)}'>
-            <img src="/assets/activity/icon-${action.icon}.png" alt="" loading="lazy">
-            <span>${action.label}</span>
-          </button>
-        `).join("")}
+      <div>
+          <div class="card-info" data-card-info="${activity.key}"></div>
+          <div class="button-row">
+            ${activity.actions.map((action) => `
+              <button class="action-button" data-card="${activity.key}" data-action-label="${action.label}" data-action='${JSON.stringify(action)}'>
+                <img src="/assets/activity/icon-${action.icon}.png" alt="" loading="lazy">
+                <span>${action.label}</span>
+              </button>
+            `).join("")}
+          </div>
       </div>
+      
     </article>
   `).join("");
 
@@ -657,7 +662,10 @@ function getActivityStats() {
     boobie: {
       label: "Breast feeds",
       value: todaySummary.breastFeeds,
-      helper: `Next side: ${state.recent.nextBreastSide || "left"}`
+      helper: `<small>➡️ Next side with good latch (breast should not be too full): ${state.recent.nextBreastSide || "left"}</small>
+              <br>
+              <small> 
+               <small>🌙 Empty breasts before sleep</small>`
     },
     bottle: {
       label: "Bottle total",
@@ -918,6 +926,46 @@ function clippedDuration(start, end, clipStart, clipEnd) {
 function todayLogs() {
   const today = todayString();
   return state.logs.filter((log) => log.date === today);
+}
+
+function formatBabyAge(birthday) {
+  if (!birthday) return "";
+
+  const birthDate = new Date(`${birthday}T00:00:00`);
+  const today = new Date(`${todayString()}T00:00:00`);
+
+  if (!Number.isFinite(birthDate.getTime()) || birthDate > today) return "";
+
+  let months =
+    (today.getFullYear() - birthDate.getFullYear()) * 12 +
+    (today.getMonth() - birthDate.getMonth());
+
+  const monthAnchor = new Date(birthDate);
+  monthAnchor.setMonth(birthDate.getMonth() + months);
+
+  if (monthAnchor > today) {
+    months -= 1;
+    monthAnchor.setMonth(birthDate.getMonth() + months);
+  }
+
+  const daysAfterMonths = Math.floor((today - monthAnchor) / 86400000);
+  const weeks = Math.floor(daysAfterMonths / 7);
+  const days = daysAfterMonths % 7;
+
+  const part = (value, unit) => value ? `${value} ${unit}${value === 1 ? "" : "s"}` : "";
+
+  if (months < 1) {
+    const totalDays = Math.floor((today - birthDate) / 86400000);
+    const babyWeeks = Math.floor(totalDays / 7);
+    const babyDays = totalDays % 7;
+    return [part(babyWeeks, "week"), part(babyDays, "day")].filter(Boolean).join(" ") || "0 days old";
+  }
+
+  return [
+    part(months, "month"),
+    part(weeks, "week"),
+    part(days, "day")
+  ].filter(Boolean).join(" ") + " old";
 }
 
 function todayString() {
