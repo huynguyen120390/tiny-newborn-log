@@ -78,6 +78,33 @@ function sum(logs, field) {
   return logs.reduce((total, log) => total + Number(log[field] || 0), 0);
 }
 
+function logTime(log) {
+  const [hour = "00", minute = "00"] = String(log.time || "00:00").split(":");
+  const local = new Date(`${log.date || todayIso()}T${hour.padStart(2, "0")}:${minute.padStart(2, "0")}:00`);
+  if (Number.isFinite(local.getTime())) return local.getTime();
+  const created = log.createdAt ? new Date(log.createdAt).getTime() : NaN;
+  return Number.isFinite(created) ? created : 0;
+}
+
+function periodMinutes(logs, type, startStatus, endStatus) {
+  let pending = null;
+  let total = sum(logs.filter((log) => log.type === type && !log.status), "minutes");
+  logs
+    .filter((log) => log.type === type && log.status)
+    .sort((a, b) => logTime(a) - logTime(b))
+    .forEach((log) => {
+      if (log.status === startStatus) {
+        pending = log;
+        return;
+      }
+      if (log.status === endStatus && pending) {
+        total += Math.max(0, Math.round((logTime(log) - logTime(pending)) / 60000));
+        pending = null;
+      }
+    });
+  return total;
+}
+
 function count(logs, predicate) {
   return logs.filter(predicate).length;
 }
@@ -118,14 +145,14 @@ function makeReport(data, range, pediatrician = false) {
 
   const summary = {
     totalLogs: logs.length,
-    sleepHours: +(sum(sleep, "minutes") / 60).toFixed(1),
+    sleepHours: +(periodMinutes(logs, "sleep", "asleep", "awake") / 60).toFixed(1),
     feedingCount: feeding.length,
     bottleOz: +sum(bottles, "ounces").toFixed(1),
     wetDiapers: count(diapers, (log) => log.pee),
     poops: poopLogs.length,
-    tummyMinutes: sum(logs.filter((log) => log.type === "tummy_time"), "minutes"),
+    tummyMinutes: periodMinutes(logs, "tummy_time", "start", "end"),
     babyGymMinutes: sum(logs.filter((log) => log.type === "baby_gym"), "minutes"),
-    outdoorMinutes: sum(logs.filter((log) => log.type === "outdoor_time"), "minutes"),
+    outdoorMinutes: periodMinutes(logs, "outdoor_time", "start", "end"),
     readingMinutes: sum(logs.filter((log) => log.type === "reading"), "minutes"),
     musicMinutes: sum(logs.filter((log) => log.type === "music"), "minutes"),
     screenVideoMinutes: sum(logs.filter((log) => log.type === "screen_video"), "minutes")

@@ -11,7 +11,7 @@ const {
   saveXlsx
 } = require("./exportService");
 
-const PORT = process.argv[2] || process.env.PORT || 3000;
+const PORT = process.argv[2] || process.env.PORT || 3002;
 const PUBLIC_DIR = path.join(__dirname, "..", "frontend");
 const DATA_PATH = path.join(__dirname, "..", "data", "appData.json");
 const RECENT_PATH = path.join(__dirname, "..", "data", "recentInfo.json");
@@ -25,6 +25,18 @@ const MIME_TYPES = {
   ".pdf": "application/pdf",
   ".csv": "text/csv; charset=utf-8",
   ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+};
+
+const EVENT_CATEGORY_CONFIG = {
+  sleep: { kind: "period", start: "asleep", end: "awake", startLabel: "asleep", endLabel: "awake" },
+  tummy_time: { kind: "period", start: "start", end: "end", startLabel: "started", endLabel: "ended" },
+  outdoor_time: { kind: "period", start: "start", end: "end", startLabel: "started", endLabel: "ended" },
+  bath: { kind: "period", start: "start", end: "end", startLabel: "started", endLabel: "stopped" },
+  feeding: { kind: "quick" },
+  bottle: { kind: "quick" },
+  diaper: { kind: "quick" },
+  growth_stats: { kind: "quick" },
+  baby_gym: { kind: "quick" }
 };
 
 function readJson(filePath, fallback) {
@@ -114,13 +126,21 @@ function cleanNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function weightToGrams(value, unit = "lb") {
+  const amount = cleanNumber(value, 0);
+  const factors = { oz: 28.349523125, lb: 453.59237, g: 1, kg: 1000 };
+  return +(amount * (factors[unit] || factors.lb)).toFixed(3);
+}
+
+function heightToMm(value, unit = "in") {
+  const amount = cleanNumber(value, 0);
+  const factors = { in: 25.4, ft: 304.8, cm: 10, mm: 1 };
+  return +(amount * (factors[unit] || factors.in)).toFixed(3);
+}
+
 function pairedConfig(type) {
-  const configs = {
-    sleep: { start: "asleep", end: "awake", startLabel: "asleep", endLabel: "awake" },
-    tummy_time: { start: "start", end: "end", startLabel: "started", endLabel: "ended" },
-    bath: { start: "start", end: "end", startLabel: "started", endLabel: "stopped" }
-  };
-  return configs[type] || null;
+  const config = EVENT_CATEGORY_CONFIG[type];
+  return config?.kind === "period" ? config : null;
 }
 
 function logTime(log) {
@@ -159,7 +179,7 @@ function nextTimedStatus(logs, type, atTime, excludeId) {
     .sort((a, b) => logTime(a) - logTime(b))[0] || null;
 }
 
-function validatePairedTransition(logs, candidate, excludeId) {
+function validatePairedTransition(logs, candidate, excludeId, options = {}) {
   const config = pairedConfig(candidate.type);
   if (!config || !candidate.status) return "";
 
@@ -173,7 +193,10 @@ function validatePairedTransition(logs, candidate, excludeId) {
   if (isStart && activeBefore) return `Already ${config.startLabel}. Stop first to avoid overlapping time.`;
   if (isEnd && !activeBefore) return `Already ${config.endLabel}. Start first before stopping.`;
 
-  const next = nextTimedStatus(logs, candidate.type, atTime, excludeId);
+  const nextCandidate = nextTimedStatus(logs, candidate.type, atTime, excludeId);
+  const next = options.ignoreFutureNext && nextCandidate && logTime(nextCandidate) > Date.now() + 30 * 1000
+    ? null
+    : nextCandidate;
   if (next && isStart && next.status === config.start) return `This would overlap with another ${config.startLabel} time.`;
   if (next && isEnd && next.status === config.end) return "This would create two stop events in a row.";
   return "";
@@ -210,12 +233,31 @@ function buildLog(input) {
     };
   }
 
+  if (input.type === "growth_stats") {
+    const stat = input.stat === "height" ? "height" : "weight";
+    if (stat === "weight") {
+      const weight = cleanNumber(input.weight, 0);
+      const weightUnit = ["oz", "lb", "g", "kg"].includes(input.weightUnit) ? input.weightUnit : "lb";
+      const weightGrams = weightToGrams(weight, weightUnit);
+      return { ...base, stat, weight, weightUnit, weightGrams, notes: `Weight ${weight} ${weightUnit}` };
+    }
+
+    const height = cleanNumber(input.height, 0);
+    const heightUnit = ["in", "ft", "cm", "mm"].includes(input.heightUnit) ? input.heightUnit : "in";
+    const heightMm = heightToMm(height, heightUnit);
+    return { ...base, stat, height, heightUnit, heightMm, notes: `Height ${height} ${heightUnit}` };
+  }
+
   if (input.type === "bath") {
     return { ...base, status: input.status || "start", notes: input.status === "end" ? "Bath ended" : "Bath started" };
   }
 
   if (input.type === "tummy_time") {
     return { ...base, status: input.status, notes: input.status === "start" ? "Tummy time started" : "Tummy time ended" };
+  }
+
+  if (input.type === "outdoor_time") {
+    return { ...base, status: input.status, notes: input.status === "start" ? "Outdoor time started" : "Outdoor time ended" };
   }
 
   if (input.type === "baby_gym") {
@@ -232,7 +274,9 @@ function updateRecent(recent, log) {
   if (log.type === "diaper") recent.lastDiaperAt = log.createdAt;
   if (log.type === "bath") recent.lastBathAt = log.createdAt;
   if (log.type === "tummy_time") recent.lastTummyTimeAt = log.createdAt;
+  if (log.type === "outdoor_time") recent.lastOutdoorTimeAt = log.createdAt;
   if (log.type === "baby_gym") recent.lastBabyGymAt = log.createdAt;
+  if (log.type === "growth_stats") recent.lastGrowthStatsAt = log.createdAt;
 
   if (log.type === "feeding") {
     recent.lastFeedAt = log.createdAt;
@@ -255,6 +299,8 @@ function rebuildRecent(data) {
     lastFeedAt: null,
     lastSleepAt: null,
     lastDiaperAt: null,
+    lastOutdoorTimeAt: null,
+    lastGrowthStatsAt: null,
     notes: data.recent_state?.notes || ""
   };
 
@@ -279,6 +325,8 @@ function summarizeToday(data) {
     poops: count((log) => log.type === "diaper" && log.poop),
     baths: count((log) => log.type === "bath"),
     tummyTimeEvents: count((log) => log.type === "tummy_time"),
+    outdoorTimeEvents: count((log) => log.type === "outdoor_time"),
+    growthStats: count((log) => log.type === "growth_stats"),
     babyGymEvents: count((log) => log.type === "baby_gym")
   };
 }
@@ -395,7 +443,9 @@ async function handlePostLog(req, res) {
   const log = buildLog(input);
 
   data.baby_log = Array.isArray(data.baby_log) ? data.baby_log : [];
-  const conflict = validatePairedTransition(data.baby_log, log);
+  const conflict = validatePairedTransition(data.baby_log, log, undefined, {
+    ignoreFutureNext: !input.date && !input.time
+  });
   if (conflict) {
     sendJson(res, 409, { error: conflict });
     return;
@@ -432,7 +482,7 @@ async function handleUpdateLog(req, res, id) {
     notes: typeof input.notes === "string" ? input.notes : current.notes
   };
 
-  if (current.type === "sleep" || current.type === "tummy_time") {
+  if (current.type === "sleep" || current.type === "tummy_time" || current.type === "outdoor_time") {
     next.status = input.status || current.status;
   }
 
@@ -452,6 +502,27 @@ async function handleUpdateLog(req, res, id) {
     if (input.kind === "pee" || input.kind === "poop") {
       next.pee = input.kind === "pee";
       next.poop = input.kind === "poop";
+    }
+  }
+
+  if (current.type === "growth_stats") {
+    next.stat = input.stat === "height" || current.stat === "height" ? "height" : "weight";
+    if (next.stat === "weight") {
+      next.weightUnit = ["oz", "lb", "g", "kg"].includes(input.weightUnit) ? input.weightUnit : current.weightUnit || "lb";
+      next.weight = cleanNumber(input.weight, current.weight || 0);
+      next.weightGrams = weightToGrams(next.weight, next.weightUnit);
+      delete next.height;
+      delete next.heightUnit;
+      delete next.heightMm;
+      next.notes = typeof input.notes === "string" ? input.notes : `Weight ${next.weight} ${next.weightUnit}`;
+    } else {
+      next.heightUnit = ["in", "ft", "cm", "mm"].includes(input.heightUnit) ? input.heightUnit : current.heightUnit || "in";
+      next.height = cleanNumber(input.height, current.height || 0);
+      next.heightMm = heightToMm(next.height, next.heightUnit);
+      delete next.weight;
+      delete next.weightUnit;
+      delete next.weightGrams;
+      next.notes = typeof input.notes === "string" ? input.notes : `Height ${next.height} ${next.heightUnit}`;
     }
   }
 

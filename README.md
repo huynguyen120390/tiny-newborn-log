@@ -28,19 +28,19 @@ start.bat
 Then open:
 
 ```text
-http://localhost:3000
+http://localhost:3002
 ```
 
-To use another port:
+The project standard port is 3002:
 
 ```bash
-node backend/server.js 3001
+node backend/server.js 3002
 ```
 
 or:
 
 ```bat
-set PORT=3001
+set PORT=3002
 start.bat
 ```
 
@@ -49,7 +49,7 @@ start.bat
 The server binds to `0.0.0.0`, so other devices on the same network can open it with the desktop's LAN IP, for example:
 
 ```text
-http://192.168.1.25:3000
+http://192.168.1.25:3002
 ```
 
 Allow Node.js through Windows Firewall if another device cannot connect.
@@ -80,7 +80,7 @@ This desktop is configured to resolve:
 phuongnamcuti -> 192.168.86.55
 ```
 
-Run the no-port local version with:
+Run the friendly-name local version with:
 
 ```bat
 start-phuongnamcuti.bat
@@ -89,7 +89,7 @@ start-phuongnamcuti.bat
 Then open:
 
 ```text
-http://phuongnamcuti
+http://phuongnamcuti:3002
 ```
 
 For other phones, tablets, and laptops, add the same DNS/host mapping in your router or on each device:
@@ -119,7 +119,7 @@ Example Caddy idea:
 
 ```caddyfile
 phuongnam.local {
-  reverse_proxy 127.0.0.1:3000
+  reverse_proxy 127.0.0.1:3002
 }
 ```
 
@@ -130,7 +130,7 @@ server {
   server_name phuongnam.local;
 
   location / {
-    proxy_pass http://127.0.0.1:3000;
+    proxy_pass http://127.0.0.1:3002;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
   }

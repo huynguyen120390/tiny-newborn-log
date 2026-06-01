@@ -10,10 +10,20 @@ const state = {
     endDate: "",
     types: ["all"]
   },
+  dashboardFilters: {
+    rangeMode: "day",
+    startDate: todayString(),
+    endDate: todayString(),
+    types: ["all"],
+    viewStartMs: null,
+    viewEndMs: null
+  },
+  dashboardSelection: null,
   activeLogsCard: null,
   milestoneProgress: {},
   selectedMilestoneId: null,
   ticker: null,
+  pendingActionConfirm: null,
   currentDate: todayString(),
   bathSoundEnabled: false,
   bathReminderSeconds: loadBathReminderSeconds(),
@@ -21,8 +31,24 @@ const state = {
   tummySoundEnabled: false,
   tummyReminderSeconds: loadTummyReminderSeconds(),
   lastTummyAnnouncementStep: 0,
+  weightUnit: loadWeightUnit(),
+  heightUnit: loadHeightUnit(),
   reminderVoiceURI: loadReminderVoiceURI(),
   audioContext: null
+};
+
+const weightUnits = {
+  oz: { label: "oz", grams: 28.349523125 },
+  lb: { label: "lb", grams: 453.59237 },
+  g: { label: "g", grams: 1 },
+  kg: { label: "kg", grams: 1000 }
+};
+
+const heightUnits = {
+  in: { label: "in", mm: 25.4 },
+  ft: { label: "ft", mm: 304.8 },
+  cm: { label: "cm", mm: 10 },
+  mm: { label: "mm", mm: 1 }
 };
 
 const activities = [
@@ -66,6 +92,16 @@ const activities = [
     ]
   },
   {
+    title: "Baby Stats",
+    key: "growth",
+    icon: "stats",
+    helper: "Log weight or height for checkups.",
+    actions: [
+      { label: "Weight", icon: "weight", dialog: "growth", stat: "weight" },
+      { label: "Height", icon: "height", dialog: "growth", stat: "height" }
+    ]
+  },
+  {
     title: "Bath",
     key: "bath",
     icon: "spark",
@@ -86,6 +122,16 @@ const activities = [
     ]
   },
   {
+    title: "Outdoor Time",
+    key: "outdoor",
+    icon: "sun",
+    helper: "Start and end fresh air time.",
+    actions: [
+      { label: "Start", icon: "outdoor-start", payload: { type: "outdoor_time", status: "start" } },
+      { label: "End", icon: "outdoor-end", payload: { type: "outdoor_time", status: "end" } }
+    ]
+  },
+  {
     title: "Baby Gym",
     key: "gym",
     icon: "star",
@@ -102,10 +148,60 @@ const historyEventTypes = [
   { value: "feeding", label: "Boobie" },
   { value: "bottle", label: "Bottle" },
   { value: "diaper", label: "Diaper" },
+  { value: "growth_stats", label: "Stats" },
   { value: "bath", label: "Bath" },
   { value: "tummy_time", label: "Tummy" },
+  { value: "outdoor_time", label: "Outdoor" },
   { value: "baby_gym", label: "Gym" }
 ];
+
+const eventCategoryConfig = {
+  sleep: {
+    label: "Sleep",
+    kind: "period",
+    start: "asleep",
+    end: "awake",
+    startLabel: "asleep",
+    endLabel: "awake",
+    color: "#4078b9",
+    icon: "/assets/activity/icon-asleep.png"
+  },
+  bath: {
+    label: "Bath",
+    kind: "period",
+    start: "start",
+    end: "end",
+    startLabel: "started",
+    endLabel: "stopped",
+    color: "#2d8b9e",
+    icon: "/assets/activity/icon-bath.png"
+  },
+  tummy_time: {
+    label: "Tummy",
+    kind: "period",
+    start: "start",
+    end: "end",
+    startLabel: "started",
+    endLabel: "ended",
+    color: "#6f8f45",
+    icon: "/assets/activity/icon-tummy-start.png"
+  },
+  outdoor_time: {
+    label: "Outdoor",
+    kind: "period",
+    start: "start",
+    end: "end",
+    startLabel: "started",
+    endLabel: "ended",
+    color: "#3f8f68",
+    icon: "/assets/activity/icon-outdoor-start.png"
+  },
+  feeding: { label: "Boobie", kind: "quick", color: "#d95f72", icon: "/assets/activity/icon-left.png" },
+  bottle: { label: "Bottle", kind: "quick", color: "#24756f", icon: "/assets/activity/icon-bottle.png" },
+  diaper: { label: "Diaper", kind: "quick", color: "#d99a2b", icon: "/assets/activity/icon-pee.png" },
+  growth_stats: { label: "Stats", kind: "quick", color: "#7d6d2f", icon: "/assets/activity/icon-weight.png" },
+  baby_gym: { label: "Gym", kind: "quick", color: "#9b5bc0", icon: "/assets/activity/icon-gym.png" }
+};
 
 const milestoneDefinitions = [
   {
@@ -235,6 +331,10 @@ const exerciseLibrary = [
 ];
 
 const milestoneStates = ["Not Yet", "Maybe", "Practicing", "Confirmed"];
+const dashboardPlotBaseWidth = 884;
+const dashboardPlotLeft = 128;
+const dashboardMaxZoom = 8;
+const dashboardMinWindowMs = 15 * 60 * 1000;
 
 const milestoneStateMessages = {
   "Not Yet": "Not started yet.",
@@ -299,6 +399,14 @@ document.querySelector("[data-close-dialog]").addEventListener("click", () => {
   document.getElementById("bottle-dialog").close();
 });
 
+document.querySelector("[data-close-weight-dialog]").addEventListener("click", () => {
+  document.getElementById("weight-dialog").close();
+});
+
+document.querySelector("[data-close-height-dialog]").addEventListener("click", () => {
+  document.getElementById("height-dialog").close();
+});
+
 document.querySelector("[data-close-activity-logs]").addEventListener("click", () => {
   document.getElementById("activity-logs-dialog").close();
 });
@@ -322,6 +430,24 @@ document.getElementById("bottle-form").addEventListener("submit", async (event) 
   await createLog({ type: "bottle", ounces });
 });
 
+document.getElementById("weight-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const weightUnit = state.weightUnit;
+  state.weightUnit = weightUnit;
+  saveWeightUnit();
+  document.getElementById("weight-dialog").close();
+  await createLog({ type: "growth_stats", stat: "weight", weight: Number(document.getElementById("growth-weight").value), weightUnit });
+});
+
+document.getElementById("height-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const heightUnit = state.heightUnit;
+  state.heightUnit = heightUnit;
+  saveHeightUnit();
+  document.getElementById("height-dialog").close();
+  await createLog({ type: "growth_stats", stat: "height", height: Number(document.getElementById("growth-height").value), heightUnit });
+});
+
 init().catch((error) => {
   const summary = document.getElementById("baby-summary");
   if (summary) summary.textContent = `Could not load profile: ${error.message}`;
@@ -331,6 +457,7 @@ init().catch((error) => {
 async function init() {
   renderActivities();
   setupHistoryFilters();
+  setupDashboardFilters();
   setupSettingsPanel();
   setupExportPanel("export-panel");
   setupSpeechVoices();
@@ -382,9 +509,11 @@ function renderAll() {
   const birthday = state.profile.birthday || "";
   const age = formatBabyAge(birthday);
   document.getElementById("baby-summary").textContent = `${age}.`;
+  updateTopbarBabyAge();
   renderTodaySummary();
   renderRecent();
   renderHistory();
+  renderDashboard();
   renderMilestones();
   renderSettings();
   renderActivityStats();
@@ -394,6 +523,7 @@ function renderAll() {
 }
 
 function renderActivities() {
+  resetPendingCardAction();
   const visibleActivities = activities.filter((activity) => state.visibleCards.includes(activity.key));
   document.getElementById("activity-grid").innerHTML = visibleActivities.map((activity) => `
     <article class="activity-card" data-activity-card="${activity.key}" style="--card-image: url('${cardHeaderImage(activity.key)}')">
@@ -438,9 +568,14 @@ function renderActivities() {
 
   document.querySelectorAll(".action-button").forEach((button) => {
     button.addEventListener("click", async () => {
+      if (!confirmCardAction(button)) return;
       const action = JSON.parse(button.dataset.action);
       if (action.dialog === "bottle") {
         openBottleDialog();
+        return;
+      }
+      if (action.dialog === "growth") {
+        openGrowthDialog(action.stat || "weight");
         return;
       }
       await createLog(action.payload, action.reminder);
@@ -458,6 +593,39 @@ function renderActivities() {
   document.querySelectorAll("[data-tummy-sound-toggle]").forEach((button) => {
     button.addEventListener("click", toggleTummySound);
   });
+}
+
+function cardActionConfirmKey(button) {
+  return `${button.dataset.card || ""}:${button.dataset.actionLabel || ""}`;
+}
+
+function resetPendingCardAction() {
+  const pending = state.pendingActionConfirm;
+  if (!pending) return;
+  clearTimeout(pending.timer);
+  pending.button?.classList.remove("awaiting-confirmation");
+  pending.button?.removeAttribute("data-confirming");
+  state.pendingActionConfirm = null;
+}
+
+function confirmCardAction(button) {
+  const key = cardActionConfirmKey(button);
+  const pending = state.pendingActionConfirm;
+  if (pending?.key === key && pending.button === button) {
+    resetPendingCardAction();
+    return true;
+  }
+
+  resetPendingCardAction();
+  button.classList.add("awaiting-confirmation");
+  button.dataset.confirming = "true";
+  showToast(`${button.dataset.actionLabel || "Action"}: tap again to confirm.`);
+  state.pendingActionConfirm = {
+    key,
+    button,
+    timer: setTimeout(resetPendingCardAction, 1800)
+  };
+  return false;
 }
 
 function renderMilestones() {
@@ -524,6 +692,9 @@ function renderMilestoneCard(milestone, nextId, index = 0, count = 1) {
       </span>
     </button>
   `;
+  container.querySelectorAll("[data-help-text]").forEach((button) => {
+    button.addEventListener("click", () => showToast(button.dataset.helpText || ""));
+  });
 }
 
 function renderNextMilestone(milestone) {
@@ -565,6 +736,13 @@ function renderExerciseGroup(label, items) {
     <div>
       <strong>${escapeHtml(label)}</strong>
       <ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+    </div>
+  `;
+  detail.innerHTML = `
+    <img src="${escapeAttr(category.icon)}" alt="">
+    <div>
+      <strong>${escapeHtml(category.label)} - ${escapeHtml(duration)}${active ? " so far" : ""}</strong>
+      <span>${escapeHtml(formatDisplayDate(startLog.date))} - ${escapeHtml(formatLogClock(startLog))} to ${escapeHtml(endLabel)}</span>
     </div>
   `;
 }
@@ -750,7 +928,11 @@ function cardHeaderImage(key) {
   const versions = {
     boobie: "20260530-boobie-baby"
   };
-  return `/assets/activity/header-${key}.png${versions[key] ? `?v=${versions[key]}` : ""}`;
+  const files = {
+    growth: "gym"
+  };
+  const fileKey = files[key] || key;
+  return `/assets/activity/header-${fileKey}.png${versions[key] ? `?v=${versions[key]}` : ""}`;
 }
 
 function renderActivityLogRow(log, cardKey) {
@@ -854,14 +1036,18 @@ function activityIconForLog(log, cardKey) {
     feeding: log.side === "right" ? "right" : "left",
     bottle: "bottle",
     diaper: log.poop ? "poop" : "pee",
+    growth_stats: readHeightMm(log) > 0 && readWeightGrams(log) <= 0 ? "height" : "weight",
     bath: "bath",
     tummy_time: log.status === "end" ? "tummy-end" : "tummy-start",
+    outdoor_time: log.status === "end" ? "outdoor-end" : "outdoor-start",
     baby_gym: "gym"
   };
   const fallbackByCard = {
     boobie: "left",
     gym: "gym",
-    tummy: "tummy-start"
+    tummy: "tummy-start",
+    outdoor: "outdoor-start",
+    growth: "weight"
   };
   return `/assets/activity/icon-${icons[log.type] || fallbackByCard[cardKey] || "success"}.png`;
 }
@@ -872,12 +1058,45 @@ function logsForActivityCard(cardKey) {
     boobie: (log) => log.type === "feeding" && log.method === "breast",
     bottle: (log) => log.type === "bottle",
     diaper: (log) => log.type === "diaper",
+    growth: (log) => log.type === "growth_stats",
     bath: (log) => log.type === "bath",
     tummy: (log) => log.type === "tummy_time",
+    outdoor: (log) => log.type === "outdoor_time",
     gym: (log) => log.type === "baby_gym"
   };
   const matches = filters[cardKey] || (() => false);
   return state.logs.filter(matches);
+}
+
+function eventTypeFilterDropdownMarkup(selectedTypes = ["all"]) {
+  return `
+    <details class="event-type-dropdown">
+      <summary>
+        <span data-event-type-summary>${escapeHtml(eventTypeSummaryLabel(selectedTypes))}</span>
+      </summary>
+      <div class="event-type-menu">
+        ${historyEventTypes.map((type) => `
+          <label>
+            <input type="checkbox" value="${escapeAttr(type.value)}" ${selectedTypes.includes(type.value) ? "checked" : ""}>
+            ${escapeHtml(type.label)}
+          </label>
+        `).join("")}
+      </div>
+    </details>
+  `;
+}
+
+function eventTypeSummaryLabel(selectedTypes = ["all"]) {
+  if (selectedTypes.includes("all")) return "All event types";
+  if (selectedTypes.length === 1) {
+    return historyEventTypes.find((type) => type.value === selectedTypes[0])?.label || "1 event type";
+  }
+  return `${selectedTypes.length} event types`;
+}
+
+function updateEventTypeDropdownSummary(container, selectedTypes) {
+  const summary = container?.querySelector("[data-event-type-summary]");
+  if (summary) summary.textContent = eventTypeSummaryLabel(selectedTypes);
 }
 
 function setupHistoryFilters() {
@@ -885,12 +1104,7 @@ function setupHistoryFilters() {
   const typeContainer = document.getElementById("history-type-filters");
   if (!form || !typeContainer) return;
 
-  typeContainer.innerHTML = historyEventTypes.map((type) => `
-    <label>
-      <input type="checkbox" value="${escapeAttr(type.value)}" ${type.value === "all" ? "checked" : ""}>
-      ${escapeHtml(type.label)}
-    </label>
-  `).join("");
+  typeContainer.innerHTML = eventTypeFilterDropdownMarkup(state.historyFilters.types || ["all"]);
 
   document.getElementById("history-start-date").addEventListener("change", updateHistoryFilters);
   document.getElementById("history-end-date").addEventListener("change", updateHistoryFilters);
@@ -916,13 +1130,243 @@ function updateHistoryFilters(event) {
       selected = ["all"];
     }
   }
+  if (!selected.length && allBox) {
+    allBox.checked = true;
+    selected = ["all"];
+  }
 
   state.historyFilters = {
     startDate: document.getElementById("history-start-date")?.value || "",
     endDate: document.getElementById("history-end-date")?.value || "",
     types: selected.includes("all") ? ["all"] : selected
   };
+  updateEventTypeDropdownSummary(typeContainer, state.historyFilters.types);
   renderHistory();
+}
+
+function setupDashboardFilters() {
+  const form = document.getElementById("dashboard-filters");
+  const typeContainer = document.getElementById("dashboard-type-filters");
+  if (!form || !typeContainer) return;
+
+  typeContainer.innerHTML = eventTypeFilterDropdownMarkup(state.dashboardFilters.types || ["all"]);
+
+  const mode = document.getElementById("dashboard-range-mode");
+  const start = document.getElementById("dashboard-start-date");
+  const end = document.getElementById("dashboard-end-date");
+  syncDashboardDateInputs();
+
+  mode.addEventListener("change", () => {
+    state.dashboardFilters.rangeMode = mode.value;
+    applyDashboardPreset(mode.value);
+    resetDashboardViewWindow();
+    syncDashboardDateInputs();
+    renderDashboard();
+  });
+
+  [start, end].forEach((input) => {
+    input.addEventListener("change", () => {
+      state.dashboardFilters.rangeMode = "custom";
+      state.dashboardFilters.startDate = start.value || todayString();
+      state.dashboardFilters.endDate = end.value || state.dashboardFilters.startDate;
+      resetDashboardViewWindow();
+      syncDashboardDateInputs();
+      renderDashboard();
+    });
+  });
+
+  typeContainer.addEventListener("change", updateDashboardTypeFilters);
+  document.getElementById("dashboard-zoom-in")?.addEventListener("click", () => updateDashboardZoom(2));
+  document.getElementById("dashboard-zoom-out")?.addEventListener("click", () => updateDashboardZoom(0.5));
+  document.getElementById("dashboard-zoom-reset")?.addEventListener("click", () => {
+    resetDashboardViewWindow();
+    renderDashboard();
+  });
+  setupDashboardTouchZoom();
+}
+
+function updateDashboardZoom(multiplier) {
+  const visible = dashboardVisibleRangeMs();
+  const center = visible.startTime + visible.span / 2;
+  setDashboardVisibleWindow(center - (visible.span / multiplier) / 2, center + (visible.span / multiplier) / 2);
+  renderDashboard();
+}
+
+function setupDashboardTouchZoom() {
+  const chart = document.getElementById("dashboard-chart");
+  if (!chart) return;
+  let pinch = null;
+  let drag = null;
+
+  chart.addEventListener("touchstart", (event) => {
+    if (event.touches.length === 2) {
+      const midpoint = touchMidpoint(event.touches);
+      const visible = dashboardVisibleRangeMs();
+      pinch = {
+        distance: touchDistance(event.touches),
+        span: visible.span,
+        anchorRatio: chartXToRatio(midpoint.x),
+        anchorTime: visible.startTime + chartXToRatio(midpoint.x) * visible.span
+      };
+      drag = null;
+      chart.classList.add("pinching");
+    } else if (event.touches.length === 1) {
+      const visible = dashboardVisibleRangeMs();
+      drag = { x: event.touches[0].clientX, startTime: visible.startTime, endTime: visible.endTime, span: visible.span };
+    }
+  }, { passive: true });
+
+  chart.addEventListener("touchmove", (event) => {
+    if (pinch && event.touches.length === 2) {
+      event.preventDefault();
+      const distance = touchDistance(event.touches);
+      const scale = distance / Math.max(1, pinch.distance);
+      const nextSpan = pinch.span / Math.max(0.1, scale);
+      const nextStart = pinch.anchorTime - pinch.anchorRatio * nextSpan;
+      setDashboardVisibleWindow(nextStart, nextStart + nextSpan);
+      renderDashboard();
+    } else if (drag && event.touches.length === 1) {
+      const visible = dashboardVisibleRangeMs();
+      if (visible.zoom <= 1.01) return;
+      event.preventDefault();
+      const deltaX = event.touches[0].clientX - drag.x;
+      const deltaTime = -(deltaX / dashboardRenderedPlotWidth()) * drag.span;
+      setDashboardVisibleWindow(drag.startTime + deltaTime, drag.endTime + deltaTime);
+      renderDashboard();
+    }
+  }, { passive: false });
+
+  chart.addEventListener("touchend", (event) => {
+    if (event.touches.length < 2) {
+      pinch = null;
+      chart.classList.remove("pinching");
+    }
+    if (event.touches.length === 0) drag = null;
+  }, { passive: true });
+}
+
+function touchDistance(touches) {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function touchMidpoint(touches) {
+  const chart = document.getElementById("dashboard-chart");
+  const rect = chart.getBoundingClientRect();
+  return {
+    x: ((touches[0].clientX + touches[1].clientX) / 2) - rect.left,
+    y: ((touches[0].clientY + touches[1].clientY) / 2) - rect.top
+  };
+}
+
+function chartXToRatio(x) {
+  return Math.min(1, Math.max(0, (x - dashboardPlotLeft) / dashboardRenderedPlotWidth()));
+}
+
+function dashboardRenderedPlotWidth() {
+  return dashboardPlotBaseWidth * Math.max(1, Math.min(3, dashboardVisibleRangeMs().zoom || 1));
+}
+
+function dashboardSelectedRangeMs() {
+  const filters = state.dashboardFilters || {};
+  const startDate = filters.startDate || todayString();
+  const endDate = filters.endDate || startDate;
+  const [start, end] = startDate <= endDate ? [startDate, endDate] : [endDate, startDate];
+  const startTime = new Date(`${start}T00:00:00`).getTime();
+  const endTime = new Date(`${end}T23:59:59`).getTime();
+  return { start, end, startTime, endTime, span: Math.max(1, endTime - startTime) };
+}
+
+function dashboardVisibleRangeMs() {
+  const selected = dashboardSelectedRangeMs();
+  const filters = state.dashboardFilters || {};
+  const maxZoomWindow = selected.span / dashboardMaxZoom;
+  const minSpan = Math.min(selected.span, Math.max(dashboardMinWindowMs, maxZoomWindow));
+  const hasWindow = Number.isFinite(filters.viewStartMs) && Number.isFinite(filters.viewEndMs);
+  if (!hasWindow) return { ...selected, zoom: 1 };
+  const startTime = Math.max(selected.startTime, filters.viewStartMs);
+  const endTime = Math.min(selected.endTime, Math.max(filters.viewEndMs, startTime + minSpan));
+  const span = Math.max(minSpan, endTime - startTime);
+  return { ...selected, startTime, endTime: Math.min(selected.endTime, startTime + span), span, zoom: selected.span / span };
+}
+
+function setDashboardVisibleWindow(startTime, endTime) {
+  const selected = dashboardSelectedRangeMs();
+  const minSpan = Math.min(selected.span, Math.max(dashboardMinWindowMs, selected.span / dashboardMaxZoom));
+  const span = Math.min(selected.span, Math.max(minSpan, endTime - startTime));
+  let nextStart = startTime;
+  let nextEnd = startTime + span;
+  if (nextStart < selected.startTime) {
+    nextStart = selected.startTime;
+    nextEnd = nextStart + span;
+  }
+  if (nextEnd > selected.endTime) {
+    nextEnd = selected.endTime;
+    nextStart = nextEnd - span;
+  }
+  state.dashboardFilters.viewStartMs = nextStart <= selected.startTime && nextEnd >= selected.endTime ? null : nextStart;
+  state.dashboardFilters.viewEndMs = nextStart <= selected.startTime && nextEnd >= selected.endTime ? null : nextEnd;
+}
+
+function resetDashboardViewWindow() {
+  state.dashboardFilters.viewStartMs = null;
+  state.dashboardFilters.viewEndMs = null;
+}
+
+function applyDashboardPreset(mode) {
+  const today = todayString();
+  if (mode === "week") {
+    state.dashboardFilters.startDate = addDays(today, -6);
+    state.dashboardFilters.endDate = today;
+  } else if (mode === "month") {
+    state.dashboardFilters.startDate = addDays(today, -29);
+    state.dashboardFilters.endDate = today;
+  } else if (mode === "day") {
+    state.dashboardFilters.startDate = today;
+    state.dashboardFilters.endDate = today;
+  }
+}
+
+function syncDashboardDateInputs() {
+  const filters = state.dashboardFilters;
+  const startDate = filters.startDate || todayString();
+  const endDate = filters.endDate || startDate;
+  const mode = document.getElementById("dashboard-range-mode");
+  const start = document.getElementById("dashboard-start-date");
+  const end = document.getElementById("dashboard-end-date");
+  if (mode) mode.value = filters.rangeMode || "day";
+  if (start && document.activeElement !== start) start.value = startDate;
+  if (end && document.activeElement !== end) end.value = endDate;
+}
+
+function updateDashboardTypeFilters(event) {
+  const typeContainer = document.getElementById("dashboard-type-filters");
+  const boxes = Array.from(typeContainer.querySelectorAll("input[type='checkbox']"));
+  const allBox = boxes.find((box) => box.value === "all");
+  let selected = boxes.filter((box) => box.checked).map((box) => box.value);
+
+  if (event?.target?.value === "all" && event.target.checked) {
+    boxes.forEach((box) => {
+      box.checked = box.value === "all";
+    });
+    selected = ["all"];
+  } else if (event?.target?.value !== "all") {
+    if (allBox) allBox.checked = false;
+    selected = boxes.filter((box) => box.checked && box.value !== "all").map((box) => box.value);
+    if (!selected.length && allBox) {
+      allBox.checked = true;
+      selected = ["all"];
+    }
+  }
+  if (!selected.length && allBox) {
+    allBox.checked = true;
+    selected = ["all"];
+  }
+
+  state.dashboardFilters.types = selected.includes("all") ? ["all"] : selected;
+  updateEventTypeDropdownSummary(typeContainer, state.dashboardFilters.types);
+  renderDashboard();
 }
 
 function setupSettingsPanel() {
@@ -930,6 +1374,8 @@ function setupSettingsPanel() {
   document.getElementById("bath-reminder-form").addEventListener("submit", saveBathReminder);
   document.getElementById("tummy-reminder-form").addEventListener("submit", saveTummyReminder);
   document.getElementById("reminder-voice-select").addEventListener("change", saveReminderVoice);
+  document.getElementById("settings-weight-unit").addEventListener("change", saveSettingsWeightUnit);
+  document.getElementById("settings-height-unit").addEventListener("change", saveSettingsHeightUnit);
   document.getElementById("test-reminder-voice").addEventListener("click", testReminderVoice);
   document.getElementById("clear-data-button").addEventListener("click", clearData);
 }
@@ -943,6 +1389,12 @@ function renderSettings() {
 
   const tummyReminderInput = document.getElementById("tummy-reminder-seconds");
   if (tummyReminderInput && document.activeElement !== tummyReminderInput) tummyReminderInput.value = state.tummyReminderSeconds;
+
+  const weightUnitSelect = document.getElementById("settings-weight-unit");
+  if (weightUnitSelect && document.activeElement !== weightUnitSelect) weightUnitSelect.value = state.weightUnit;
+
+  const heightUnitSelect = document.getElementById("settings-height-unit");
+  if (heightUnitSelect && document.activeElement !== heightUnitSelect) heightUnitSelect.value = state.heightUnit;
 
   renderVoiceOptions();
 
@@ -993,6 +1445,24 @@ function saveReminderVoice(event) {
 
 function testReminderVoice() {
   prepareReminderSound("Two minutes");
+}
+
+function saveSettingsWeightUnit(event) {
+  state.weightUnit = event.target.value;
+  saveWeightUnit();
+  renderActivityStats();
+  renderDashboard();
+  updateTopbarBabyStats();
+  showSettingsStatus(`Weight unit saved: ${state.weightUnit}.`);
+}
+
+function saveSettingsHeightUnit(event) {
+  state.heightUnit = event.target.value;
+  saveHeightUnit();
+  renderActivityStats();
+  renderDashboard();
+  updateTopbarBabyStats();
+  showSettingsStatus(`Height unit saved: ${state.heightUnit}.`);
 }
 
 function saveBathReminder(event) {
@@ -1096,7 +1566,19 @@ function loadVisibleCards() {
     if (Array.isArray(saved) && saved.length) {
       const validKeys = new Set(activities.map((activity) => activity.key));
       const filtered = saved.filter((key) => validKeys.has(key));
-      if (filtered.length) return filtered;
+      if (filtered.length) {
+        [
+          ["outdoor", "visibleCardsOutdoorAdded"],
+          ["growth", "visibleCardsGrowthAdded"]
+        ].forEach(([key, flag]) => {
+          if (!filtered.includes(key) && storageGet(flag) !== "true") {
+            filtered.push(key);
+            storageSet(flag, "true");
+            storageSet("visibleCards", JSON.stringify(filtered));
+          }
+        });
+        return filtered;
+      }
     }
   } catch {
     return activities.map((activity) => activity.key);
@@ -1124,6 +1606,24 @@ function loadTummyReminderSeconds() {
 
 function saveTummyReminderSeconds() {
   storageSet("tummyReminderSeconds", String(state.tummyReminderSeconds));
+}
+
+function loadWeightUnit() {
+  const saved = storageGet("weightUnit");
+  return ["oz", "lb", "g", "kg"].includes(saved) ? saved : "lb";
+}
+
+function saveWeightUnit() {
+  storageSet("weightUnit", state.weightUnit);
+}
+
+function loadHeightUnit() {
+  const saved = storageGet("heightUnit");
+  return ["in", "ft", "cm", "mm"].includes(saved) ? saved : "in";
+}
+
+function saveHeightUnit() {
+  storageSet("heightUnit", state.heightUnit);
 }
 
 function loadReminderVoiceURI() {
@@ -1193,11 +1693,39 @@ function openBottleDialog() {
   document.getElementById("bottle-dialog").showModal();
 }
 
+function openGrowthDialog(stat = "weight") {
+  if (stat === "height") {
+    updateHeightDialogDefaults();
+    document.getElementById("height-dialog").showModal();
+    return;
+  }
+  updateWeightDialogDefaults();
+  document.getElementById("weight-dialog").showModal();
+}
+
 function updateBottleDefaults() {
   const slider = document.getElementById("bottle-slider");
   const amount = Math.min(8, Math.max(0, Number(state.recent.bottleOunces || 3)));
   slider.value = amount;
   document.getElementById("bottle-value").textContent = amount.toFixed(2).replace(/0$/, "");
+}
+
+function updateWeightDialogDefaults() {
+  const latestWeight = lastGrowthLog("weight");
+  const weight = document.getElementById("growth-weight");
+  const weightUnitLabel = document.getElementById("growth-weight-unit-label");
+
+  if (weightUnitLabel) weightUnitLabel.textContent = state.weightUnit;
+  if (weight && document.activeElement !== weight) weight.value = latestWeight ? formatUnitValue(readWeightGrams(latestWeight), state.weightUnit, "weight") : "";
+}
+
+function updateHeightDialogDefaults() {
+  const latestHeight = lastGrowthLog("height");
+  const height = document.getElementById("growth-height");
+  const heightUnitLabel = document.getElementById("growth-height-unit-label");
+
+  if (heightUnitLabel) heightUnitLabel.textContent = state.heightUnit;
+  if (height && document.activeElement !== height) height.value = latestHeight ? formatUnitValue(readHeightMm(latestHeight), state.heightUnit, "height") : "";
 }
 
 function startTicker() {
@@ -1210,6 +1738,7 @@ function startTicker() {
       return;
     }
     renderActivityStats();
+    if (state.activeTab === "dashboard") renderDashboard();
     updateActivityButtons();
     announceBathProgress();
     announceTummyProgress();
@@ -1229,6 +1758,26 @@ function updateClock() {
     minute: "2-digit",
     second: "2-digit"
   });
+  updateTopbarBabyAge();
+}
+
+function updateTopbarBabyAge() {
+  const ageElement = document.getElementById("topbar-baby-age");
+  if (!ageElement) return;
+  const age = formatBabyAge(state.profile.birthday || "");
+  ageElement.textContent = age ? `Baby age: ${age}` : "";
+  updateTopbarBabyStats();
+}
+
+function updateTopbarBabyStats() {
+  const element = document.getElementById("topbar-baby-stats");
+  if (!element) return;
+  const weight = lastGrowthLog("weight");
+  const height = lastGrowthLog("height");
+  const parts = [];
+  if (weight) parts.push(formatWeightLog(weight));
+  if (height) parts.push(formatHeightLog(height));
+  element.textContent = parts.length ? parts.join(" / ") : "Stats: --";
 }
 
 function renderActivityStats() {
@@ -1263,6 +1812,7 @@ function updateSleepHeader() {
 function updateActivityButtons() {
   const sleep = getCurrentState("sleep");
   const tummy = getCurrentState("tummy_time");
+  const outdoor = getCurrentState("outdoor_time");
   const bath = getCurrentState("bath");
 
   document.querySelectorAll(".action-button").forEach((button) => {
@@ -1271,10 +1821,12 @@ function updateActivityButtons() {
     const shouldDisable =
       (card === "sleep" && ((sleep.status === "asleep" && label === "Asleep") || (sleep.status === "awake" && label === "Awake"))) ||
       (card === "tummy" && ((tummy.status === "start" && label === "Start") || (tummy.status === "end" && label === "End"))) ||
+      (card === "outdoor" && ((outdoor.status === "start" && label === "Start") || (outdoor.status === "end" && label === "End"))) ||
       (card === "bath" && ((bath.status === "start" && label === "Start") || (bath.status === "end" && label === "Stop")));
 
     button.disabled = shouldDisable;
     button.setAttribute("aria-disabled", shouldDisable ? "true" : "false");
+    if (shouldDisable && button.dataset.confirming === "true") resetPendingCardAction();
   });
 
   document.querySelectorAll("[data-bath-sound-toggle]").forEach((button) => {
@@ -1293,10 +1845,12 @@ function updateActivityButtons() {
 function getActivityStats() {
   const sleep = getCurrentState("sleep");
   const tummy = getCurrentState("tummy_time");
+  const outdoor = getCurrentState("outdoor_time");
   const bath = getCurrentState("bath");
   const todaySummary = summarizeLogsToday();
   const sleepLabel = sleep.status === "asleep" ? "Asleep" : "Awake";
   const tummyLabel = tummy.status === "start" ? "Started" : "Ended";
+  const outdoorLabel = outdoor.status === "start" ? "Started" : "Ended";
   const bathLabel = bath.status === "start" ? "Bathing" : "Stopped";
 
   return {
@@ -1326,6 +1880,9 @@ function getActivityStats() {
         </div>
       `
     },
+    growth: {
+      html: renderGrowthCardInfo()
+    },
     bath: {
       label: `${bathLabel} ${formatDuration(elapsedTodaySince(bath.log))}${formatSince(bath.log)}`,
       value: formatTotalDuration(totalToday("bath", "start", "end")),
@@ -1335,6 +1892,11 @@ function getActivityStats() {
       label: `${tummyLabel} ${formatDuration(elapsedTodaySince(tummy.log))}${formatSince(tummy.log)}`,
       value: formatTotalDuration(totalToday("tummy_time", "start", "end")),
       helper: `Sound ${state.tummySoundEnabled ? "on" : "off"} - every ${formatReminderPeriod(state.tummyReminderSeconds)}`
+    },
+    outdoor: {
+      label: `${outdoorLabel} ${formatDuration(elapsedTodaySince(outdoor.log))}${formatSince(outdoor.log)}`,
+      value: formatTotalDuration(totalToday("outdoor_time", "start", "end")),
+      helper: `${todaySummary.outdoorTimeEvents} start/end taps today`
     },
     gym: {
       label: "Baby gym",
@@ -1355,8 +1917,29 @@ function summarizeLogsToday() {
     wetDiapers: count((log) => log.type === "diaper" && log.pee),
     poops: count((log) => log.type === "diaper" && log.poop),
     baths: count((log) => log.type === "bath" && (log.status === "start" || !log.status)),
+    outdoorTimeEvents: count((log) => log.type === "outdoor_time"),
+    growthStats: count((log) => log.type === "growth_stats"),
     babyGymEvents: count((log) => log.type === "baby_gym")
   };
+}
+
+function renderGrowthCardInfo() {
+  const weight = lastGrowthLog("weight");
+  const height = lastGrowthLog("height");
+  if (!weight && !height) {
+    return `
+      <span>Latest stats</span>
+      <strong>--</strong>
+      <small>No stats logged yet</small>
+    `;
+  }
+
+  return `
+    <div class="hygiene-list stats-list">
+      <span>Weight: ${weight ? formatWeightLog(weight) : "--"}</span>
+      <span>Height: ${height ? formatHeightLog(height) : "--"}</span>
+    </div>
+  `;
 }
 
 function getCurrentState(type) {
@@ -1371,12 +1954,8 @@ function getCurrentState(type) {
 }
 
 function pairedConfig(type) {
-  const configs = {
-    sleep: { start: "asleep", end: "awake", startLabel: "asleep", endLabel: "awake" },
-    tummy_time: { start: "start", end: "end", startLabel: "started", endLabel: "ended" },
-    bath: { start: "start", end: "end", startLabel: "started", endLabel: "stopped" }
-  };
-  return configs[type] || null;
+  const config = eventCategoryConfig[type];
+  return config?.kind === "period" ? config : null;
 }
 
 function transitionConflict(input, excludeId) {
@@ -1395,7 +1974,10 @@ function transitionConflict(input, excludeId) {
   if (isStart && activeBefore) return `Already ${config.startLabel}. Stop first to avoid overlapping time.`;
   if (isEnd && !activeBefore) return `Already ${config.endLabel}. Start first before stopping.`;
 
-  const next = nextTimedStatus(input.type, eventTime, excludeId);
+  const nextCandidate = nextTimedStatus(input.type, eventTime, excludeId);
+  const next = !input.date && !input.time && nextCandidate && logTime(nextCandidate) > Date.now() + 30 * 1000
+    ? null
+    : nextCandidate;
   if (next && isStart && next.status === config.start) return `This would overlap with another ${config.startLabel} time.`;
   if (next && isEnd && next.status === config.end) return `This would create two stop events in a row.`;
   return "";
@@ -1742,6 +2324,12 @@ function todayString() {
   return `${year}-${month}-${day}`;
 }
 
+function daysBetween(startDate, endDate) {
+  const start = new Date(`${startDate}T00:00:00`).getTime();
+  const end = new Date(`${endDate}T00:00:00`).getTime();
+  return Math.max(0, Math.round((end - start) / (24 * 60 * 60 * 1000)));
+}
+
 function logTime(log) {
   const [hour = "00", minute = "00"] = String(log.time || "00:00").split(":");
   const local = new Date(`${log.date || todayString()}T${hour.padStart(2, "0")}:${minute.padStart(2, "0")}:00`);
@@ -1802,6 +2390,25 @@ function formatLogClock(log) {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
 }
 
+function formatDashboardTick(date, span) {
+  if (span <= 36 * 60 * 60 * 1000) return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return date.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function formatCompactDuration(value) {
+  const totalMinutes = Math.max(0, Math.round(value / 60000));
+  return formatMinutesAsHoursMinutes(totalMinutes);
+}
+
+function formatMinutesAsHoursMinutes(totalMinutes) {
+  const safeMinutes = Math.max(0, Math.round(Number(totalMinutes) || 0));
+  const hours = Math.floor(safeMinutes / 60);
+  const minutes = safeMinutes % 60;
+  if (hours && minutes) return `${hours}h ${minutes}m`;
+  if (hours) return `${hours}h`;
+  return `${minutes}m`;
+}
+
 function renderTodaySummary() {
   const container = document.getElementById("today-metrics");
   if (!container) return;
@@ -1814,7 +2421,8 @@ function renderTodaySummary() {
     ["Poo", state.summary.poops || 0, "Poo diapers"],
     ["Sleep", state.summary.sleepEvents || 0, "Sleep events"],
     ["Bath", state.summary.baths || 0, "Baths"],
-    ["Tummy", state.summary.tummyTimeEvents || 0, "Start/end taps"]
+    ["Tummy", state.summary.tummyTimeEvents || 0, "Start/end taps"],
+    ["Outdoor", state.summary.outdoorTimeEvents || 0, "Start/end taps"]
   ];
 
   container.innerHTML = cards.map(([label, value, helper]) => `
@@ -1860,6 +2468,810 @@ function renderHistory() {
   list.querySelectorAll("[data-delete-log]").forEach((button) => {
     button.addEventListener("click", () => deleteLog(button.dataset.deleteLog));
   });
+}
+
+function renderDashboard() {
+  syncDashboardDateInputs();
+
+  const chart = document.getElementById("dashboard-chart");
+  const detail = document.getElementById("dashboard-event-detail");
+  const zoomLabel = document.getElementById("dashboard-zoom-label");
+  const zoomOut = document.getElementById("dashboard-zoom-out");
+  const zoomIn = document.getElementById("dashboard-zoom-in");
+  if (!chart || !detail) return;
+
+  const rangeLogs = dashboardLogsInSelectedRange();
+  const logs = filteredDashboardLogs(rangeLogs);
+  const rows = dashboardRows(rangeLogs);
+  const totals = rows.map((row) => [row.label, logs.filter((log) => log.type === row.value).length]);
+  detail.innerHTML = logs.length
+    ? `<strong>${logs.length} events</strong><span>${escapeHtml(totals.filter(([, count]) => count).map(([label, count]) => `${label}: ${count}`).join(" · "))}</span>`
+    : `<strong>No events</strong><span>Try a wider date range or more event types.</span>`;
+  const visible = dashboardVisibleRangeMs();
+  const zoom = visible.zoom || 1;
+  if (zoomLabel) zoomLabel.textContent = `${formatZoomLabel(zoom)} · ${formatVisibleWindowLabel(visible)}`;
+  if (zoomOut) zoomOut.disabled = zoom <= 1;
+  if (zoomIn) zoomIn.disabled = zoom >= dashboardMaxZoom;
+
+  chart.innerHTML = rangeLogs.length ? renderDashboardChart(logs, rows, rangeLogs) : `<p class="empty-state">No events match these dashboard filters.</p>`;
+  renderDashboardAnalytics(rangeLogs);
+  setupTrendPlotInteractions();
+
+  chart.querySelectorAll("[data-dashboard-log]").forEach((point) => {
+    const show = () => showDashboardEvent(point.dataset.dashboardLog);
+    point.addEventListener("mouseenter", show);
+    point.addEventListener("focus", show);
+    point.addEventListener("click", show);
+    point.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        show();
+      }
+    });
+  });
+  chart.querySelectorAll("[data-dashboard-period-start]").forEach((item) => {
+    const show = () => showDashboardPeriod(item.dataset.dashboardPeriodStart, item.dataset.dashboardPeriodEnd || "");
+    item.addEventListener("mouseenter", show);
+    item.addEventListener("focus", show);
+    item.addEventListener("click", show);
+    item.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        show();
+      }
+    });
+  });
+  renderDashboardSelection();
+}
+
+function renderDashboardAnalytics(rangeLogs) {
+  const container = document.getElementById("dashboard-analytics");
+  if (!container) return;
+
+  const analytics = buildDashboardAnalytics(rangeLogs);
+  container.innerHTML = `
+    <section class="analytics-section">
+      <div class="section-heading">
+        <h3>Duration Events</h3>
+        <p>Period-based activities in this date range.</p>
+      </div>
+      <div class="analytics-grid">
+        ${analytics.durationStats.length ? analytics.durationStats.map(renderDurationStatCard).join("") : `<p class="empty-state">No completed duration events in this range.</p>`}
+      </div>
+    </section>
+    <section class="analytics-section">
+      <div class="section-heading">
+        <h3>Quick Events</h3>
+        <p>Counts and amounts for instant logs.</p>
+      </div>
+      <div class="analytics-grid">
+        ${analytics.quickStats.length ? analytics.quickStats.map(renderQuickStatCard).join("") : `<p class="empty-state">No quick events in this range.</p>`}
+      </div>
+    </section>
+    <section class="analytics-section">
+      <div class="section-heading">
+        <h3>Feeding Rhythm</h3>
+        <p>Time from the previous feed to care events.</p>
+      </div>
+      <div class="analytics-grid">
+        ${analytics.intervalStats.length ? analytics.intervalStats.map(renderIntervalStatCard).join("") : `<p class="empty-state">Not enough feeding rhythm data yet.</p>`}
+      </div>
+    </section>
+    <section class="analytics-section">
+      <div class="section-heading">
+        <h3>Trends</h3>
+        <p>Daily plots for parenting patterns and reports.</p>
+      </div>
+      <div class="plot-grid">
+        ${analytics.plots.map(renderLinePlot).join("")}
+      </div>
+    </section>
+  `;
+  setupHelpTooltips(container);
+}
+
+function buildDashboardAnalytics(rangeLogs) {
+  const periodRecords = dashboardEventPairs(rangeLogs)
+    .filter((period) => !period.active)
+    .map(({ startLog, endLog }) => ({
+      type: startLog.type,
+      label: labelForType(startLog.type),
+      startLog,
+      endLog,
+      duration: logTime(endLog) - logTime(startLog)
+    }))
+    .filter((period) => period.duration > 0);
+
+  const durationStats = Object.values(periodRecords.reduce((acc, period) => {
+    acc[period.type] = acc[period.type] || { type: period.type, label: period.label, total: 0, count: 0, longest: period };
+    acc[period.type].total += period.duration;
+    acc[period.type].count += 1;
+    if (period.duration > acc[period.type].longest.duration) acc[period.type].longest = period;
+    return acc;
+  }, {})).map((item) => ({ ...item, average: item.total / item.count }));
+
+  const quickLogs = rangeLogs.filter((log) => eventCategory(log.type).kind !== "period");
+  const quickStats = Object.values(quickLogs.reduce((acc, log) => {
+    const key = log.type === "diaper" ? (log.poop ? "poop" : "pee") : log.type;
+    const label = log.type === "diaper" ? (log.poop ? "Poo" : "Pee") : labelForType(log.type);
+    acc[key] = acc[key] || { key, label, count: 0, amounts: [], weights: [], heights: [] };
+    acc[key].count += 1;
+    if (log.type === "bottle" && Number.isFinite(Number(log.ounces))) acc[key].amounts.push(Number(log.ounces));
+    if (log.type === "growth_stats" && readWeightGrams(log) > 0) acc[key].weights.push(readWeightGrams(log));
+    if (log.type === "growth_stats" && readHeightMm(log) > 0) acc[key].heights.push(readHeightMm(log));
+    return acc;
+  }, {})).map((item) => ({
+    ...item,
+    averageAmount: item.amounts.length ? item.amounts.reduce((sum, value) => sum + value, 0) / item.amounts.length : null,
+    totalAmount: item.amounts.reduce((sum, value) => sum + value, 0),
+    latestWeightGrams: item.weights.length ? item.weights[item.weights.length - 1] : null,
+    latestHeightMm: item.heights.length ? item.heights[item.heights.length - 1] : null
+  }));
+
+  const intervalStats = buildFeedingIntervalStats(rangeLogs);
+  const plots = buildDashboardPlots(rangeLogs, periodRecords);
+  return { durationStats, quickStats, intervalStats, plots };
+}
+
+function renderDurationStatCard(stat) {
+  return `
+    <article class="analytics-card">
+      <h4>${escapeHtml(stat.label)} ${helpIcon("Total, count, average period length, and longest period in the selected range.")}</h4>
+      <strong>${escapeHtml(formatCompactDuration(stat.total))}</strong>
+      <span>${stat.count} times · avg ${escapeHtml(formatCompactDuration(stat.average))}</span>
+      <small>Longest: ${escapeHtml(formatCompactDuration(stat.longest.duration))}, ${escapeHtml(formatLogClock(stat.longest.startLog))} to ${escapeHtml(formatLogClock(stat.longest.endLog))}</small>
+    </article>
+  `;
+}
+
+function renderQuickStatCard(stat) {
+  const growth = stat.latestWeightGrams == null && stat.latestHeightMm == null
+    ? ""
+    : `<small>Latest: ${stat.latestWeightGrams ? formatMeasurement(Number(formatUnitValue(stat.latestWeightGrams, state.weightUnit, "weight")), state.weightUnit) : "--"} - ${stat.latestHeightMm ? formatMeasurement(Number(formatUnitValue(stat.latestHeightMm, state.heightUnit, "height")), state.heightUnit) : "--"}</small>`;
+  const amount = stat.averageAmount == null ? "" : `<small>Avg amount: ${Number(stat.averageAmount.toFixed(2))} oz · total ${Number(stat.totalAmount.toFixed(2))} oz</small>`;
+  return `
+    <article class="analytics-card">
+      <h4>${escapeHtml(stat.label)} ${helpIcon("How many times this quick event happened. Bottle also shows average and total amount.")}</h4>
+      <strong>${stat.count}</strong>
+      <span>times</span>
+      ${amount}
+      ${growth}
+    </article>
+  `;
+}
+
+function renderIntervalStatCard(stat) {
+  return `
+    <article class="analytics-card">
+      <h4>${escapeHtml(stat.label)} ${helpIcon("Average elapsed time from the previous feeding or bottle to this event.")}</h4>
+      <strong>${escapeHtml(formatCompactDuration(stat.average))}</strong>
+      <span>${stat.count} matched events</span>
+      <small>Range: ${escapeHtml(formatCompactDuration(stat.min))} to ${escapeHtml(formatCompactDuration(stat.max))}</small>
+    </article>
+  `;
+}
+
+function helpIcon(text) {
+  return `<button class="help-icon" type="button" title="${escapeAttr(text)}" aria-label="${escapeAttr(text)}" data-help-text="${escapeAttr(text)}">?</button>`;
+}
+
+function setupHelpTooltips(container = document) {
+  container.querySelectorAll("[data-help-text]").forEach((button) => {
+    const show = () => showToast(button.dataset.helpText || "");
+    button.addEventListener("mouseenter", show);
+    button.addEventListener("focus", show);
+    button.addEventListener("click", show);
+    button.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        show();
+      }
+    });
+  });
+}
+
+function buildFeedingIntervalStats(rangeLogs) {
+  const allFeeds = state.logs
+    .filter((log) => log.type === "feeding" || log.type === "bottle")
+    .sort((a, b) => logTime(a) - logTime(b));
+  const targets = [
+    { key: "pee", label: "Previous feed to pee", test: (log) => log.type === "diaper" && log.pee },
+    { key: "poop", label: "Previous feed to poo", test: (log) => log.type === "diaper" && log.poop },
+    { key: "bath", label: "Previous feed to bath", test: (log) => log.type === "bath" && log.status === "start" }
+  ];
+
+  return targets.map((target) => {
+    const values = rangeLogs
+      .filter(target.test)
+      .map((log) => {
+        const time = logTime(log);
+        const previous = [...allFeeds].reverse().find((feed) => logTime(feed) < time);
+        return previous ? time - logTime(previous) : null;
+      })
+      .filter((value) => value != null && value >= 0);
+    if (!values.length) return null;
+    return {
+      key: target.key,
+      label: target.label,
+      count: values.length,
+      average: values.reduce((sum, value) => sum + value, 0) / values.length,
+      min: Math.min(...values),
+      max: Math.max(...values)
+    };
+  }).filter(Boolean);
+}
+
+function buildDashboardPlots(rangeLogs, periodRecords) {
+  const days = dashboardDateKeys();
+  const sleepSessions = getSleepSessionRecords(periodRecords);
+  let latestWeight = 0;
+  let latestHeight = 0;
+  const dayRows = days.map((date) => {
+    const logs = rangeLogs.filter((log) => log.date === date);
+    const bottles = logs.filter((log) => log.type === "bottle" && Number.isFinite(Number(log.ounces)));
+    const stats = logs.filter((log) => log.type === "growth_stats");
+    const sortedStats = stats.sort((a, b) => logTime(a) - logTime(b));
+    const weightStats = sortedStats.filter((log) => readWeightGrams(log) > 0);
+    const heightStats = sortedStats.filter((log) => readHeightMm(log) > 0);
+    const latestWeightStats = weightStats[weightStats.length - 1];
+    const latestHeightStats = heightStats[heightStats.length - 1];
+    if (latestWeightStats) latestWeight = readWeightGrams(latestWeightStats);
+    if (latestHeightStats) latestHeight = readHeightMm(latestHeightStats);
+    const sleep = sleepSessions.filter((session) => session.date === date);
+    const tummy = periodRecords.filter((period) => period.type === "tummy_time" && period.startLog.date === date);
+    const outdoor = periodRecords.filter((period) => period.type === "outdoor_time" && period.startLog.date === date);
+    const sleepDay = sleep.filter((session) => session.period === "daytime").reduce((sum, session) => sum + session.durationMinutes, 0);
+    const sleepNight = sleep.filter((session) => session.period === "nighttime").reduce((sum, session) => sum + session.durationMinutes, 0);
+    return {
+      date,
+      milkAvg: bottles.length ? bottles.reduce((sum, log) => sum + Number(log.ounces || 0), 0) / bottles.length : 0,
+      weight: Number(formatUnitValue(latestWeight, state.weightUnit, "weight") || 0),
+      height: Number(formatUnitValue(latestHeight, state.heightUnit, "height") || 0),
+      sleepDay,
+      sleepNight,
+      sleepDayAvg: getAverageSleepSessionDuration(sleep.filter((session) => session.period === "daytime")),
+      sleepNightAvg: getAverageSleepSessionDuration(sleep.filter((session) => session.period === "nighttime")),
+      pee: logs.filter((log) => log.type === "diaper" && log.pee).length,
+      poop: logs.filter((log) => log.type === "diaper" && log.poop).length,
+      tummyAvg: tummy.length ? tummy.reduce((sum, period) => sum + period.duration, 0) / tummy.length / 60000 : 0,
+      outdoorTotal: outdoor.reduce((sum, period) => sum + period.duration, 0) / 60000
+    };
+  });
+
+  return [
+    {
+      title: "Average Milk Per Bottle",
+      help: "Average bottle ounces per bottle feeding each day.",
+      unit: "oz",
+      series: [{ label: "Milk", values: dayRows.map((row) => row.milkAvg), color: eventCategory("bottle").color }],
+      labels: days
+    },
+    {
+      title: "Weight",
+      help: "Latest logged weight for each day.",
+      unit: state.weightUnit,
+      series: [{ label: "Weight", values: dayRows.map((row) => row.weight), color: eventCategory("growth_stats").color }],
+      labels: days
+    },
+    {
+      title: "Height",
+      help: "Latest logged height for each day.",
+      unit: state.heightUnit,
+      series: [{ label: "Height", values: dayRows.map((row) => row.height), color: "#365f91" }],
+      labels: days
+    },
+    {
+      title: "Sleep Time",
+      help: "Daytime 9:00 AM to 6:00 PM. Nighttime 6PM to 9AM. If a sleep session crosses daytime/nighttime boundaries, it is counted toward whichever period contains the majority of that session.",
+      unit: "duration",
+      series: [
+        { label: "Daytime sleep", values: dayRows.map((row) => row.sleepDay), color: "#4078b9" },
+        { label: "Nighttime sleep", values: dayRows.map((row) => row.sleepNight), color: "#10243f" }
+      ],
+      labels: days
+    },
+    {
+      title: "Average Sleep Session",
+      help: "Average length of completed sleep sessions by start date, split by daytime and nighttime majority classification.",
+      unit: "duration",
+      series: [
+        { label: "Daytime average", values: dayRows.map((row) => row.sleepDayAvg), color: "#4078b9" },
+        { label: "Nighttime average", values: dayRows.map((row) => row.sleepNightAvg), color: "#10243f" }
+      ],
+      labels: days
+    },
+    {
+      title: "Diaper Counts",
+      help: "Daily pee and poo event counts.",
+      unit: "count",
+      series: [
+        { label: "Pee", values: dayRows.map((row) => row.pee), color: "#d99a2b" },
+        { label: "Poo", values: dayRows.map((row) => row.poop), color: "#8f5f2f" }
+      ],
+      labels: days
+    },
+    {
+      title: "Average Tummy Time",
+      help: "Average completed tummy-time session length each day.",
+      unit: "min",
+      series: [{ label: "Tummy", values: dayRows.map((row) => row.tummyAvg), color: eventCategory("tummy_time").color }],
+      labels: days
+    },
+    {
+      title: "Outdoor Time",
+      help: "Total completed outdoor-time minutes each day.",
+      unit: "min",
+      series: [{ label: "Outdoor", values: dayRows.map((row) => row.outdoorTotal), color: eventCategory("outdoor_time").color }],
+      labels: days
+    }
+  ];
+}
+
+function getSleepSessionRecords(periodRecords) {
+  return periodRecords
+    .filter((period) => period.type === "sleep" && !period.active && period.endLog)
+    .map((period) => {
+      const startTime = logTime(period.startLog);
+      const endTime = logTime(period.endLog);
+      const classification = classifySleepSessionByMajority(startTime, endTime);
+      return {
+        ...period,
+        date: period.startLog.date,
+        period: classification.period,
+        durationMinutes: classification.totalMinutes,
+        daytimeMinutes: classification.daytimeMinutes,
+        nighttimeMinutes: classification.nighttimeMinutes
+      };
+    })
+    .filter((session) => session.durationMinutes > 0);
+}
+
+function classifySleepSessionByMajority(startTime, endTime) {
+  const startMs = Number(startTime);
+  const endMs = Number(endTime);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+    return { period: "nighttime", daytimeMinutes: 0, nighttimeMinutes: 0, totalMinutes: 0 };
+  }
+
+  let daytimeMs = 0;
+  const cursor = new Date(startMs);
+  cursor.setHours(0, 0, 0, 0);
+
+  // Daytime is 9:00 AM to 6:00 PM for each local calendar day touched by the session.
+  // If daytime and nighttime minutes tie exactly, default to nighttime for consistency.
+  while (cursor.getTime() < endMs) {
+    const dayStart = new Date(cursor);
+    dayStart.setHours(9, 0, 0, 0);
+    const dayEnd = new Date(cursor);
+    dayEnd.setHours(18, 0, 0, 0);
+    daytimeMs += Math.max(0, Math.min(endMs, dayEnd.getTime()) - Math.max(startMs, dayStart.getTime()));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  const totalMs = endMs - startMs;
+  const nighttimeMs = Math.max(0, totalMs - daytimeMs);
+  return {
+    period: daytimeMs > nighttimeMs ? "daytime" : "nighttime",
+    daytimeMinutes: Math.round(daytimeMs / 60000),
+    nighttimeMinutes: Math.round(nighttimeMs / 60000),
+    totalMinutes: Math.round(totalMs / 60000)
+  };
+}
+
+function getAverageSleepSessionDuration(sessions) {
+  if (!sessions.length) return 0;
+  return sessions.reduce((sum, session) => sum + session.durationMinutes, 0) / sessions.length;
+}
+
+function dashboardDateKeys() {
+  const selected = dashboardSelectedRangeMs();
+  const dates = [];
+  let cursor = selected.start;
+  while (cursor <= selected.end) {
+    dates.push(cursor);
+    cursor = addDays(cursor, 1);
+  }
+  return dates;
+}
+
+function renderLinePlot(plot) {
+  const flat = plot.series.flatMap((series) => series.values);
+  const max = Math.max(1, ...flat);
+  const latest = plot.series.map((series) => `${series.label}: ${formatPlotValue(series.values[series.values.length - 1] || 0, plot.unit)}`).join(" · ");
+  const latestIndex = Math.max(0, plot.labels.length - 1);
+  const latestDate = plot.labels[latestIndex] || "";
+  const width = 520;
+  const height = 210;
+  const left = 42;
+  const right = 18;
+  const top = 20;
+  const bottom = 34;
+  const plotWidth = width - left - right;
+  const plotHeight = height - top - bottom;
+  const xFor = (index) => left + (plot.labels.length <= 1 ? 0 : index / (plot.labels.length - 1)) * plotWidth;
+  const yFor = (value) => top + (1 - value / max) * plotHeight;
+  const seriesMarkup = plot.series.map((series, seriesIndex) => {
+    const points = series.values.map((value, index) => `${xFor(index)},${yFor(value)}`).join(" ");
+    const dots = series.values.map((value, index) => {
+      const label = plot.labels[index] || "";
+      const formattedDate = formatDisplayDate(label);
+      const formattedValue = formatPlotValue(value, plot.unit);
+      const ariaLabel = `${plot.title}, ${series.label}, ${formattedDate}, ${formattedValue}`;
+      return `
+        <g class="plot-point" tabindex="0" role="button"
+          data-plot-point
+          data-series="${escapeAttr(series.label)}"
+          data-date="${escapeAttr(formattedDate)}"
+          data-value="${escapeAttr(formattedValue)}"
+          data-series-index="${seriesIndex}"
+          aria-label="${escapeAttr(ariaLabel)}">
+          <circle class="plot-point-hit" cx="${xFor(index)}" cy="${yFor(value)}" r="12"></circle>
+          <circle class="plot-point-dot" cx="${xFor(index)}" cy="${yFor(value)}" r="4.6" fill="${escapeAttr(series.color)}">
+            <title>${escapeHtml(`${formattedDate}: ${formattedValue}`)}</title>
+          </circle>
+        </g>
+      `;
+    }).join("");
+    return `<polyline points="${points}" fill="none" stroke="${series.color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>${dots}`;
+  }).join("");
+  const legend = plot.series.map((series) => `<span><i style="background:${series.color}"></i>${escapeHtml(series.label)}</span>`).join("");
+
+  return `
+    <article class="plot-card">
+      <div>
+        <h4>${escapeHtml(plot.title)} ${helpIcon(plot.help)}</h4>
+        <p>${escapeHtml(latest)}</p>
+      </div>
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeAttr(plot.title)} trend">
+        <line x1="${left}" y1="${height - bottom}" x2="${width - right}" y2="${height - bottom}" class="plot-axis"></line>
+        <line x1="${left}" y1="${top}" x2="${left}" y2="${height - bottom}" class="plot-axis"></line>
+        <text x="${left - 8}" y="${top + 5}" text-anchor="end">${escapeHtml(formatPlotValue(max, plot.unit))}</text>
+        <text x="${left - 8}" y="${height - bottom}" text-anchor="end">0</text>
+        ${seriesMarkup}
+      </svg>
+      <div class="plot-legend">${legend}</div>
+      <div class="plot-detail" aria-live="polite">
+        <strong>${escapeHtml(latestDate ? formatDisplayDate(latestDate) : "Latest")}</strong>
+        <span>${escapeHtml(latest || "No trend data yet")}</span>
+      </div>
+    </article>
+  `;
+}
+
+function setupTrendPlotInteractions() {
+  document.querySelectorAll("[data-plot-point]").forEach((point) => {
+    const show = () => showTrendPlotPoint(point);
+    point.addEventListener("mouseenter", show);
+    point.addEventListener("focus", show);
+    point.addEventListener("click", show);
+    point.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        show();
+      }
+    });
+  });
+}
+
+function showTrendPlotPoint(point) {
+  const card = point.closest(".plot-card");
+  const detail = card?.querySelector(".plot-detail");
+  if (!card || !detail) return;
+  card.querySelectorAll("[data-plot-point]").forEach((item) => {
+    item.classList.toggle("active", item === point);
+  });
+  detail.innerHTML = `
+    <strong>${escapeHtml(point.dataset.date || "")}</strong>
+    <span>${escapeHtml(point.dataset.series || "Value")}: ${escapeHtml(point.dataset.value || "")}</span>
+  `;
+}
+
+function formatPlotValue(value, unit) {
+  if (unit === "duration") return formatMinutesAsHoursMinutes(value);
+  const rounded = Number(value.toFixed(value >= 10 ? 0 : 1));
+  return `${rounded} ${unit}`;
+}
+
+function formatMeasurement(value, unit) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return `-- ${unit}`;
+  return `${Number(number.toFixed(2))} ${unit}`;
+}
+
+function formatUnitValue(canonicalValue, unit, kind) {
+  const factor = kind === "height" ? heightUnits[unit]?.mm : weightUnits[unit]?.grams;
+  const value = Number(canonicalValue) / (factor || 1);
+  if (!Number.isFinite(value) || value <= 0) return "";
+  if (unit === "g" || unit === "mm") return String(Math.round(value));
+  return String(Number(value.toFixed(unit === "kg" || unit === "ft" ? 3 : 2)));
+}
+
+function formatWeightLog(log, unit = state.weightUnit) {
+  return formatMeasurement(Number(formatUnitValue(readWeightGrams(log), unit, "weight")), unit);
+}
+
+function formatHeightLog(log, unit = state.heightUnit) {
+  return formatMeasurement(Number(formatUnitValue(readHeightMm(log), unit, "height")), unit);
+}
+
+function readWeightGrams(log) {
+  if (!log) return 0;
+  if (Number.isFinite(Number(log.weightGrams))) return Number(log.weightGrams);
+  const unit = log.weightUnit || "lb";
+  return Number(log.weight || 0) * (weightUnits[unit]?.grams || weightUnits.lb.grams);
+}
+
+function readHeightMm(log) {
+  if (!log) return 0;
+  if (Number.isFinite(Number(log.heightMm))) return Number(log.heightMm);
+  const unit = log.heightUnit || "in";
+  return Number(log.height || 0) * (heightUnits[unit]?.mm || heightUnits.in.mm);
+}
+
+function lastGrowthLog(stat) {
+  return state.logs
+    .filter((log) => log.type === "growth_stats")
+    .filter((log) => {
+      if (stat === "weight") return log.stat === "weight" || (!log.stat && (log.weight || log.weightGrams));
+      return log.stat === "height" || (!log.stat && (log.height || log.heightMm));
+    })
+    .sort((a, b) => logTime(b) - logTime(a))[0] || null;
+}
+
+function dashboardLogsInSelectedRange() {
+  const filters = state.dashboardFilters || {};
+  const startDate = filters.startDate || todayString();
+  const endDate = filters.endDate || startDate;
+  const [start, end] = startDate <= endDate ? [startDate, endDate] : [endDate, startDate];
+  const types = filters.types || ["all"];
+  return state.logs
+    .filter((log) => {
+      if (log.date < start || log.date > end) return false;
+      if (!types.includes("all") && !types.includes(log.type)) return false;
+      return true;
+    })
+    .sort((a, b) => logTime(a) - logTime(b));
+}
+
+function filteredDashboardLogs(logs = dashboardLogsInSelectedRange()) {
+  const visible = dashboardVisibleRangeMs();
+  return logs.filter((log) => {
+    const time = logTime(log);
+    return time >= visible.startTime && time <= visible.endTime;
+  });
+}
+
+function dashboardRows(logs) {
+  const selected = state.dashboardFilters.types || ["all"];
+  const base = selected.includes("all")
+    ? historyEventTypes.filter((type) => type.value !== "all")
+    : historyEventTypes.filter((type) => selected.includes(type.value));
+  const withLoggedTypes = logs.reduce((rows, log) => {
+    if (!rows.some((row) => row.value === log.type)) rows.push({ value: log.type, label: labelForType(log.type) });
+    return rows;
+  }, [...base]);
+  return withLoggedTypes;
+}
+
+function renderDashboardChart(logs, rows, rangeLogs = logs) {
+  const filters = state.dashboardFilters;
+  const visible = dashboardVisibleRangeMs();
+  const startTime = visible.startTime;
+  const endTime = visible.endTime;
+  const span = Math.max(1, endTime - startTime);
+  const left = dashboardPlotLeft;
+  const right = 28;
+  const top = 40;
+  const rowHeight = 58;
+  const bottom = 58;
+  const plotWidth = dashboardRenderedPlotWidth();
+  const width = left + plotWidth + right;
+  const height = top + bottom + Math.max(1, rows.length) * rowHeight;
+  const now = Date.now();
+  const showNow = now >= startTime && now <= endTime;
+  const nowX = left + ((now - startTime) / span) * plotWidth;
+  const tickCount = span <= 24 * 60 * 60 * 1000 ? 7 : Math.min(12, Math.max(2, Math.ceil(span / (24 * 60 * 60 * 1000)) + 1));
+  const toX = (time) => left + ((time - startTime) / span) * plotWidth;
+  const rowY = (type) => {
+    const rowIndex = Math.max(0, rows.findIndex((row) => row.value === type));
+    return top + rowIndex * rowHeight + rowHeight / 2;
+  };
+
+  const rowLines = rows.map((row, index) => {
+    const y = top + index * rowHeight + rowHeight / 2;
+    return `
+      <text class="dashboard-axis-label" x="${left - 14}" y="${y + 5}" text-anchor="end">${escapeHtml(row.label)}</text>
+      <line class="dashboard-row-line" x1="${left}" y1="${y}" x2="${width - right}" y2="${y}"></line>
+    `;
+  }).join("");
+
+  const ticks = Array.from({ length: tickCount }, (_, index) => {
+    const ratio = tickCount === 1 ? 0 : index / (tickCount - 1);
+    const x = left + ratio * plotWidth;
+    const date = new Date(startTime + span * ratio);
+    return `
+      <line class="dashboard-tick" x1="${x}" y1="${top - 12}" x2="${x}" y2="${height - bottom + 12}"></line>
+      <text class="dashboard-time-label" x="${x}" y="${height - 18}" text-anchor="middle">${escapeHtml(formatDashboardTick(date, span))}</text>
+    `;
+  }).join("");
+
+  const periodItems = dashboardEventPairs(rangeLogs).filter(({ startLog, endLog, active }) => {
+    const periodEnd = active ? now : logTime(endLog);
+    return periodEnd >= startTime && logTime(startLog) <= endTime;
+  }).map(({ startLog, endLog, active }) => {
+    const effectiveEnd = active ? now : logTime(endLog);
+    const x1 = toX(Math.max(startTime, logTime(startLog)));
+    const x2 = toX(Math.min(endTime, effectiveEnd));
+    const y = rowY(startLog.type);
+    const category = eventCategory(startLog.type);
+    const color = category.color;
+    const duration = formatCompactDuration(effectiveEnd - logTime(startLog));
+    const label = active
+      ? `${category.label} running ${duration}, started ${formatLogClock(startLog)}`
+      : `${category.label} ${duration}, ${formatLogClock(startLog)} to ${formatLogClock(endLog)}`;
+    const barX = Math.min(x1, x2);
+    const barWidth = Math.max(12, Math.abs(x2 - x1));
+    const labelX = barX + barWidth / 2;
+    const iconX = Math.min(width - right - 28, Math.max(left, barX + 7));
+    const showLabel = barWidth >= 62;
+    return `
+      <rect class="dashboard-period-bar${active ? " active" : ""}" data-dashboard-period-start="${escapeAttr(startLog.id)}" data-dashboard-period-end="${escapeAttr(endLog?.id || "")}"
+        x="${barX}" y="${y - 16}" width="${barWidth}" height="32" rx="16" fill="${color}">
+        <title>${escapeHtml(label)}</title>
+      </rect>
+      <circle class="dashboard-period-icon-glow${active ? " active" : ""}" cx="${iconX + 14}" cy="${y}" r="20" fill="${color}"></circle>
+      <circle class="dashboard-icon-avatar" data-dashboard-period-start="${escapeAttr(startLog.id)}" data-dashboard-period-end="${escapeAttr(endLog?.id || "")}" cx="${iconX + 14}" cy="${y}" r="14"></circle>
+      <image class="dashboard-period-icon${active ? " active" : ""}" data-dashboard-period-start="${escapeAttr(startLog.id)}" data-dashboard-period-end="${escapeAttr(endLog?.id || "")}"
+        href="${escapeAttr(category.icon)}" x="${iconX}" y="${y - 14}" width="28" height="28" tabindex="0" role="button" aria-label="${escapeAttr(label)}"></image>
+      ${showLabel ? `<text class="dashboard-duration-label" x="${labelX}" y="${y + 5}" text-anchor="middle">${escapeHtml(duration)}</text>` : ""}
+    `;
+  }).join("");
+
+  const quickMarks = logs.filter((log) => eventCategory(log.type).kind !== "period").map((log) => {
+    const x = toX(logTime(log));
+    const y = rowY(log.type);
+    const category = eventCategory(log.type);
+    const label = `${labelForLog(log)} at ${formatLogClock(log)} on ${formatDisplayDate(log.date)}`;
+    return `
+      <circle class="dashboard-quick-bg dashboard-event-icon-glow" cx="${x}" cy="${y}" r="18" fill="${escapeAttr(category.color)}"></circle>
+      <circle class="dashboard-icon-avatar" data-dashboard-log="${escapeAttr(log.id)}" cx="${x}" cy="${y}" r="13"></circle>
+      <image class="dashboard-event-icon" data-dashboard-log="${escapeAttr(log.id)}" tabindex="0" role="button"
+        aria-label="${escapeAttr(label)}" href="${escapeAttr(iconForLog(log))}" x="${x - 13}" y="${y - 13}" width="26" height="26">
+        <title>${escapeHtml(label)}</title>
+      </image>
+    `;
+  }).join("");
+
+  return `
+    <svg width="${width}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeAttr(dashboardRangeLabel())} event timeline">
+      <rect class="dashboard-plot-bg" x="${left}" y="${top - 18}" width="${plotWidth}" height="${height - top - bottom + 36}" rx="8"></rect>
+      ${ticks}
+      ${rowLines}
+      ${periodItems}
+      ${showNow ? `
+        <line class="dashboard-now-line" x1="${nowX}" y1="${top - 18}" x2="${nowX}" y2="${height - bottom + 18}"></line>
+        <text class="dashboard-now-label" x="${Math.min(width - right - 42, nowX + 8)}" y="${top - 24}">Now</text>
+      ` : ""}
+      ${quickMarks}
+    </svg>
+  `;
+}
+
+function dashboardEventPairs(logs) {
+  const pending = {};
+  const pairs = [];
+
+  logs.forEach((log) => {
+    const config = pairedConfig(log.type);
+    if (!config) return;
+    if (log.status === config.start) {
+      pending[log.type] = log;
+      return;
+    }
+    if (log.status === config.end && pending[log.type]) {
+      pairs.push({ startLog: pending[log.type], endLog: log });
+      pending[log.type] = null;
+    }
+  });
+
+  Object.values(pending)
+    .filter(Boolean)
+    .forEach((startLog) => pairs.push({ startLog, endLog: null, active: true }));
+
+  return pairs;
+}
+
+function showDashboardEvent(logId) {
+  state.dashboardSelection = { kind: "quick", logId };
+  renderDashboardEventDetail(logId);
+}
+
+function renderDashboardEventDetail(logId) {
+  const detail = document.getElementById("dashboard-event-detail");
+  const log = state.logs.find((item) => item.id === logId);
+  if (!detail || !log) return;
+  detail.innerHTML = `
+    <img src="${activityIconForLog(log)}" alt="">
+    <div>
+      <strong>${escapeHtml(labelForLog(log))}</strong>
+      <span>${escapeHtml(formatDisplayDate(log.date))} · ${escapeHtml(formatLogClock(log))}${log.notes ? ` · ${escapeHtml(log.notes)}` : ""}</span>
+    </div>
+  `;
+}
+
+function showDashboardPeriod(startId, endId) {
+  state.dashboardSelection = { kind: "period", startId, endId };
+  renderDashboardPeriodDetail(startId, endId);
+}
+
+function renderDashboardPeriodDetail(startId, endId) {
+  const detail = document.getElementById("dashboard-event-detail");
+  const startLog = state.logs.find((item) => item.id === startId);
+  const endLog = state.logs.find((item) => item.id === endId);
+  if (!detail || !startLog) return;
+  const category = eventCategory(startLog.type);
+  const active = !endLog;
+  const endTime = active ? Date.now() : logTime(endLog);
+  const duration = formatCompactDuration(endTime - logTime(startLog));
+  const endLabel = active ? "still going" : formatLogClock(endLog);
+  if (active) {
+    detail.innerHTML = `
+      <img src="${escapeAttr(category.icon)}" alt="">
+      <div>
+        <strong>${escapeHtml(category.label)} - ${escapeHtml(duration)} so far</strong>
+        <span>${escapeHtml(formatDisplayDate(startLog.date))} - ${escapeHtml(formatLogClock(startLog))} to ${escapeHtml(endLabel)}</span>
+      </div>
+    `;
+    return;
+  }
+  detail.innerHTML = `
+    <img src="${escapeAttr(category.icon)}" alt="">
+    <div>
+      <strong>${escapeHtml(category.label)} · ${escapeHtml(duration)}</strong>
+      <span>${escapeHtml(formatDisplayDate(startLog.date))} · ${escapeHtml(formatLogClock(startLog))} to ${escapeHtml(formatLogClock(endLog))}</span>
+    </div>
+  `;
+}
+
+function renderDashboardSelection() {
+  const selection = state.dashboardSelection;
+  if (!selection) return;
+  if (selection.kind === "quick") {
+    renderDashboardEventDetail(selection.logId);
+    return;
+  }
+  if (selection.kind === "period") renderDashboardPeriodDetail(selection.startId, selection.endId || "");
+}
+
+function renderDashboardDetailSummary(logs, totals) {
+  const detail = document.getElementById("dashboard-event-detail");
+  if (!detail) return;
+  detail.innerHTML = logs.length
+    ? `<strong>${logs.length} events</strong><span>${escapeHtml(totals.filter(([, count]) => count).map(([label, count]) => `${label}: ${count}`).join(" - "))}</span>`
+    : `<strong>No events</strong><span>Try a wider date range or more event types.</span>`;
+}
+
+function dashboardRangeLabel() {
+  const visible = dashboardVisibleRangeMs();
+  return formatVisibleWindowLabel(visible);
+}
+
+function formatZoomLabel(zoom) {
+  if (zoom <= 1.01) return "Full range";
+  return `${Number(zoom.toFixed(zoom < 2 ? 1 : 0))}x zoom`;
+}
+
+function formatVisibleWindowLabel(visible) {
+  const start = new Date(visible.startTime);
+  const end = new Date(visible.endTime);
+  const sameDay = start.toDateString() === end.toDateString();
+  const startText = sameDay
+    ? start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : start.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const endText = sameDay
+    ? end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : end.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return `${startText} to ${endText}`;
 }
 
 function filteredHistoryLogs() {
@@ -1954,6 +3366,18 @@ function renderCorrectionField(log) {
     `;
   }
 
+  if (log.type === "outdoor_time") {
+    return `
+      <label>
+        Status
+        <select name="status">
+          <option value="start"${log.status === "start" ? " selected" : ""}>Start</option>
+          <option value="end"${log.status === "end" ? " selected" : ""}>End</option>
+        </select>
+      </label>
+    `;
+  }
+
   if (log.type === "bath") {
     return `
       <label>
@@ -1983,6 +3407,41 @@ function renderCorrectionField(log) {
       <label>
         Ounces
         <input name="ounces" type="number" min="0" max="8" step="0.25" value="${escapeAttr(log.ounces || 0)}">
+      </label>
+    `;
+  }
+
+  if (log.type === "growth_stats") {
+    const stat = log.stat === "height" || (!log.stat && readHeightMm(log) > 0 && readWeightGrams(log) <= 0) ? "height" : "weight";
+    if (stat === "height") {
+      const unit = log.heightUnit || state.heightUnit;
+      return `
+        <input name="stat" type="hidden" value="height">
+        <label>
+          Height
+          <input name="height" type="number" min="0" max="3000" step="0.01" value="${escapeAttr(formatUnitValue(readHeightMm(log), unit, "height"))}">
+        </label>
+        <label>
+          Unit
+          <select name="heightUnit">
+            ${Object.keys(heightUnits).map((item) => `<option value="${item}"${item === unit ? " selected" : ""}>${item}</option>`).join("")}
+          </select>
+        </label>
+      `;
+    }
+
+    const unit = log.weightUnit || state.weightUnit;
+    return `
+      <input name="stat" type="hidden" value="weight">
+      <label>
+        Weight
+        <input name="weight" type="number" min="0" max="30000" step="0.01" value="${escapeAttr(formatUnitValue(readWeightGrams(log), unit, "weight"))}">
+      </label>
+      <label>
+        Unit
+        <select name="weightUnit">
+          ${Object.keys(weightUnits).map((item) => `<option value="${item}"${item === unit ? " selected" : ""}>${item}</option>`).join("")}
+        </select>
       </label>
     `;
   }
@@ -2042,12 +3501,41 @@ async function saveHistoryCorrection(event) {
 function labelForLog(log) {
   if (log.type === "feeding") return `Boobie, ${log.side || "unknown"} side`;
   if (log.type === "bottle") return `Bottle, ${log.ounces} oz`;
+  if (log.type === "growth_stats") {
+    if (readWeightGrams(log) > 0 && (log.stat === "weight" || !log.stat)) return `Weight, ${formatWeightLog(log)}`;
+    if (readHeightMm(log) > 0) return `Height, ${formatHeightLog(log)}`;
+    return "Baby stats";
+  }
   if (log.type === "diaper") return log.poop ? "Poo diaper" : "Wee diaper";
   if (log.type === "sleep") return `Sleep: ${log.status || "logged"}`;
   if (log.type === "tummy_time") return `Tummy time: ${log.status || "logged"}`;
+  if (log.type === "outdoor_time") return `Outdoor time: ${log.status || "logged"}`;
   if (log.type === "baby_gym") return "Baby gym time";
   if (log.type === "bath") return `Bath: ${log.status === "end" ? "stop" : "start"}`;
   return (log.type || "activity").replaceAll("_", " ");
+}
+
+function labelForType(type) {
+  return eventCategory(type).label;
+}
+
+function colorForLogType(type) {
+  return eventCategory(type).color;
+}
+
+function eventCategory(type) {
+  return eventCategoryConfig[type] || {
+    label: String(type || "Log").replaceAll("_", " "),
+    kind: "quick",
+    color: "#66736d",
+    icon: "/assets/activity/icon-success.png"
+  };
+}
+
+function iconForLog(log) {
+  if (log.type === "feeding") return `/assets/activity/icon-${log.side === "right" ? "right" : "left"}.png`;
+  if (log.type === "diaper") return `/assets/activity/icon-${log.poop ? "poop" : "pee"}.png`;
+  return eventCategory(log.type).icon;
 }
 
 function formatWhen(value) {

@@ -38,7 +38,7 @@ Read this before repo navigation, setup, entry-point changes, or command discove
 - Install: no npm packages required.
 - Run default: `npm start`.
 - Run direct: `node backend/server.js`.
-- Run custom port: `node backend/server.js 3001`.
+- Run app port: `node backend/server.js 3002`.
 - Windows run: `start.bat`.
 - Friendly-name run: `start-phuongnamcuti.bat`.
 

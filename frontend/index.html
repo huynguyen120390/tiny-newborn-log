@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Phương Nam Cu Tí</title>
-    <link rel="stylesheet" href="/styles.css?v=20260530-milestone-timeline">
+    <link rel="stylesheet" href="/styles.css?v=20260601-button-icons-2">
   </head>
   <body>
     <div class="app-shell">
@@ -19,11 +19,16 @@
         <nav class="tabs" aria-label="Main views">
           <button class="tab active" data-tab="log">Log</button>
           <button class="tab" data-tab="milestones">Milestones</button>
+          <button class="tab" data-tab="dashboard">Dashboard</button>
           <button class="tab" data-tab="history">History</button>
           <button class="tab" data-tab="exports">Export</button>
           <button class="tab" data-tab="settings">Settings</button>
         </nav>
-        <time id="current-clock" class="current-clock" aria-live="polite"></time>
+        <div class="topbar-status" aria-live="polite">
+          <span id="topbar-baby-age" class="topbar-baby-age"></span>
+          <span id="topbar-baby-stats" class="topbar-baby-stats"></span>
+          <time id="current-clock" class="current-clock"></time>
+        </div>
       </header>
 
       <main>
@@ -58,6 +63,50 @@
             </fieldset>
           </form>
           <div id="history-list" class="list dense"></div>
+        </section>
+
+        <section id="dashboard" class="panel">
+          <div class="page-title">
+            <h2>Dashboard</h2>
+            <p>Visualize events by day, week, month, or a custom date range.</p>
+          </div>
+          <form id="dashboard-filters" class="dashboard-filters">
+            <label>
+              View
+              <select id="dashboard-range-mode" name="rangeMode">
+                <option value="day">Daily</option>
+                <option value="week">Weekly</option>
+                <option value="month">Monthly</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+            <label>
+              From
+              <input id="dashboard-start-date" type="date" name="startDate">
+            </label>
+            <label>
+              To
+              <input id="dashboard-end-date" type="date" name="endDate">
+            </label>
+            <fieldset>
+              <legend>Event types</legend>
+              <div id="dashboard-type-filters" class="history-type-filters"></div>
+            </fieldset>
+          </form>
+          <div class="dashboard-chart-shell">
+            <div class="dashboard-chart-toolbar">
+              <span id="dashboard-zoom-label">1x time scale</span>
+              <div class="dashboard-zoom-controls" aria-label="Time scale zoom">
+                <button type="button" class="ghost" id="dashboard-zoom-out" aria-label="Zoom out time scale">−</button>
+                <button type="button" class="ghost" id="dashboard-zoom-reset">Reset</button>
+                <button type="button" class="ghost" id="dashboard-zoom-in" aria-label="Zoom in time scale">+</button>
+              </div>
+            </div>
+            <p class="dashboard-touch-hint">Pinch on the chart to zoom into a time area.</p>
+            <div id="dashboard-chart" class="dashboard-chart" aria-live="polite"></div>
+            <div id="dashboard-event-detail" class="dashboard-event-detail" aria-live="polite"></div>
+          </div>
+          <div id="dashboard-analytics" class="dashboard-analytics"></div>
         </section>
 
         <section id="exports" class="panel">
@@ -137,6 +186,31 @@
               <button id="test-reminder-voice" class="primary" type="button">Test voice</button>
             </div>
 
+            <div class="settings-card">
+              <div>
+                <h3>Stats Units</h3>
+                <p>Used when logging and viewing weight and height.</p>
+              </div>
+              <label>
+                Weight
+                <select id="settings-weight-unit" name="weightUnit">
+                  <option value="oz">oz</option>
+                  <option value="lb">lb</option>
+                  <option value="g">g</option>
+                  <option value="kg">kg</option>
+                </select>
+              </label>
+              <label>
+                Height
+                <select id="settings-height-unit" name="heightUnit">
+                  <option value="in">in</option>
+                  <option value="ft">ft</option>
+                  <option value="cm">cm</option>
+                  <option value="mm">mm</option>
+                </select>
+              </label>
+            </div>
+
             <form id="bath-reminder-form" class="settings-card">
               <div>
                 <h3>Bath Reminder</h3>
@@ -184,6 +258,52 @@
         <div class="modal-actions">
           <button type="button" class="ghost" data-close-dialog>Cancel</button>
           <button type="submit" class="primary">Log bottle</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="weight-dialog" class="modal">
+      <form method="dialog" id="weight-form">
+        <div class="modal-title">
+          <h3>Baby weight</h3>
+          <strong>Log weight</strong>
+        </div>
+        <div class="modal-grid">
+          <label>
+            Weight
+            <input id="growth-weight" name="weight" type="number" min="0" max="40" step="0.01" inputmode="decimal" required>
+          </label>
+          <label>
+            Unit
+            <span id="growth-weight-unit-label" class="modal-unit-label">lb</span>
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="ghost" data-close-weight-dialog>Cancel</button>
+          <button type="submit" class="primary">Log weight</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="height-dialog" class="modal">
+      <form method="dialog" id="height-form">
+        <div class="modal-title">
+          <h3>Baby height</h3>
+          <strong>Log height</strong>
+        </div>
+        <div class="modal-grid">
+          <label>
+            Height
+            <input id="growth-height" name="height" type="number" min="0" max="50" step="0.01" inputmode="decimal" required>
+          </label>
+          <label>
+            Unit
+            <span id="growth-height-unit-label" class="modal-unit-label">in</span>
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="ghost" data-close-height-dialog>Cancel</button>
+          <button type="submit" class="primary">Log height</button>
         </div>
       </form>
     </dialog>
@@ -256,6 +376,6 @@
       </form>
     </template>
 
-    <script src="/app.js?v=20260530-milestone-timeline"></script>
+    <script src="/app.js?v=20260601-button-icons-2"></script>
   </body>
 </html>
