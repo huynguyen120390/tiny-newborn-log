@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Phương Nam Cu Tí</title>
-    <link rel="stylesheet" href="/styles.css?v=20260601-button-icons-2">
+    <link rel="stylesheet" href="/styles.css?v=20260601-poop-colors">
   </head>
   <body>
     <div class="app-shell">
@@ -262,6 +262,37 @@
       </form>
     </dialog>
 
+    <dialog id="poop-color-dialog" class="modal poop-color-modal">
+      <div class="poop-color-shell">
+        <div class="modal-title">
+          <div>
+            <h3>Poop color</h3>
+            <p>Pick the closest color.</p>
+          </div>
+          <button type="button" class="icon-close" data-close-poop-color aria-label="Close poop color picker">&times;</button>
+        </div>
+        <div class="poop-extra-fields">
+          <label>
+            Consistency
+            <select id="poop-consistency" name="consistency">
+              <option value="">Not sure</option>
+              <option value="soft">Soft</option>
+              <option value="seedy">Seedy</option>
+              <option value="loose">Loose</option>
+              <option value="watery">Watery</option>
+              <option value="mucus">Mucus</option>
+              <option value="hard pellets">Hard pellets</option>
+            </select>
+          </label>
+          <label>
+            Notes
+            <input id="poop-notes" name="notes" type="text" placeholder="Optional">
+          </label>
+        </div>
+        <div id="poop-color-picker" class="poop-color-grid"></div>
+      </div>
+    </dialog>
+
     <dialog id="weight-dialog" class="modal">
       <form method="dialog" id="weight-form">
         <div class="modal-title">
@@ -376,6 +407,6 @@
       </form>
     </template>
 
-    <script src="/app.js?v=20260601-button-icons-2"></script>
+    <script src="/app.js?v=20260601-poop-colors"></script>
   </body>
 </html>

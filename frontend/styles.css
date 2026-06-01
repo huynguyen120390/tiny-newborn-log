@@ -1968,6 +1968,13 @@ main {
   align-items: center;
 }
 
+.modal-title p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+}
+
 .modal-title strong {
   color: var(--primary-dark);
   font-size: 24px;
@@ -2013,6 +2020,114 @@ input[type="range"] {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+.poop-color-modal {
+  width: min(720px, calc(100% - 24px));
+}
+
+.poop-color-shell {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.poop-extra-fields {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.8fr) minmax(180px, 1.2fr);
+  gap: 10px;
+}
+
+.poop-extra-fields label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.poop-extra-fields input,
+.poop-extra-fields select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.poop-color-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.poop-color-card {
+  display: grid;
+  gap: 7px;
+  min-height: 132px;
+  border: 1px solid rgba(221, 228, 220, 0.9);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(31, 41, 38, 0.07);
+  transition: transform 120ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.poop-color-card:hover {
+  border-color: rgba(36, 117, 111, 0.26);
+  box-shadow: 0 12px 24px rgba(31, 41, 38, 0.11);
+  transform: translateY(-2px);
+}
+
+.poop-card-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.poop-color-swatch {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  object-fit: cover;
+  box-shadow: 0 4px 10px rgba(31, 41, 38, 0.16);
+}
+
+.poop-status-badge {
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: #e9f7f0;
+  color: var(--primary-dark);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.poop-color-card strong {
+  color: var(--primary-dark);
+  font-size: 16px;
+}
+
+.poop-color-card > span:last-child {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.poop-color-card.status-call .poop-status-badge {
+  background: #fff0d9;
+  color: #8b4f00;
+}
+
+.poop-color-card.status-urgent .poop-status-badge {
+  background: #ffe5e8;
+  color: #9d252c;
 }
 
 .activity-logs-modal {
@@ -2969,6 +3084,8 @@ input[type="range"] {
   .export-controls,
   .activity-log-edit-form,
   .history-editor,
+  .poop-extra-fields,
+  .poop-color-grid,
   .dense .list-item {
     grid-template-columns: 1fr;
   }

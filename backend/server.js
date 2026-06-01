@@ -15,6 +15,7 @@ const PORT = process.argv[2] || process.env.PORT || 3002;
 const PUBLIC_DIR = path.join(__dirname, "..", "frontend");
 const DATA_PATH = path.join(__dirname, "..", "data", "appData.json");
 const RECENT_PATH = path.join(__dirname, "..", "data", "recentInfo.json");
+const POOP_COLORS_PATH = path.join(__dirname, "..", "data", "poop-colors.json");
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -126,6 +127,12 @@ function cleanNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function cleanText(value, fallback = "") {
+  if (typeof value !== "string") return fallback;
+  const trimmed = value.trim();
+  return trimmed || fallback;
+}
+
 function weightToGrams(value, unit = "lb") {
   const amount = cleanNumber(value, 0);
   const factors = { oz: 28.349523125, lb: 453.59237, g: 1, kg: 1000 };
@@ -209,6 +216,7 @@ function buildLog(input) {
     date: input.date || stamp.date,
     time: input.time || stamp.time,
     type: input.type,
+    timestamp: stamp.iso,
     createdAt: stamp.iso
   };
 
@@ -225,11 +233,16 @@ function buildLog(input) {
   }
 
   if (input.type === "diaper") {
+    const isPoop = input.kind === "poop";
+    const poopColorId = isPoop ? cleanText(input.poopColorId) : "";
+    const consistency = isPoop ? cleanText(input.consistency) : "";
     return {
       ...base,
       pee: input.kind === "pee",
-      poop: input.kind === "poop",
-      notes: input.kind === "poop" ? "Poo diaper" : "Wee diaper"
+      poop: isPoop,
+      ...(isPoop && poopColorId ? { poopColorId, poopColor: poopColorId } : {}),
+      ...(isPoop && consistency ? { consistency, poopTexture: consistency } : {}),
+      notes: cleanText(input.notes, isPoop ? "Poo diaper" : "Wee diaper")
     };
   }
 
@@ -503,6 +516,21 @@ async function handleUpdateLog(req, res, id) {
       next.pee = input.kind === "pee";
       next.poop = input.kind === "poop";
     }
+    if (next.poop) {
+      if (typeof input.poopColorId === "string") {
+        next.poopColorId = cleanText(input.poopColorId);
+        next.poopColor = next.poopColorId;
+      }
+      if (typeof input.consistency === "string") {
+        next.consistency = cleanText(input.consistency);
+        next.poopTexture = next.consistency;
+      }
+    } else {
+      delete next.poopColorId;
+      delete next.poopColor;
+      delete next.consistency;
+      delete next.poopTexture;
+    }
   }
 
   if (current.type === "growth_stats") {
@@ -583,6 +611,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/logs") {
       sendJson(res, 200, loadData().baby_log || []);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/poop-colors") {
+      sendJson(res, 200, readJson(POOP_COLORS_PATH, []));
       return;
     }
 

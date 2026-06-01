@@ -5,6 +5,7 @@ const state = {
   profile: {},
   activeTab: "log",
   visibleCards: [],
+  poopColors: [],
   historyFilters: {
     startDate: "",
     endDate: "",
@@ -88,7 +89,7 @@ const activities = [
     helper: "Tiny toilet logs.",
     actions: [
       { label: "Wee", icon: "pee", payload: { type: "diaper", kind: "pee" } },
-      { label: "Poo", icon: "poop", payload: { type: "diaper", kind: "poop" } }
+      { label: "Poo", icon: "poop", dialog: "poopColor" }
     ]
   },
   {
@@ -407,6 +408,14 @@ document.querySelector("[data-close-height-dialog]").addEventListener("click", (
   document.getElementById("height-dialog").close();
 });
 
+document.querySelector("[data-close-poop-color]").addEventListener("click", () => {
+  document.getElementById("poop-color-dialog").close();
+});
+
+document.getElementById("poop-color-dialog").addEventListener("click", (event) => {
+  if (event.target.id === "poop-color-dialog") event.target.close();
+});
+
 document.querySelector("[data-close-activity-logs]").addEventListener("click", () => {
   document.getElementById("activity-logs-dialog").close();
 });
@@ -466,16 +475,18 @@ async function init() {
 }
 
 async function refreshData() {
-  const [appData, recent, summary] = await Promise.all([
+  const [appData, recent, summary, poopColors] = await Promise.all([
     fetchJson("/api/app-data"),
     fetchJson("/api/recent"),
-    fetchJson("/api/today-summary")
+    fetchJson("/api/today-summary"),
+    fetchJson("/api/poop-colors")
   ]);
 
   state.profile = appData.baby_profile || {};
   state.logs = appData.baby_log || [];
   state.recent = recent;
   state.summary = summary;
+  state.poopColors = Array.isArray(poopColors) ? poopColors : [];
   state.bathSoundEnabled = Boolean(appData.sound_settings?.bathSoundEnabled);
   state.tummySoundEnabled = Boolean(appData.sound_settings?.tummySoundEnabled);
   state.milestoneProgress = appData.milestone_progress || (Array.isArray(appData.milestones) ? {} : appData.milestones || {});
@@ -568,7 +579,6 @@ function renderActivities() {
 
   document.querySelectorAll(".action-button").forEach((button) => {
     button.addEventListener("click", async () => {
-      if (!confirmCardAction(button)) return;
       const action = JSON.parse(button.dataset.action);
       if (action.dialog === "bottle") {
         openBottleDialog();
@@ -578,6 +588,11 @@ function renderActivities() {
         openGrowthDialog(action.stat || "weight");
         return;
       }
+      if (action.dialog === "poopColor") {
+        openPoopColorDialog();
+        return;
+      }
+      if (!confirmCardAction(button)) return;
       await createLog(action.payload, action.reminder);
     });
   });
@@ -1701,6 +1716,86 @@ function openGrowthDialog(stat = "weight") {
   }
   updateWeightDialogDefaults();
   document.getElementById("weight-dialog").showModal();
+}
+
+function openPoopColorDialog() {
+  resetPendingCardAction();
+  const picker = document.getElementById("poop-color-picker");
+  const consistency = document.getElementById("poop-consistency");
+  const notes = document.getElementById("poop-notes");
+  if (consistency) consistency.value = "";
+  if (notes) notes.value = "";
+  if (picker) {
+    picker.innerHTML = PoopColorPicker(state.poopColors);
+    picker.querySelectorAll("[data-poop-color-id]").forEach((button) => {
+      button.addEventListener("click", () => logPoopWithColor(button.dataset.poopColorId));
+    });
+  }
+  document.getElementById("poop-color-dialog").showModal();
+}
+
+function PoopColorPicker(colors) {
+  return colors.map(renderPoopColorCard).join("");
+}
+
+function renderPoopColorCard(color) {
+  const status = getPoopColorStatus(color.id, babyAgeDays());
+  return `
+    <button class="poop-color-card status-${escapeAttr(status)}" type="button" data-poop-color-id="${escapeAttr(color.id)}">
+      <span class="poop-card-topline">
+        <img class="poop-color-swatch" src="${escapeAttr(color.swatch)}" alt="">
+        <span class="poop-status-badge">${escapeHtml(statusLabel(status))}</span>
+      </span>
+      <strong>${escapeHtml(color.label)}</strong>
+      <span>${escapeHtml(color.parentAction)}</span>
+    </button>
+  `;
+}
+
+async function logPoopWithColor(poopColorId) {
+  const color = poopColorById(poopColorId);
+  const status = getPoopColorStatus(poopColorId, babyAgeDays());
+  const consistency = document.getElementById("poop-consistency")?.value || "";
+  const notes = document.getElementById("poop-notes")?.value.trim() || "";
+
+  document.getElementById("poop-color-dialog").close();
+  await createLog({
+    type: "diaper",
+    kind: "poop",
+    poopColorId,
+    consistency,
+    notes
+  }, color?.label || "Poo diaper");
+
+  if (status === "call" || status === "urgent") {
+    showToast(status === "urgent" ? "Urgent: call pediatrician." : "Call pediatrician.");
+  }
+}
+
+function getPoopColorStatus(poopColorId, babyAgeDays) {
+  if (poopColorId === "dark-brown-black") return babyAgeDays <= 3 ? "normal" : "call";
+  if (poopColorId === "red-blood") return "call";
+  if (poopColorId === "white-pale-gray") return "urgent";
+  return poopColorById(poopColorId)?.category || "normal";
+}
+
+function babyAgeDays() {
+  if (!state.profile.birthday) return Number.POSITIVE_INFINITY;
+  return daysBetween(state.profile.birthday, todayString()) + 1;
+}
+
+function poopColorById(id) {
+  return state.poopColors.find((color) => color.id === id) || null;
+}
+
+function statusLabel(status) {
+  const labels = {
+    normal: "Usually normal",
+    watch: "Watch",
+    call: "Call",
+    urgent: "Urgent"
+  };
+  return labels[status] || status;
 }
 
 function updateBottleDefaults() {
@@ -3506,7 +3601,11 @@ function labelForLog(log) {
     if (readHeightMm(log) > 0) return `Height, ${formatHeightLog(log)}`;
     return "Baby stats";
   }
-  if (log.type === "diaper") return log.poop ? "Poo diaper" : "Wee diaper";
+  if (log.type === "diaper") {
+    if (!log.poop) return "Wee diaper";
+    const color = poopColorById(log.poopColorId || log.poopColor);
+    return color ? `Poo: ${color.label}` : "Poo diaper";
+  }
   if (log.type === "sleep") return `Sleep: ${log.status || "logged"}`;
   if (log.type === "tummy_time") return `Tummy time: ${log.status || "logged"}`;
   if (log.type === "outdoor_time") return `Outdoor time: ${log.status || "logged"}`;

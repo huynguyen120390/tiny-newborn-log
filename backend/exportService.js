@@ -4,10 +4,14 @@ const path = require("path");
 const DATA_PATH = path.join(__dirname, "..", "data", "appData.json");
 const EXPORT_DIR = path.join(__dirname, "exports");
 
+function poopColorId(log) {
+  return log.poopColorId || log.poopColor || "";
+}
+
 const WARNING_RULES = [
-  { test: (log) => log.poopColor === "red", label: "Red poop" },
-  { test: (log, ctx) => log.poopColor === "black" && ctx.ageDays > 3, label: "Black poop after day 3" },
-  { test: (log) => ["white", "gray", "grey"].includes(log.poopColor), label: "White/gray poop" },
+  { test: (log) => ["red", "red-blood"].includes(poopColorId(log)), label: "Red poop" },
+  { test: (log, ctx) => ["black", "dark-brown-black"].includes(poopColorId(log)) && ctx.ageDays + 1 > 3, label: "Black poop after day 3" },
+  { test: (log) => ["white", "gray", "grey", "white-pale-gray"].includes(poopColorId(log)), label: "White/gray poop" },
   { test: (log) => /watery|diarrhea/i.test(log.poopTexture || ""), label: "Watery diarrhea" },
   { test: (log) => /hard|pellet/i.test(log.poopTexture || ""), label: "Hard pellets" },
   { test: (log) => /mucus/i.test(log.poopTexture || log.notes || ""), label: "Mucus in stool" },
