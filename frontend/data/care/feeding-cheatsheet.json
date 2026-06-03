@@ -1,0 +1,390 @@
+{
+  "id": "feeding-cheatsheet",
+  "careIssue": "eat",
+  "title": "Baby Feeding Cheat Sheet",
+  "subtitle": "0-24 months feeding guide",
+  "sourceImage": "C:/Users/Huy/Downloads/bc9b0e3e-a845-45f2-954c-cdd565e49ec6.png",
+  "sections": [
+    {
+      "id": "feeding-milestones",
+      "number": "1",
+      "title": "Feeding Milestones",
+      "type": "table",
+      "columns": ["Age", "What To Feed", "How Often", "Amount Per Feed", "Bottle Nipple", "Notes / Goals"],
+      "rows": [
+        {
+          "age": "0-1 month",
+          "whatToFeed": "Breastmilk or formula only",
+          "howOften": "Every 2-3 hrs; 8-12 feeds/day",
+          "amountPerFeed": "1-2 oz first week, then 2-3 oz",
+          "bottleNipple": "Preemie / Size 1",
+          "notes": ["Tiny stomach", "Build milk supply", "Learn baby's cues"]
+        },
+        {
+          "age": "1-3 months",
+          "whatToFeed": "Breastmilk or formula only",
+          "howOften": "Every 3-4 hrs; 7-9 feeds/day",
+          "amountPerFeed": "3-5 oz",
+          "bottleNipple": "Size 1",
+          "notes": ["More predictable routine", "Longer stretches"]
+        },
+        {
+          "age": "3-6 months",
+          "whatToFeed": "Breastmilk or formula only; solids if ready",
+          "howOften": "5-7 feeds/day",
+          "amountPerFeed": "4-6 oz",
+          "bottleNipple": "Size 2",
+          "notes": ["Milk is still main nutrition", "Solids are practice"]
+        },
+        {
+          "age": "6-8 months",
+          "whatToFeed": "Breastmilk / formula + solids; 1-2 meals/day",
+          "howOften": "Milk feeds + 1-2 meals/day",
+          "amountPerFeed": "6-8 oz",
+          "bottleNipple": "Size 3",
+          "notes": ["Introduce textures", "Increasing foods", "Self-feeding begins"]
+        },
+        {
+          "age": "8-10 months",
+          "whatToFeed": "Breastmilk / formula + solids; 2-3 meals/day",
+          "howOften": "Milk feeds + 2-3 meals/day",
+          "amountPerFeed": "6-8 oz",
+          "bottleNipple": "Size 3-4",
+          "notes": ["More textures", "Finger foods", "Cup practice"]
+        },
+        {
+          "age": "10-12 months",
+          "whatToFeed": "Breastmilk / formula + solids; 3 meals + 1-2 snacks",
+          "howOften": "3 meals + 1-2 snacks + milk",
+          "amountPerFeed": "16-24 oz per day total",
+          "bottleNipple": "Size 4 / Y-Cut cup",
+          "notes": ["Transition to table foods", "Less bottle"]
+        },
+        {
+          "age": "12-24+ months",
+          "whatToFeed": "Family foods; whole milk; 3 meals + 2 snacks",
+          "howOften": "3 meals + snacks + milk",
+          "amountPerFeed": "16-24 oz whole milk per day",
+          "bottleNipple": "Sippy / straw cup",
+          "notes": ["Family meals", "Balanced diet", "Bottle-free goal"]
+        }
+      ],
+      "note": "All babies are unique. Follow your baby's hunger/full cues and doctor's advice."
+    },
+    {
+      "id": "pumping-and-storage",
+      "number": "2",
+      "title": "Techniques: Pumping & Storage",
+      "type": "subsections",
+      "subsections": [
+        {
+          "id": "when-to-pump",
+          "title": "When To Pump",
+          "type": "list",
+          "items": [
+            "Right after birth if separated or baby cannot latch",
+            "Morning is often best",
+            "8-10 times/day for exclusive pumping"
+          ]
+        },
+        {
+          "id": "power-pumping",
+          "title": "Power Pumping",
+          "subtitle": "To boost supply",
+          "type": "sequence",
+          "steps": ["20 min pump", "10 min rest", "20 min pump", "10 min rest", "10 min pump"]
+        },
+        {
+          "id": "breastmilk-storage",
+          "title": "Breastmilk Storage",
+          "subtitle": "Safe guidelines",
+          "type": "table",
+          "columns": ["Storage Place", "Temperature", "Use Within"],
+          "rows": [
+            ["Room temperature", "68-77 F / 20-25 C", "Up to 4 hours"],
+            ["Refrigerator", "40 F / 4 C", "Up to 4 days"],
+            ["Cooler with ice packs", "", "Up to 24 hours"],
+            ["Freezer", "0 F / -18 C", "6 months best; up to 12 months acceptable"],
+            ["Thawed milk in fridge", "", "Use within 24 hours"]
+          ],
+          "warning": "Never refreeze thawed milk."
+        }
+      ]
+    },
+    {
+      "id": "techniques",
+      "title": "Techniques",
+      "type": "subsections",
+      "subsections": [
+        {
+          "id": "breastfeeding-tips",
+          "number": "3",
+          "title": "Breastfeeding Tips",
+          "type": "subsections",
+          "subsections": [
+            {
+              "id": "before-feeding",
+              "title": "Before Feeding",
+              "type": "list",
+              "items": ["Warm compress", "Offer breast", "Helps milk flow", "Relax and breathe"]
+            },
+            {
+              "id": "during-feeding",
+              "title": "During Feeding",
+              "type": "list",
+              "items": ["Good latch is key", "Alternate breasts", "Watch swallowing", "Unlatch and relatch each side if needed", "Follow baby's cues"]
+            },
+            {
+              "id": "after-feeding",
+              "title": "After Feeding",
+              "type": "list",
+              "items": ["Cold compress", "Helps reduce swelling and discomfort"]
+            },
+            {
+              "id": "common-issues",
+              "title": "Common Issues & How To Prevent",
+              "type": "subsections",
+              "subsections": [
+                {
+                  "id": "thrush",
+                  "title": "Thrush",
+                  "type": "list",
+                  "items": ["White patches in mouth", "Painful nipples", "Clean pump parts", "See doctor"]
+                },
+                {
+                  "id": "blocked-ducts-mastitis",
+                  "title": "Blocked Ducts / Mastitis",
+                  "type": "list",
+                  "items": ["Painful lump, redness", "Fever, chills", "Regular milk removal", "Avoid tight bras"]
+                },
+                {
+                  "id": "cracked-nipples",
+                  "title": "Cracked Nipples",
+                  "type": "list",
+                  "items": ["Usually from poor latch", "Keep nipples clean and dry", "Use nipple cream if needed", "Ask lactation for help"]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "bottle-feeding-guide",
+          "number": "4",
+          "title": "Bottle Feeding Guide",
+          "type": "subsections",
+          "subsections": [
+            {
+              "id": "paced-bottle-feeding",
+              "title": "Paced Bottle Feeding",
+              "subtitle": "Best method",
+              "type": "list",
+              "items": [
+                "Baby semi-upright",
+                "Bottle more horizontal",
+                "Let baby control the pace",
+                "Pause often",
+                "Stop when baby turns head or closes mouth"
+              ]
+            },
+            {
+              "id": "good-feeding-positions",
+              "title": "Good Feeding Positions",
+              "type": "list",
+              "items": ["Cradle hold", "Lap feeding", "Upright feeding"]
+            },
+            {
+              "id": "nipple-size-guide",
+              "title": "Nipple Size Guide",
+              "type": "table",
+              "columns": ["Age", "Nipple"],
+              "rows": [
+                ["0-3 months", "Preemie, 1"],
+                ["3-6 months", "2"],
+                ["6-9 months", "3"],
+                ["9+ months", "Y-Cut"]
+              ]
+            },
+            {
+              "id": "milk-temperature",
+              "title": "Milk Temperature",
+              "type": "list",
+              "items": ["98.6-99.5 F (37 C)", "Test on your wrist", "Never microwave bottles"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "feeding-support",
+      "title": "Feeding Support",
+      "type": "subsections",
+      "subsections": [
+        {
+          "id": "burping",
+          "number": "5",
+          "title": "Burping",
+          "type": "subsections",
+          "subsections": [
+            {
+              "id": "burping-methods",
+              "title": "Methods",
+              "type": "list",
+              "items": ["Over shoulder", "Sitting upright", "Across lap"]
+            },
+            {
+              "id": "burping-notes",
+              "title": "Notes",
+              "type": "list",
+              "items": ["Time: 1-10 minutes", "No burp does not mean bad parent", "Comfort matters"]
+            }
+          ]
+        },
+        {
+          "id": "hunger-cues",
+          "number": "6",
+          "title": "Hunger Cues",
+          "type": "subsections",
+          "subsections": [
+            {
+              "id": "early-hunger-cues",
+              "title": "Early Cues",
+              "subtitle": "Feed me",
+              "type": "list",
+              "items": ["Rooting", "Sucking fingers", "Lip smacking", "Stirring / opening mouth", "Stirring / mouth"]
+            },
+            {
+              "id": "late-hunger-cues",
+              "title": "Late Cues",
+              "subtitle": "Crying too late",
+              "type": "list",
+              "items": ["Baby is overwhelmed", "Harder to calm", "Takes longer to feed"]
+            }
+          ]
+        },
+        {
+          "id": "wet-diapers-poop",
+          "number": "7",
+          "title": "Wet Diapers & Poop Guide",
+          "type": "subsections",
+          "subsections": [
+            {
+              "id": "wet-diapers",
+              "title": "Wet Diapers",
+              "subtitle": "Good sign",
+              "type": "table",
+              "columns": ["Day", "Expected Wet Diapers"],
+              "rows": [
+                ["Day 1", "1+ wet diaper"],
+                ["Day 2", "2+ wet diapers"],
+                ["Day 3", "3+ wet diapers"],
+                ["Day 4+", "6+ wet diapers/day"]
+              ]
+            },
+            {
+              "id": "poop-evolution",
+              "title": "Poop Evolution",
+              "type": "list",
+              "items": [
+                "Meconium: 1-3 days",
+                "Transitional: 2-6 days",
+                "Milk poop: yellow, soft, seedy"
+              ]
+            }
+          ],
+          "warning": "Call doctor if: no wet diapers, red/white poop, bloody poop, or baby is fussy/lethargic."
+        },
+        {
+          "id": "solid-foods-guide",
+          "title": "Solid Foods Guide",
+          "type": "subsections",
+          "subsections": [
+            {
+              "id": "readiness-signs",
+              "title": "Readiness Signs",
+              "subtitle": "Usually ~6 months",
+              "type": "checklist",
+              "items": [
+                "Sits with support",
+                "Opens mouth for food",
+                "Interested in food",
+                "Good head control",
+                "Swallows, not pushing out",
+                "Grasps objects"
+              ]
+            },
+            {
+              "id": "how-to-start-solids",
+              "title": "How To Start",
+              "type": "list",
+              "items": ["1 new food every 3-5 days", "Watch for allergic reactions"]
+            },
+            {
+              "id": "good-first-foods",
+              "title": "Good First Foods",
+              "type": "list",
+              "items": ["Sweet potato", "Banana", "Oatmeal", "Avocado", "Apple"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sleepy-cues",
+      "number": "7",
+      "title": "Sleepy Cues: Watch & Act Early",
+      "type": "subsections",
+      "subsections": [
+        {
+          "id": "sleepy-cues-feed-neutral",
+          "title": "Sleepy Cues",
+          "subtitle": "Good time to start routine",
+          "type": "checklist",
+          "items": ["Rubbing eyes", "Yawning", "Glassy eyes", "Looking away", "Fussy but settles with cuddles"]
+        },
+        {
+          "id": "overtired-cues",
+          "title": "Overtired Cues",
+          "subtitle": "Harder to settle",
+          "type": "warning-list",
+          "items": ["Crying", "Arching back", "Fighting sleep", "Hyperactive", "Very fussy / wired"]
+        }
+      ],
+      "note": "Tip: Follow sleepy cues, not the clock."
+    },
+    {
+      "id": "misc",
+      "title": "Misc",
+      "type": "subsections",
+      "subsections": [
+        {
+          "id": "when-things-go-off-track",
+          "number": "10",
+          "title": "When Things Go Off Track",
+          "type": "list",
+          "items": [
+            "Too many short naps? Extend wake windows.",
+            "Fighting bedtime? Move bedtime earlier.",
+            "Waking often at night? Check schedule, feed needs, and sleep environment.",
+            "Travel or sick days? Lower expectations, return to routine when able."
+          ]
+        },
+        {
+          "id": "dad-pro-tips",
+          "number": "12",
+          "title": "Dad Pro Tips",
+          "type": "checklist",
+          "items": [
+            "Track feeds & diapers",
+            "Wash bottles & parts",
+            "Prepare bottles & snacks",
+            "Handle burping & soothing",
+            "Protect mom's rest",
+            "Celebrate the small wins"
+          ],
+          "callout": "You've got this!"
+        }
+      ],
+      "note": "Consistency over perfection."
+    }
+  ]
+}

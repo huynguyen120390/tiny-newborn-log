@@ -3,7 +3,9 @@ const state = {
   recent: {},
   summary: {},
   profile: {},
-  activeTab: "log",
+  activeTab: "home",
+  activeHomeTab: "log",
+  activeSettingsView: "settings",
   visibleCards: [],
   poopColors: [],
   historyFilters: {
@@ -21,11 +23,16 @@ const state = {
   },
   dashboardSelection: null,
   activeLogsCard: null,
+  selectedCareIssue: null,
+  selectedCareSubtab: {},
+  careInfo: {},
   milestoneProgress: {},
   selectedMilestoneId: null,
   ticker: null,
   pendingActionConfirm: null,
   currentDate: todayString(),
+  weather: null,
+  weatherLastUpdated: 0,
   bathSoundEnabled: false,
   bathReminderSeconds: loadBathReminderSeconds(),
   lastBathAnnouncementStep: 0,
@@ -35,8 +42,48 @@ const state = {
   weightUnit: loadWeightUnit(),
   heightUnit: loadHeightUnit(),
   reminderVoiceURI: loadReminderVoiceURI(),
-  audioContext: null
+  audioContext: null,
+  quiz: {
+    selectedSetId: "everyday_parenting_daily_scenarios",
+    questionCount: 10,
+    timerDuration: 0,
+    soundEnabled: false,
+    status: "idle",
+    error: "",
+    set: null,
+    questions: [],
+    currentIndex: 0,
+    selectedChoiceId: null,
+    result: null,
+    score: 0,
+    answered: 0,
+    correct: 0,
+    timerRemaining: 0,
+    timerStartedAt: 0,
+    timerId: null,
+    tickTimerId: null,
+    tickOscillator: null,
+    tickGain: null
+  }
 };
+
+// Add future quiz JSON files under frontend/data/quizzes/ and register them here.
+const quizSets = [
+  {
+    id: "everyday_parenting_daily_scenarios",
+    displayName: "Everyday Parenting — Daily Scenarios",
+    jsonPath: "./data/quizzes/everyday_parenting_daily_scenarios_quiz_bank_200.json",
+    description: "Practical daily parenting scenario quiz for everyday family situations."
+  }
+];
+
+const quizQuestionCounts = [10, 20, 30];
+const quizTimerDurations = [
+  { label: "Off", value: 0 },
+  { label: "10s", value: 10 },
+  { label: "15s", value: 15 },
+  { label: "20s", value: 20 }
+];
 
 const weightUnits = {
   oz: { label: "oz", grams: 28.349523125 },
@@ -141,6 +188,16 @@ const activities = [
       { label: "Log gym time", icon: "gym", payload: { type: "baby_gym" } }
     ]
   }
+];
+
+const careIssues = [
+  { key: "eat", title: "Eat", helper: "Feeding and appetite concerns.", header: "eat" },
+  { key: "sleep", title: "Sleep", helper: "Rest, naps, and bedtime concerns.", header: "sleep" },
+  { key: "hygiene", title: "Hygiene", helper: "Diaper, bath, and clean-up concerns.", header: "hygiene" },
+  { key: "exercise", title: "Exercise", helper: "Movement and body practice concerns.", header: "exercise" },
+  { key: "play", title: "Play", helper: "Engagement and stimulation concerns.", header: "play" },
+  { key: "safety", title: "Safety", helper: "Home, travel, and setup concerns.", header: "safety" },
+  { key: "health", title: "Health", helper: "Symptoms and checkup concerns.", header: "health" }
 ];
 
 const historyEventTypes = [
@@ -396,6 +453,17 @@ document.querySelectorAll(".tab").forEach((button) => {
   button.addEventListener("click", () => activateTab(button.dataset.tab));
 });
 
+document.querySelectorAll("[data-home-tab]").forEach((button) => {
+  button.addEventListener("click", () => activateTab(button.dataset.homeTab));
+});
+
+document.querySelectorAll("[data-settings-view]").forEach((button) => {
+  button.addEventListener("click", () => activateTab(button.dataset.settingsView));
+});
+
+document.getElementById("chatgpt-shortcut")?.addEventListener("click", openChatGptShortcut);
+document.getElementById("weather-shortcut")?.addEventListener("click", openWeatherShortcut);
+
 document.querySelector("[data-close-dialog]").addEventListener("click", () => {
   document.getElementById("bottle-dialog").close();
 });
@@ -465,12 +533,16 @@ init().catch((error) => {
 
 async function init() {
   renderActivities();
+  await loadCareInfo();
   setupHistoryFilters();
   setupDashboardFilters();
   setupSettingsPanel();
+  setupQuizPanel();
   setupExportPanel("export-panel");
   setupSpeechVoices();
   updateClock();
+  updateWeatherDisplay();
+  refreshWeather();
   await refreshData();
 }
 
@@ -509,10 +581,48 @@ async function fetchJson(url, options) {
   return response.json();
 }
 
+async function loadCareInfo() {
+  try {
+    state.careInfo.sleep = await fetchJson("/data/care/sleep-card-info.json");
+  } catch (error) {
+    state.careInfo.sleep = null;
+  }
+}
+
 function activateTab(tab) {
-  state.activeTab = tab;
-  document.querySelectorAll(".tab").forEach((button) => button.classList.toggle("active", button.dataset.tab === tab));
-  document.querySelectorAll(".panel").forEach((panel) => panel.classList.toggle("active", panel.id === tab));
+  const homeViews = ["log", "care", "milestones", "dashboard"];
+  const settingsViews = ["settings", "history", "exports"];
+
+  if (homeViews.includes(tab)) {
+    state.activeTab = "home";
+    state.activeHomeTab = tab;
+  } else if (settingsViews.includes(tab)) {
+    state.activeTab = "settings";
+    state.activeSettingsView = tab;
+  } else {
+    state.activeTab = tab;
+  }
+
+  document.querySelectorAll(".tab").forEach((button) => {
+    button.classList.toggle("active", button.dataset.tab === state.activeTab);
+  });
+
+  document.getElementById("home-tabs")?.classList.toggle("active", state.activeTab === "home");
+  document.querySelectorAll("[data-home-tab]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.homeTab === state.activeHomeTab);
+  });
+  document.querySelectorAll("[data-settings-view]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.settingsView === state.activeSettingsView);
+  });
+
+  document.querySelectorAll(".panel").forEach((panel) => {
+    const isHomePanel = state.activeTab === "home" && homeViews.includes(panel.id) && panel.id === state.activeHomeTab;
+    const isSettingsPanel = state.activeTab === "settings" && settingsViews.includes(panel.id) && panel.id === state.activeSettingsView;
+    const isTopPanel = !homeViews.includes(panel.id) && !settingsViews.includes(panel.id) && panel.id === state.activeTab;
+    panel.classList.toggle("active", isHomePanel || isSettingsPanel || isTopPanel);
+  });
+
+  if (state.activeTab === "home" && state.activeHomeTab === "dashboard") renderDashboard();
 }
 
 function renderAll() {
@@ -523,9 +633,11 @@ function renderAll() {
   updateTopbarBabyAge();
   renderTodaySummary();
   renderRecent();
+  renderCare();
   renderHistory();
   renderDashboard();
   renderMilestones();
+  renderQuiz();
   renderSettings();
   renderActivityStats();
   updateActivityButtons();
@@ -608,6 +720,162 @@ function renderActivities() {
   document.querySelectorAll("[data-tummy-sound-toggle]").forEach((button) => {
     button.addEventListener("click", toggleTummySound);
   });
+}
+
+function renderCare() {
+  const panel = document.getElementById("care-panel");
+  if (!panel) return;
+
+  const selected = careIssues.find((issue) => issue.key === state.selectedCareIssue);
+  if (selected) {
+    panel.innerHTML = renderCareIssueView(selected);
+    panel.querySelector("[data-care-back]")?.addEventListener("click", () => {
+      state.selectedCareIssue = null;
+      renderCare();
+    });
+    panel.querySelectorAll("[data-care-subtab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.selectedCareSubtab[selected.key] = button.dataset.careSubtab;
+        renderCare();
+      });
+    });
+    return;
+  }
+
+  panel.innerHTML = `
+    <div class="care-grid">
+      ${careIssues.map(renderCareIssueCard).join("")}
+    </div>
+  `;
+
+  panel.querySelectorAll("[data-care-issue]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedCareIssue = button.dataset.careIssue;
+      renderCare();
+    });
+  });
+}
+
+function renderCareIssueCard(issue) {
+  return `
+    <button class="activity-card care-card" type="button" data-care-issue="${escapeAttr(issue.key)}" style="--card-image: url('${careHeaderImage(issue.header)}')">
+      <div class="card-top card-header">
+        <div>
+          <h3>${escapeHtml(issue.title)}</h3>
+          <p>${escapeHtml(issue.helper)}</p>
+        </div>
+      </div>
+      <div class="card-info care-card-info">${renderCareIssueCardInfo(issue)}</div>
+    </button>
+  `;
+}
+
+function renderCareIssueCardInfo(issue) {
+  if (issue.key !== "sleep") return "";
+  return `<ul class="care-card-bullets">${sleepCardBullets().map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
+}
+
+function sleepCardBullets() {
+  const data = state.careInfo.sleep;
+  if (!data) {
+    return [
+      "Sleep milestones: Loading...",
+      "Nap: Loading...",
+      "Outdoor clothing: Waiting for weather",
+      "Indoor clothing: Coming soon"
+    ];
+  }
+
+  const row = relevantSleepRow(data);
+  return [
+    `Sleep milestones: ${row ? `${row.age}: ${row.sleepMilestone}; wake ${row.wakeWindow}` : "Set birthday for age-based guidance"}`,
+    `Nap: ${row ? row.nap : "Set birthday for age-based guidance"}`,
+    `Outdoor clothing: ${outdoorClothingRecommendation(data)}`,
+    `Indoor clothing: ${data.indoorClothing || "Coming soon"}`
+  ];
+}
+
+function relevantSleepRow(data) {
+  const weeks = babyAgeWeeks();
+  if (!Number.isFinite(weeks)) return null;
+  return (data.milestones || []).find((row) => weeks >= row.minWeeks && weeks <= row.maxWeeks)
+    || (data.milestones || [])[data.milestones.length - 1]
+    || null;
+}
+
+function outdoorClothingRecommendation(data) {
+  const temperature = state.weather?.temperature;
+  if (!Number.isFinite(temperature)) return "Waiting for local weather";
+  const rule = (data.outdoorClothingRules || []).find((item) => temperature <= item.maxF);
+  return `${temperature}°F: ${rule?.text || "Dress in light layers and check baby often."}`;
+}
+
+function renderCareIssueView(issue) {
+  if (issue.key === "eat") return renderEatCareView(issue);
+  if (issue.key === "sleep") return renderSleepCheatsheetImage(issue);
+
+  return `
+    <section class="care-detail">
+      <button class="ghost care-back-button" type="button" data-care-back>Back to Care</button>
+      <div class="care-detail-hero" style="--card-image: url('${careHeaderImage(issue.header)}')">
+        <h3>${escapeHtml(issue.title)}</h3>
+        <p>${escapeHtml(issue.helper)}</p>
+      </div>
+      <div class="care-detail-body"></div>
+    </section>
+  `;
+}
+
+function renderEatCareView(issue) {
+  const tabs = [
+    { key: "cheatsheet", label: "Cheatsheet", image: "/assets/care/feeding-cheatsheet.png", alt: "Baby feeding cheatsheet" },
+    { key: "hunger-cues", label: "Hunger Cues", image: "/assets/care/feeding-hunger-cues.png", alt: "Baby feeding hunger cues" }
+  ];
+  const activeKey = state.selectedCareSubtab.eat || "cheatsheet";
+  const activeTab = tabs.find((tab) => tab.key === activeKey) || tabs[0];
+
+  return `
+    <section class="care-detail">
+      <button class="ghost care-back-button" type="button" data-care-back>Back to Care</button>
+      <div class="care-detail-hero" style="--card-image: url('${careHeaderImage(issue.header)}')">
+        <h3>${escapeHtml(issue.title)}</h3>
+        <p>${escapeHtml(issue.helper)}</p>
+      </div>
+      <div class="care-issue-tabs" role="tablist" aria-label="Eat care views">
+        ${tabs.map((tab) => `
+          <button class="${tab.key === activeTab.key ? "active" : ""}" type="button" role="tab" aria-selected="${tab.key === activeTab.key ? "true" : "false"}" data-care-subtab="${escapeAttr(tab.key)}">
+            ${escapeHtml(tab.label)}
+          </button>
+        `).join("")}
+      </div>
+      <div class="care-image-viewer">
+        <img src="${escapeAttr(activeTab.image)}" alt="${escapeAttr(activeTab.alt)}">
+      </div>
+    </section>
+  `;
+}
+
+function renderSleepCheatsheetImage(issue) {
+  return renderCareCheatsheetImage(issue, "/assets/care/sleep-cheatsheet.png", "Baby sleep cheatsheet");
+}
+
+function renderCareCheatsheetImage(issue, imagePath, altText) {
+  return `
+    <section class="care-detail">
+      <button class="ghost care-back-button" type="button" data-care-back>Back to Care</button>
+      <div class="care-detail-hero" style="--card-image: url('${careHeaderImage(issue.header)}')">
+        <h3>${escapeHtml(issue.title)}</h3>
+        <p>${escapeHtml(issue.helper)}</p>
+      </div>
+      <div class="care-image-viewer">
+        <img src="${escapeAttr(imagePath)}" alt="${escapeAttr(altText)}">
+      </div>
+    </section>
+  `;
+}
+
+function careHeaderImage(header) {
+  return `/assets/care/${header}.png`;
 }
 
 function cardActionConfirmKey(button) {
@@ -1395,6 +1663,500 @@ function setupSettingsPanel() {
   document.getElementById("clear-data-button").addEventListener("click", clearData);
 }
 
+function setupQuizPanel() {
+  const panel = document.getElementById("quiz-panel");
+  if (!panel) return;
+
+  panel.addEventListener("change", (event) => {
+    const quiz = state.quiz;
+    if (event.target.id === "quiz-set-select") quiz.selectedSetId = event.target.value;
+    if (event.target.id === "quiz-count-select") quiz.questionCount = Number(event.target.value);
+    if (event.target.id === "quiz-timer-select") {
+      quiz.timerDuration = Math.min(20, Math.max(0, Number(event.target.value)));
+      if (quiz.status === "active") startQuizTimer();
+    }
+    renderQuiz();
+  });
+
+  panel.addEventListener("click", (event) => {
+    const target = event.target.closest("button");
+    if (!target) return;
+    if (target.dataset.quizAction === "get") startQuiz();
+    if (target.dataset.quizAction === "sound") toggleQuizSound();
+    if (target.dataset.quizChoice) selectQuizAnswer(target.dataset.quizChoice);
+    if (target.dataset.quizAction === "next") nextQuizQuestion();
+    if (target.dataset.quizAction === "restart") resetQuizSession();
+  });
+}
+
+async function startQuiz() {
+  const quiz = state.quiz;
+  const set = quizSets.find((item) => item.id === quiz.selectedSetId) || quizSets[0];
+  stopQuizTimer();
+  quiz.status = "loading";
+  quiz.error = "";
+  quiz.set = set;
+  renderQuiz();
+
+  try {
+    const data = await fetchJson(set.jsonPath);
+    const questions = normalizeQuizQuestions(data);
+    if (!questions.length) throw new Error("This quiz set has no questions.");
+    quiz.questions = shuffleArray(questions).slice(0, Math.min(quiz.questionCount, questions.length));
+    quiz.currentIndex = 0;
+    quiz.selectedChoiceId = null;
+    quiz.result = null;
+    quiz.score = 0;
+    quiz.answered = 0;
+    quiz.correct = 0;
+    quiz.status = "active";
+    startQuizTimer();
+  } catch (error) {
+    quiz.status = "idle";
+    quiz.error = `Could not load quiz: ${error.message}`;
+  }
+  renderQuiz();
+}
+
+function normalizeQuizQuestions(data) {
+  const rawQuestions = Array.isArray(data) ? data : data.questions || data.items || [];
+  return rawQuestions.map((item, index) => normalizeQuizQuestion(item, index)).filter(Boolean);
+}
+
+function normalizeQuizQuestion(item, index) {
+  if (!item || typeof item !== "object") return null;
+  const choicesSource = Array.isArray(item.choices) ? item.choices : item.answers;
+  if (!Array.isArray(choicesSource) || !choicesSource.length) return null;
+  const choices = choicesSource.map((choice, choiceIndex) => normalizeQuizChoice(choice, choiceIndex));
+  const correctChoiceId = String(
+    item.correctChoiceId ||
+    item.correct_choice_id ||
+    item.correctAnswerId ||
+    item.correct_answer_id ||
+    item.correct ||
+    item.answer ||
+    choices.find((choice) => choice.isCorrect)?.id ||
+    ""
+  );
+  const matchingChoice = choices.find((choice) => choice.id === correctChoiceId || choice.text === correctChoiceId);
+  return {
+    id: String(item.id || `question-${index + 1}`),
+    question: String(item.question || item.prompt || item.text || ""),
+    scenarioTitle: cleanQuizText(item.scenarioTitle || item.scenario_title),
+    scenario: cleanQuizText(item.scenario),
+    strategyName: cleanQuizText(item.strategyName || item.strategy_name),
+    strategySummary: cleanQuizText(item.strategySummary || item.strategy_summary),
+    brainModelLink: cleanQuizText(item.brainModelLink || item.brain_model_link),
+    parentScript: normalizeParentScript(item.parentScript || item.parent_script),
+    choices,
+    correctChoiceId: matchingChoice?.id || correctChoiceId || choices[0].id,
+    answerExplanation: String(item.answerExplanation || item.answer_explanation || item.explanation || ""),
+    keyTakeaway: String(item.keyTakeaway || item.key_takeaway || item.takeaway || "")
+  };
+}
+
+function cleanQuizText(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function normalizeParentScript(value) {
+  if (Array.isArray(value)) return value.map(cleanQuizText).filter(Boolean).slice(0, 4);
+  const text = cleanQuizText(value);
+  return text ? [text] : [];
+}
+
+function normalizeQuizChoice(choice, index) {
+  if (typeof choice === "string") {
+    return { id: String.fromCharCode(97 + index), text: choice, explanation: "", isCorrect: false };
+  }
+  const id = String(choice.id || choice.key || choice.value || String.fromCharCode(97 + index));
+  return {
+    id,
+    text: String(choice.text || choice.label || choice.answer || ""),
+    explanation: String(choice.explanation || choice.reason || ""),
+    isCorrect: Boolean(choice.isCorrect || choice.is_correct || choice.correct)
+  };
+}
+
+function shuffleArray(items) {
+  const copy = [...items];
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[swap]] = [copy[swap], copy[index]];
+  }
+  return copy;
+}
+
+function selectQuizAnswer(choiceId) {
+  const quiz = state.quiz;
+  if (quiz.status !== "active" || quiz.result) return;
+  const question = currentQuizQuestion();
+  if (!question) return;
+  const isCorrect = choiceId === question.correctChoiceId;
+  const bonus = isCorrect && quiz.timerDuration > 0 && quiz.timerRemaining > quiz.timerDuration / 2 ? 2 : 0;
+  stopQuizTimer();
+  quiz.selectedChoiceId = choiceId;
+  quiz.result = {
+    type: isCorrect ? "correct" : "wrong",
+    isCorrect,
+    points: isCorrect ? 10 + bonus : 0,
+    bonus
+  };
+  quiz.score += quiz.result.points;
+  quiz.answered += 1;
+  if (isCorrect) quiz.correct += 1;
+  renderQuiz();
+}
+
+function handleQuizTimeout() {
+  const quiz = state.quiz;
+  if (quiz.status !== "active" || quiz.result) return;
+  stopQuizTimer();
+  quiz.selectedChoiceId = null;
+  quiz.result = { type: "timeout", isCorrect: false, points: 0, bonus: 0 };
+  quiz.answered += 1;
+  renderQuiz();
+}
+
+function nextQuizQuestion() {
+  const quiz = state.quiz;
+  stopQuizTimer();
+  if (quiz.currentIndex >= quiz.questions.length - 1) {
+    quiz.status = "complete";
+    quiz.result = null;
+    quiz.selectedChoiceId = null;
+    renderQuiz();
+    return;
+  }
+  quiz.currentIndex += 1;
+  quiz.selectedChoiceId = null;
+  quiz.result = null;
+  startQuizTimer();
+  renderQuiz();
+}
+
+function resetQuizSession() {
+  stopQuizTimer();
+  Object.assign(state.quiz, {
+    status: "idle",
+    error: "",
+    questions: [],
+    currentIndex: 0,
+    selectedChoiceId: null,
+    result: null,
+    score: 0,
+    answered: 0,
+    correct: 0,
+    timerRemaining: 0,
+    timerStartedAt: 0
+  });
+  renderQuiz();
+}
+
+function currentQuizQuestion() {
+  return state.quiz.questions[state.quiz.currentIndex] || null;
+}
+
+function startQuizTimer() {
+  const quiz = state.quiz;
+  stopQuizTimer();
+  if (quiz.status !== "active" || quiz.result || quiz.timerDuration <= 0) return;
+  quiz.timerRemaining = quiz.timerDuration;
+  quiz.timerStartedAt = Date.now();
+  startQuizTicking();
+  quiz.timerId = setInterval(() => {
+    const elapsed = (Date.now() - quiz.timerStartedAt) / 1000;
+    quiz.timerRemaining = Math.max(0, quiz.timerDuration - elapsed);
+    if (quiz.timerRemaining <= 0) {
+      handleQuizTimeout();
+      return;
+    }
+    renderQuiz();
+  }, 200);
+}
+
+function stopQuizTimer() {
+  const quiz = state.quiz;
+  clearInterval(quiz.timerId);
+  quiz.timerId = null;
+  stopQuizTicking();
+}
+
+function toggleQuizSound() {
+  const quiz = state.quiz;
+  quiz.soundEnabled = !quiz.soundEnabled;
+  if (!quiz.soundEnabled) {
+    stopQuizTicking();
+  } else {
+    ensureAudioContext();
+    startQuizTicking();
+  }
+  renderQuiz();
+}
+
+function startQuizTicking() {
+  const quiz = state.quiz;
+  if (!quiz.soundEnabled || quiz.timerDuration <= 0 || quiz.status !== "active" || quiz.result) return;
+  if (quiz.tickTimerId) return;
+  playQuizTick();
+  quiz.tickTimerId = setInterval(playQuizTick, 1000);
+}
+
+function stopQuizTicking() {
+  const quiz = state.quiz;
+  clearInterval(quiz.tickTimerId);
+  quiz.tickTimerId = null;
+  if (quiz.tickOscillator) {
+    try {
+      quiz.tickOscillator.stop();
+    } catch {}
+    quiz.tickOscillator = null;
+  }
+  quiz.tickGain = null;
+}
+
+function playQuizTick() {
+  const quiz = state.quiz;
+  const context = ensureAudioContext();
+  if (!context || !quiz.soundEnabled) return;
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.type = "sine";
+  oscillator.frequency.value = 540;
+  gain.gain.setValueAtTime(0.0001, context.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.035, context.currentTime + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.08);
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start();
+  oscillator.stop(context.currentTime + 0.09);
+  quiz.tickOscillator = oscillator;
+  quiz.tickGain = gain;
+}
+
+function ensureAudioContext() {
+  if (!window.AudioContext && !window.webkitAudioContext) return null;
+  if (!state.audioContext) state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  if (state.audioContext.state === "suspended") state.audioContext.resume();
+  return state.audioContext;
+}
+
+function renderQuiz() {
+  const panel = document.getElementById("quiz-panel");
+  if (!panel) return;
+  const quiz = state.quiz;
+  const set = quizSets.find((item) => item.id === quiz.selectedSetId) || quizSets[0];
+  const total = quiz.questions.length;
+  const completed = quiz.answered;
+  const accuracy = completed ? Math.round((quiz.correct / completed) * 100) : 0;
+
+  panel.innerHTML = `
+    <div class="quiz-toolbar">
+      <label>
+        Quiz Set
+        <select id="quiz-set-select">
+          ${quizSets.map((item) => `<option value="${escapeAttr(item.id)}"${item.id === quiz.selectedSetId ? " selected" : ""}>${escapeHtml(item.displayName)}</option>`).join("")}
+        </select>
+      </label>
+      <label>
+        Number of Questions
+        <select id="quiz-count-select">
+          ${quizQuestionCounts.map((count) => `<option value="${count}"${count === quiz.questionCount ? " selected" : ""}>${count}</option>`).join("")}
+        </select>
+      </label>
+      <label>
+        Timer Duration
+        <select id="quiz-timer-select">
+          ${quizTimerDurations.map((timer) => `<option value="${timer.value}"${timer.value === quiz.timerDuration ? " selected" : ""}>${timer.label}</option>`).join("")}
+        </select>
+      </label>
+      <button class="ghost quiz-sound-button" type="button" data-quiz-action="sound" aria-pressed="${quiz.soundEnabled ? "true" : "false"}">
+        <span aria-hidden="true">${quiz.soundEnabled ? "🔊" : "🔇"}</span>
+        ${quiz.soundEnabled ? "Sound On" : "Sound Off"}
+      </button>
+      <button class="primary" type="button" data-quiz-action="get">${quiz.status === "loading" ? "Loading..." : "Get Quiz"}</button>
+    </div>
+    <p class="quiz-description">${escapeHtml(set.description || "")}</p>
+    ${quiz.error ? `<p class="quiz-error">${escapeHtml(quiz.error)}</p>` : ""}
+    ${renderQuizStats(total, completed, accuracy)}
+    ${renderQuizBody()}
+  `;
+}
+
+function renderQuizStats(total, completed, accuracy) {
+  const quiz = state.quiz;
+  const progressPercent = total ? Math.round((completed / total) * 100) : 0;
+  const width = total ? Math.min(100, (completed / total) * 100) : 0;
+  return `
+    <div class="quiz-progress-card">
+      <div class="quiz-progress-heading">
+        <strong>${escapeHtml(parentTitleForProgress(progressPercent))}</strong>
+        <span>${completed} / ${total || quiz.questionCount} questions completed</span>
+      </div>
+      <div class="quiz-progress-track" aria-hidden="true">
+        <span style="width: ${width}%"></span>
+      </div>
+      <div class="quiz-stat-grid">
+        <span><strong>${quiz.score}</strong> Score</span>
+        <span><strong>${completed}</strong> Answered</span>
+        <span><strong>${quiz.correct}</strong> Correct</span>
+        <span><strong>${accuracy}%</strong> Accuracy</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderQuizBody() {
+  const quiz = state.quiz;
+  if (quiz.status === "loading") return `<p class="empty-state">Loading quiz questions...</p>`;
+  if (quiz.status === "complete") return renderQuizComplete();
+  if (quiz.status !== "active") {
+    return `<p class="empty-state">Choose a quiz set, pick your options, and tap Get Quiz.</p>`;
+  }
+  const question = currentQuizQuestion();
+  if (!question) return `<p class="empty-state">No question is ready yet.</p>`;
+  const total = quiz.questions.length;
+  return `
+    <article class="quiz-card">
+      <div class="quiz-question-top">
+        <span>Question ${quiz.currentIndex + 1} of ${total}</span>
+        ${quiz.timerDuration > 0 ? renderQuizTimer() : ""}
+      </div>
+      ${renderQuizScenario(question)}
+      <h3>${escapeHtml(question.question)}</h3>
+      <div class="quiz-choices">
+        ${question.choices.map((choice) => renderQuizChoice(question, choice)).join("")}
+      </div>
+      ${quiz.result ? renderQuizResult(question) : ""}
+    </article>
+  `;
+}
+
+function renderQuizScenario(question) {
+  if (!question.scenarioTitle && !question.scenario) return "";
+  return `
+    <div class="quiz-scenario-card">
+      ${question.scenarioTitle ? `<strong>${escapeHtml(question.scenarioTitle)}</strong>` : ""}
+      ${question.scenario ? `<p>${escapeHtml(question.scenario)}</p>` : ""}
+    </div>
+  `;
+}
+
+function renderQuizTimer() {
+  const quiz = state.quiz;
+  const fraction = quiz.timerDuration ? Math.max(0, Math.min(1, quiz.timerRemaining / quiz.timerDuration)) : 0;
+  const degrees = Math.round(fraction * 360);
+  const seconds = Math.ceil(quiz.timerRemaining);
+  const warning = quiz.timerRemaining <= 5;
+  const pulse = quiz.timerRemaining <= 3;
+  return `
+    <div class="quiz-timer ${warning ? "warning" : ""} ${pulse ? "pulse" : ""}" style="--quiz-timer-deg: ${degrees}deg">
+      <span>${seconds}s</span>
+    </div>
+  `;
+}
+
+function renderQuizChoice(question, choice) {
+  const quiz = state.quiz;
+  const answered = Boolean(quiz.result);
+  const isCorrect = choice.id === question.correctChoiceId;
+  const isSelected = choice.id === quiz.selectedChoiceId;
+  const classes = ["quiz-choice"];
+  if (answered && isCorrect) classes.push("correct");
+  if (answered && isSelected && !isCorrect) classes.push("wrong");
+  return `
+    <button class="${classes.join(" ")}" type="button" data-quiz-choice="${escapeAttr(choice.id)}" ${answered ? "disabled" : ""}>
+      <span class="quiz-choice-letter">${escapeHtml(choiceLabel(choice.id))}</span>
+      <span>${escapeHtml(choice.text)}</span>
+    </button>
+  `;
+}
+
+function choiceLabel(choiceId) {
+  const normalized = String(choiceId || "").trim();
+  if (/^[a-d]$/i.test(normalized)) return normalized.toUpperCase();
+  return normalized.slice(0, 1).toUpperCase() || "";
+}
+
+function renderQuizResult(question) {
+  const quiz = state.quiz;
+  const result = quiz.result;
+  const title = result.type === "timeout" ? "Time is up" : result.isCorrect ? "Correct" : "Not quite";
+  return `
+    <div class="quiz-result ${result.isCorrect ? "correct" : "wrong"}">
+      <div class="quiz-result-title">
+        <strong>${title}</strong>
+        <span>${result.points} points${result.bonus ? `, including +${result.bonus} speed bonus` : ""}</span>
+      </div>
+      <div class="quiz-explanations">
+        ${question.choices.map((choice) => `
+          <div>
+            <strong>${choice.id.toUpperCase()}. ${escapeHtml(choice.text)}</strong>
+            <p>${escapeHtml(choice.explanation || "No choice explanation provided.")}</p>
+          </div>
+        `).join("")}
+      </div>
+      ${question.answerExplanation ? `<p class="quiz-overall">${escapeHtml(question.answerExplanation)}</p>` : ""}
+      ${question.keyTakeaway ? `<p class="quiz-takeaway"><strong>Key takeaway:</strong> ${escapeHtml(question.keyTakeaway)}</p>` : ""}
+      ${renderQuizStrategy(question)}
+      ${renderParentScript(question)}
+      <button class="primary" type="button" data-quiz-action="next">
+        ${quiz.currentIndex >= quiz.questions.length - 1 ? "Finish Quiz" : "Next Question"}
+      </button>
+    </div>
+  `;
+}
+
+function renderQuizStrategy(question) {
+  if (!question.strategyName && !question.strategySummary && !question.brainModelLink) return "";
+  return `
+    <div class="quiz-strategy">
+      <strong>${escapeHtml(question.strategyName || "Strategy")}</strong>
+      ${question.strategySummary ? `<p>${escapeHtml(question.strategySummary)}</p>` : ""}
+      ${question.brainModelLink ? `<p>${escapeHtml(question.brainModelLink)}</p>` : ""}
+    </div>
+  `;
+}
+
+function renderParentScript(question) {
+  if (!question.parentScript.length) return "";
+  return `
+    <div class="quiz-parent-script">
+      <strong>Parent Next Steps</strong>
+      <ol>
+        ${question.parentScript.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}
+      </ol>
+    </div>
+  `;
+}
+
+function renderQuizComplete() {
+  const quiz = state.quiz;
+  const accuracy = quiz.answered ? Math.round((quiz.correct / quiz.answered) * 100) : 0;
+  const title = parentTitleForProgress(100);
+  return `
+    <div class="quiz-complete">
+      <h3>${escapeHtml(title)}</h3>
+      <p>You finished the quiz with ${quiz.score} points and ${accuracy}% accuracy. Tiny steady practice counts.</p>
+      <div class="quiz-stat-grid">
+        <span><strong>${quiz.score}</strong> Final score</span>
+        <span><strong>${quiz.correct}</strong> Correct</span>
+        <span><strong>${quiz.answered}</strong> Answered</span>
+        <span><strong>${accuracy}%</strong> Accuracy</span>
+      </div>
+      <button class="primary" type="button" data-quiz-action="restart">Start Another Quiz</button>
+    </div>
+  `;
+}
+
+function parentTitleForProgress(percent) {
+  if (percent >= 100) return "Everyday Parenting Champion";
+  if (percent >= 75) return "Hero Parent";
+  if (percent >= 50) return "Brain-Building Parent";
+  if (percent >= 25) return "Calm Parent in Training";
+  return "New Parent Recruit";
+}
+
 function renderSettings() {
   const birthdayInput = document.getElementById("birthday-input");
   if (birthdayInput && document.activeElement !== birthdayInput) birthdayInput.value = state.profile.birthday || "";
@@ -1833,8 +2595,9 @@ function startTicker() {
       return;
     }
     renderActivityStats();
-    if (state.activeTab === "dashboard") renderDashboard();
+    if (state.activeTab === "home" && state.activeHomeTab === "dashboard") renderDashboard();
     updateActivityButtons();
+    if (Date.now() - state.weatherLastUpdated > 30 * 60 * 1000) refreshWeather();
     announceBathProgress();
     announceTummyProgress();
   }, 1000);
@@ -1873,6 +2636,143 @@ function updateTopbarBabyStats() {
   if (weight) parts.push(formatWeightLog(weight));
   if (height) parts.push(formatHeightLog(height));
   element.textContent = parts.length ? parts.join(" / ") : "Stats: --";
+}
+
+async function refreshWeather() {
+  state.weatherLastUpdated = Date.now();
+  try {
+    const { latitude, longitude } = await weatherCoordinates();
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph`;
+    const data = await fetchJson(url);
+    const current = data.current || {};
+    const weatherInfo = weatherCodeInfo(Number(current.weather_code), Number(current.wind_speed_10m));
+
+    state.weather = {
+      latitude,
+      longitude,
+      temperature: Math.round(Number(current.temperature_2m)),
+      description: weatherInfo.description,
+      icon: weatherInfo.icon,
+      websiteUrl: `https://weather.com/weather/today/l/${latitude},${longitude}`
+    };
+  } catch (error) {
+    state.weather = state.weather || {
+      temperature: null,
+      description: "Weather unavailable",
+      icon: "?",
+      websiteUrl: "https://weather.com/"
+    };
+  }
+  updateWeatherDisplay();
+  renderCare();
+}
+
+async function weatherCoordinates() {
+  try {
+    const position = await currentPosition();
+    return {
+      latitude: Number(position.coords.latitude.toFixed(4)),
+      longitude: Number(position.coords.longitude.toFixed(4))
+    };
+  } catch (error) {
+    const location = await fetchJson("https://ipapi.co/json/");
+    if (!Number.isFinite(Number(location.latitude)) || !Number.isFinite(Number(location.longitude))) {
+      throw new Error("Weather location is not available.");
+    }
+    return {
+      latitude: Number(Number(location.latitude).toFixed(4)),
+      longitude: Number(Number(location.longitude).toFixed(4))
+    };
+  }
+}
+
+function currentPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Location is not available."));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: false,
+      maximumAge: 30 * 60 * 1000,
+      timeout: 8000
+    });
+  });
+}
+
+function updateWeatherDisplay() {
+  const button = document.getElementById("weather-shortcut");
+  const icon = document.getElementById("weather-icon");
+  const temp = document.getElementById("weather-temp");
+  if (!button || !icon || !temp) return;
+
+  const weather = state.weather;
+  icon.textContent = weather?.icon || "--";
+  temp.textContent = Number.isFinite(weather?.temperature) ? `${weather.temperature}°F` : "Weather";
+  button.title = weather?.description || "Local weather";
+  button.setAttribute("aria-label", `Open weather${weather?.description ? `, ${weather.description}` : ""}`);
+}
+
+function weatherCodeInfo(code, windSpeed) {
+  if (Number.isFinite(windSpeed) && windSpeed >= 25) return { icon: "🌬", description: "Windy" };
+  if ([0].includes(code)) return { icon: "☀", description: "Sunny" };
+  if ([1, 2].includes(code)) return { icon: "🌤", description: "Partly cloudy" };
+  if ([3, 45, 48].includes(code)) return { icon: "☁", description: "Cloudy" };
+  if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return { icon: "🌧", description: "Rainy" };
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return { icon: "❄", description: "Snowy" };
+  if ([95, 96, 99].includes(code)) return { icon: "⛈", description: "Stormy" };
+  return { icon: "🌡", description: "Weather" };
+}
+
+function openWeatherShortcut() {
+  const webUrl = state.weather?.websiteUrl || "https://weather.com/";
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  if (!isMobile) {
+    window.open(webUrl, "_blank", "noopener");
+    return;
+  }
+
+  const probe = document.createElement("iframe");
+  let fallbackTimer = window.setTimeout(() => {
+    probe.remove();
+    window.location.href = webUrl;
+  }, 900);
+
+  window.addEventListener("blur", () => {
+    window.clearTimeout(fallbackTimer);
+    probe.remove();
+  }, { once: true });
+
+  probe.style.display = "none";
+  probe.src = "weather://";
+  document.body.appendChild(probe);
+}
+
+function openChatGptShortcut() {
+  const webUrl = "https://chatgpt.com/";
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  if (!isMobile) {
+    window.open(webUrl, "_blank", "noopener");
+    return;
+  }
+
+  const probe = document.createElement("iframe");
+  let fallbackTimer = window.setTimeout(() => {
+    probe.remove();
+    window.location.href = webUrl;
+  }, 900);
+
+  window.addEventListener("blur", () => {
+    window.clearTimeout(fallbackTimer);
+    probe.remove();
+  }, { once: true });
+
+  probe.style.display = "none";
+  probe.src = "chatgpt://";
+  document.body.appendChild(probe);
 }
 
 function renderActivityStats() {
