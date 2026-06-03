@@ -26,6 +26,17 @@ const state = {
   selectedCareIssue: null,
   selectedCareSubtab: {},
   careInfo: {},
+  babyCriesAssistant: {
+    open: false,
+    inFlight: false,
+    lastSignature: "",
+    lastRunAt: 0,
+    result: null,
+    source: "",
+    updatedAt: "",
+    error: "",
+    prompt: ""
+  },
   milestoneProgress: {},
   selectedMilestoneId: null,
   ticker: null,
@@ -99,6 +110,8 @@ const heightUnits = {
   mm: { label: "mm", mm: 1 }
 };
 
+const feedingBurpReminder = "Burp baby after feeding.";
+
 const activities = [
   {
     title: "Sleep and Awake",
@@ -116,8 +129,8 @@ const activities = [
     icon: "heart",
     helper: "Start side reminder updates after each feed.",
     actions: [
-      { label: "Left", icon: "left", payload: { type: "feeding", method: "breast", side: "left" }, reminder: "Try right side next time." },
-      { label: "Right", icon: "right", payload: { type: "feeding", method: "breast", side: "right" }, reminder: "Try left side next time." }
+      { label: "Left", icon: "left", payload: { type: "feeding", method: "breast", side: "left" }, reminder: `${feedingBurpReminder} Try right side next time.` },
+      { label: "Right", icon: "right", payload: { type: "feeding", method: "breast", side: "right" }, reminder: `${feedingBurpReminder} Try left side next time.` }
     ]
   },
   {
@@ -191,6 +204,7 @@ const activities = [
 ];
 
 const careIssues = [
+  { key: "troubleshoot", title: "Troubleshoot", helper: "Fix it with care.", header: "troubleshoot" },
   { key: "eat", title: "Eat", helper: "Feeding and appetite concerns.", header: "eat" },
   { key: "sleep", title: "Sleep", helper: "Rest, naps, and bedtime concerns.", header: "sleep" },
   { key: "hygiene", title: "Hygiene", helper: "Diaper, bath, and clean-up concerns.", header: "hygiene" },
@@ -504,7 +518,7 @@ document.getElementById("bottle-form").addEventListener("submit", async (event) 
   event.preventDefault();
   const ounces = Number(document.getElementById("bottle-slider").value);
   document.getElementById("bottle-dialog").close();
-  await createLog({ type: "bottle", ounces });
+  await createLog({ type: "bottle", ounces }, feedingBurpReminder);
 });
 
 document.getElementById("weight-form").addEventListener("submit", async (event) => {
@@ -587,6 +601,11 @@ async function loadCareInfo() {
   } catch (error) {
     state.careInfo.sleep = null;
   }
+  try {
+    state.careInfo.eat = await fetchJson("/data/care/feeding-cheatsheet.json");
+  } catch (error) {
+    state.careInfo.eat = null;
+  }
 }
 
 function activateTab(tab) {
@@ -655,19 +674,28 @@ function renderActivities() {
           <h3 data-card-title="${activity.key}">${activity.title}</h3>
           <p data-card-subtitle="${activity.key}">${activity.helper}</p>
         </div>
-        ${activity.key === "sleep" ? `
-          <div class="sleep-motion" aria-hidden="true">
+        ${["sleep", "bath", "tummy", "outdoor"].includes(activity.key) ? `
+          <div class="activity-motion" aria-hidden="true">
             <span class="star-field"></span>
             <span class="star-field"></span>
             <span class="star-field"></span>
             <span class="cloud-field"></span>
             <span class="cloud-field"></span>
             <span class="cloud-field"></span>
+            <span class="bubble-field"></span>
+            <span class="bubble-field"></span>
+            <span class="sweat-field"></span>
+            <span class="sweat-field"></span>
           </div>
         ` : ""}
         <button class="card-more" type="button" data-more-card="${activity.key}" aria-label="Show today's ${activity.title} logs">
           <span></span><span></span><span></span>
         </button>
+        ${activity.key === "boobie" ? `
+          <button class="card-care-link" type="button" data-care-shortcut="eat" data-care-subtab-shortcut="boobie-positions" aria-label="Open Boobie Positions">
+            <img src="/assets/activity/icon-bottle.png" alt="" loading="lazy">
+          </button>
+        ` : ""}
         ${["bath", "tummy"].includes(activity.key) ? `
           <button class="sound-toggle" type="button" data-${activity.key}-sound-toggle aria-label="${activity.title} sound is off">
             <span class="speaker-icon" aria-hidden="true"></span>
@@ -713,6 +741,10 @@ function renderActivities() {
     button.addEventListener("click", () => openActivityLogs(button.dataset.moreCard));
   });
 
+  document.querySelectorAll("[data-care-shortcut]").forEach((button) => {
+    button.addEventListener("click", () => openCareShortcut(button.dataset.careShortcut, button.dataset.careSubtabShortcut));
+  });
+
   document.querySelectorAll("[data-bath-sound-toggle]").forEach((button) => {
     button.addEventListener("click", toggleBathSound);
   });
@@ -720,6 +752,15 @@ function renderActivities() {
   document.querySelectorAll("[data-tummy-sound-toggle]").forEach((button) => {
     button.addEventListener("click", toggleTummySound);
   });
+}
+
+function openCareShortcut(issueKey, subtabKey = "") {
+  if (!careIssues.some((issue) => issue.key === issueKey)) return;
+  state.selectedCareIssue = issueKey;
+  if (subtabKey) state.selectedCareSubtab[issueKey] = subtabKey;
+  activateTab("care");
+  renderCare();
+  document.getElementById("care")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function renderCare() {
@@ -739,12 +780,26 @@ function renderCare() {
         renderCare();
       });
     });
+    panel.querySelector("[data-baby-cries-llama]")?.addEventListener("click", () => {
+      state.babyCriesAssistant.open = true;
+      updateBabyCriesAssistantPanel();
+      maybeRefreshBabyCriesAssistant(true);
+    });
+    panel.querySelector("[data-baby-cries-close]")?.addEventListener("click", () => {
+      state.babyCriesAssistant.open = false;
+      updateBabyCriesAssistantPanel();
+    });
     return;
   }
 
+  const columns = careIssueColumns();
   panel.innerHTML = `
     <div class="care-grid">
-      ${careIssues.map(renderCareIssueCard).join("")}
+      ${columns.map((column) => `
+        <div class="care-column">
+          ${column.map(renderCareIssueCard).join("")}
+        </div>
+      `).join("")}
     </div>
   `;
 
@@ -756,7 +811,16 @@ function renderCare() {
   });
 }
 
+function careIssueColumns() {
+  const columnCount = 3;
+  return careIssues.reduce((columns, issue, index) => {
+    columns[index % columnCount].push(issue);
+    return columns;
+  }, Array.from({ length: columnCount }, () => []));
+}
+
 function renderCareIssueCard(issue) {
+  const info = renderCareIssueCardInfo(issue);
   return `
     <button class="activity-card care-card" type="button" data-care-issue="${escapeAttr(issue.key)}" style="--card-image: url('${careHeaderImage(issue.header)}')">
       <div class="card-top card-header">
@@ -765,14 +829,15 @@ function renderCareIssueCard(issue) {
           <p>${escapeHtml(issue.helper)}</p>
         </div>
       </div>
-      <div class="card-info care-card-info">${renderCareIssueCardInfo(issue)}</div>
+      ${info ? `<div class="card-info care-card-info">${info}</div>` : ""}
     </button>
   `;
 }
 
 function renderCareIssueCardInfo(issue) {
-  if (issue.key !== "sleep") return "";
-  return `<ul class="care-card-bullets">${sleepCardBullets().map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
+  const bullets = issue.key === "sleep" ? sleepCardBullets() : issue.key === "eat" ? eatCardBullets() : [];
+  if (!bullets.length) return "";
+  return `<ul class="care-card-bullets">${bullets.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
 }
 
 function sleepCardBullets() {
@@ -789,10 +854,113 @@ function sleepCardBullets() {
   const row = relevantSleepRow(data);
   return [
     `Sleep milestones: ${row ? `${row.age}: ${row.sleepMilestone}; wake ${row.wakeWindow}` : "Set birthday for age-based guidance"}`,
-    `Nap: ${row ? row.nap : "Set birthday for age-based guidance"}`,
+    `Nap: ${row ? `${row.nap}; ${row.recommendedNapTime || "30 min-2 hrs each"}. Dark, quiet room. Limit long naps to 2-3x/day.` : "Set birthday for age-based guidance"}`,
     `Outdoor clothing: ${outdoorClothingRecommendation(data)}`,
-    `Indoor clothing: ${data.indoorClothing || "Coming soon"}`
+    `Indoor clothing: ${data.indoorClothing || "Coming soon"}`,
+    "Start bedtime routine 30-60m before bed; watch sleepy cues to start routine."
   ];
+}
+
+function eatCardBullets() {
+  const data = state.careInfo.eat;
+  if (!data) {
+    return [
+      "Eat milestones: Loading...",
+      "Breastfeed: Loading...",
+      "Milk Pump: Loading...",
+      "Bottle: Loading...",
+      "Wet diapers: Loading..."
+    ];
+  }
+
+  const row = relevantFeedingRow(data);
+  return [
+    `Eat milestones: ${row ? formatFeedingMilestoneRow(row) : "Set birthday for age-based guidance"}`,
+    "Breastfeed: Warm compress before feed; alternate sides; cold compress after feed.",
+    `Milk Pump: ${milkPumpReminder(data)}`,
+    `Bottle: ${bottleReminder(data, row)}`,
+    `Wet diapers: ${wetDiaperReminder(data)}`
+  ];
+}
+
+function relevantFeedingRow(data) {
+  const ageMonths = babyAgeMonths();
+  if (!Number.isFinite(ageMonths)) return null;
+  const rows = findCareSectionById(data.sections, "feeding-milestones")?.rows || [];
+  return rows.find((row) => ageRangeMatches(row.age, ageMonths)) || rows[rows.length - 1] || null;
+}
+
+function formatFeedingMilestoneRow(row) {
+  const notes = Array.isArray(row.notes) && row.notes.length ? `; Notes: ${row.notes.join(", ")}` : "";
+  return `${row.age}: ${row.whatToFeed}; ${row.howOften}; ${row.amountPerFeed}; nipple ${row.bottleNipple}${notes}`;
+}
+
+function milkPumpReminder(data) {
+  const whenToPump = findCareSectionById(data.sections, "when-to-pump")?.items || [];
+  const exclusive = whenToPump.find((item) => /times\/day/i.test(item)) || "8-10 times/day for exclusive pumping";
+  const powerSteps = findCareSectionById(data.sections, "power-pumping")?.steps || [];
+  const trend = latestWeightTrend();
+  if (trend === "not-increasing") {
+    return `${exclusive}. Weight is not increasing in latest logs; consider power pumping${powerSteps.length ? ` (${powerSteps.join(" -> ")})` : ""}.`;
+  }
+  if (trend === "increasing") return `${exclusive}. Latest weight is increasing; keep tracking.`;
+  return `${exclusive}. Log at least 2 weights to watch supply trend.`;
+}
+
+function bottleReminder(data, milestoneRow) {
+  const nipple = relevantNippleSize(data) || milestoneRow?.bottleNipple || "age-appropriate nipple";
+  const milkTemp = findCareSectionById(data.sections, "milk-temperature")?.items || [];
+  return `Nipple ${nipple}; milk ${milkTemp.join(", ") || "warm to body temperature and test on wrist"}.`;
+}
+
+function relevantNippleSize(data) {
+  const ageMonths = babyAgeMonths();
+  if (!Number.isFinite(ageMonths)) return "";
+  const rows = findCareSectionById(data.sections, "nipple-size-guide")?.rows || [];
+  const row = rows.find((item) => ageRangeMatches(item[0], ageMonths)) || rows[rows.length - 1];
+  return row?.[1] || "";
+}
+
+function wetDiaperReminder(data) {
+  const rows = findCareSectionById(data.sections, "wet-diapers")?.rows || [];
+  const ageDays = babyAgeDays();
+  const label = Number.isFinite(ageDays) ? (ageDays >= 4 ? "Day 4+" : `Day ${Math.max(1, ageDays)}`) : "";
+  const row = rows.find((item) => item[0] === label) || rows[rows.length - 1];
+  const logged = summarizeLogsToday().wetDiapers;
+  if (!row) return `${logged} logged today; database guidance unavailable.`;
+  return `${row[0]} expected ${row[1]}; ${logged} logged today.`;
+}
+
+function findCareSectionById(sections, id) {
+  for (const section of sections || []) {
+    if (section.id === id) return section;
+    const found = findCareSectionById(section.subsections, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+function ageRangeMatches(label, ageMonths) {
+  const text = String(label || "").toLowerCase();
+  const match = text.match(/(\d+)\s*-\s*(\d+)\+?\s*months?/);
+  if (match) return ageMonths >= Number(match[1]) && ageMonths <= Number(match[2]);
+  const plus = text.match(/(\d+)\+\s*months?/);
+  if (plus) return ageMonths >= Number(plus[1]);
+  const single = text.match(/(\d+)\s*months?/);
+  if (single) return Math.round(ageMonths) === Number(single[1]);
+  return false;
+}
+
+function latestWeightTrend() {
+  const weights = state.logs
+    .filter((log) => log.type === "growth_stats" && (log.stat === "weight" || (!log.stat && (log.weight || log.weightGrams))))
+    .map((log) => ({ log, grams: readWeightGrams(log) }))
+    .filter((item) => item.grams > 0)
+    .sort((a, b) => logTime(a.log) - logTime(b.log));
+  if (weights.length < 2) return "unknown";
+  const previous = weights[weights.length - 2].grams;
+  const latest = weights[weights.length - 1].grams;
+  return latest > previous ? "increasing" : "not-increasing";
 }
 
 function relevantSleepRow(data) {
@@ -811,6 +979,7 @@ function outdoorClothingRecommendation(data) {
 }
 
 function renderCareIssueView(issue) {
+  if (issue.key === "troubleshoot") return renderTroubleshootCareView(issue);
   if (issue.key === "eat") return renderEatCareView(issue);
   if (issue.key === "sleep") return renderSleepCheatsheetImage(issue);
 
@@ -826,10 +995,192 @@ function renderCareIssueView(issue) {
   `;
 }
 
+function renderTroubleshootCareView(issue) {
+  return `
+    <section class="care-detail">
+      <button class="ghost care-back-button" type="button" data-care-back>Back to Care</button>
+      <div class="care-detail-hero" style="--card-image: url('${careHeaderImage(issue.header)}')">
+        <h3>${escapeHtml(issue.title)}</h3>
+        <p>${escapeHtml(issue.helper)}</p>
+      </div>
+      <div class="care-image-viewer">
+        ${renderBabyCriesCardClean()}
+        <div class="baby-cries-llama-row">
+          <button class="baby-cries-llama-button" type="button" data-baby-cries-llama aria-expanded="${state.babyCriesAssistant.open ? "true" : "false"}">
+            <img src="/assets/care/llama.png" alt="">
+            <span>Ask Llama</span>
+          </button>
+        </div>
+        <div id="baby-cries-assistant-slot">
+          ${state.babyCriesAssistant.open ? renderBabyCriesAssistantPanel() : ""}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderBabyCriesAssistantPanel() {
+  const assistant = state.babyCriesAssistant;
+  const result = assistant.result;
+  const status = assistant.inFlight ? "Checking logs..." : assistant.error ? "Fallback guidance" : result ? "Llama's Thoughts" : "Waiting to review logs";
+  const updated = assistant.updatedAt ? formatAssistantUpdatedAt(assistant.updatedAt) : "--";
+  const source = assistant.source === "llama" ? "Llama" : assistant.source === "fallback" ? "Fallback" : "Local review";
+  const inspections = result?.inspections || [];
+
+  return `
+    <section class="baby-cries-assistant" id="baby-cries-assistant" aria-live="polite">
+      <div class="baby-cries-assistant-top">
+        <div>
+          <span>${escapeHtml(status)}</span>
+          <h4>${escapeHtml(result?.likelyReason || "Baby cries review")}</h4>
+        </div>
+        <div class="baby-cries-assistant-actions">
+          <span class="baby-cries-confidence confidence-${escapeAttr((result?.confidence || "low").toLowerCase())}">${escapeHtml(result?.confidence || "Low")}</span>
+          <button type="button" data-baby-cries-close aria-label="Close Llama recommendation">x</button>
+        </div>
+      </div>
+      <div class="baby-cries-assistant-grid">
+        <div>
+          <strong>Reasoning</strong>
+          <p>${escapeHtml(result?.reasoning || "I will review recent feeding, diaper, sleep, weather, and care guidance while this view is open.")}</p>
+        </div>
+        <div>
+          <strong>Next action</strong>
+          <p>${escapeHtml(result?.suggestedAction || "Start with the Baby cries checklist above.")}</p>
+        </div>
+      </div>
+      ${inspections.length ? `
+        <div class="baby-cries-inspections">
+          <strong>Step inspection</strong>
+          <ol>
+            ${inspections.map((item) => `
+              <li>
+                <span>${escapeHtml(item.label || `Step ${item.step || ""}`)}</span>
+                <small>${escapeHtml(item.status || "unknown")}</small>
+                <p>${escapeHtml(item.reasoning || "No information found.")}</p>
+              </li>
+            `).join("")}
+          </ol>
+        </div>
+      ` : ""}
+      ${assistant.prompt ? `
+        <details class="baby-cries-prompt" open>
+          <summary>User default prompt to Llama</summary>
+          <pre>${escapeHtml(assistant.prompt)}</pre>
+        </details>
+      ` : ""}
+      <div class="baby-cries-assistant-meta">
+        <span>${escapeHtml(source)}</span>
+        <span>Updated: ${escapeHtml(updated)}</span>
+        ${assistant.error ? `<span>${escapeHtml(assistant.error)}</span>` : ""}
+      </div>
+    </section>
+  `;
+}
+
+function isBabyCriesAssistantVisible() {
+  return state.activeTab === "home" && state.activeHomeTab === "care" && state.selectedCareIssue === "troubleshoot";
+}
+
+function babyCriesAssistantSignature() {
+  const reviewCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const recentLogs = state.logs
+    .slice()
+    .filter((log) => logTime(log) >= reviewCutoff)
+    .sort((a, b) => logTime(b) - logTime(a))
+    .slice(0, 80)
+    .map((log) => ({
+      id: log.id,
+      type: log.type,
+      date: log.date,
+      time: log.time,
+      status: log.status || "",
+      method: log.method || "",
+      side: log.side || "",
+      ounces: log.ounces || "",
+      pee: Boolean(log.pee),
+      poop: Boolean(log.poop),
+      notes: log.notes || ""
+    }));
+  return JSON.stringify({
+    birthday: state.profile.birthday || "",
+    summary: state.summary || {},
+    weather: state.weather ? {
+      temperature: state.weather.temperature,
+      description: state.weather.description
+    } : null,
+    recentLogs
+  });
+}
+
+async function maybeRefreshBabyCriesAssistant(force = false) {
+  if (!isBabyCriesAssistantVisible()) return;
+  const assistant = state.babyCriesAssistant;
+  if (!assistant.open) return;
+  const now = Date.now();
+  if (assistant.inFlight) return;
+  if (!force && now - assistant.lastRunAt < 60_000) return;
+
+  const signature = babyCriesAssistantSignature();
+  if (!force && assistant.result && signature === assistant.lastSignature) return;
+
+  assistant.inFlight = true;
+  assistant.lastRunAt = now;
+  assistant.error = "";
+  updateBabyCriesAssistantPanel();
+
+  try {
+    const payload = await fetchJson("/api/troubleshoot/baby-cries", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        weather: state.weather ? {
+          temperature: state.weather.temperature,
+          description: state.weather.description,
+          icon: state.weather.icon
+        } : null
+      })
+    });
+    assistant.result = payload.recommendation || null;
+    assistant.source = payload.source || "fallback";
+    assistant.updatedAt = payload.updatedAt || new Date().toISOString();
+    assistant.prompt = payload.prompt || payload.llamaPrompt || "";
+    assistant.lastSignature = signature;
+    assistant.error = payload.llama?.available === false && payload.llama?.error ? "Llama unavailable; using fallback." : "";
+  } catch (error) {
+    assistant.error = `Could not review logs: ${error.message}`;
+    assistant.source = "fallback";
+    assistant.updatedAt = new Date().toISOString();
+    assistant.prompt = "";
+  } finally {
+    assistant.inFlight = false;
+    updateBabyCriesAssistantPanel();
+  }
+}
+
+function updateBabyCriesAssistantPanel() {
+  const slot = document.getElementById("baby-cries-assistant-slot");
+  if (!slot) return;
+  slot.innerHTML = state.babyCriesAssistant.open ? renderBabyCriesAssistantPanel() : "";
+  slot.querySelector("[data-baby-cries-close]")?.addEventListener("click", () => {
+    state.babyCriesAssistant.open = false;
+    updateBabyCriesAssistantPanel();
+  });
+  const button = document.querySelector("[data-baby-cries-llama]");
+  if (button) button.setAttribute("aria-expanded", state.babyCriesAssistant.open ? "true" : "false");
+}
+
+function formatAssistantUpdatedAt(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "--";
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+}
+
 function renderEatCareView(issue) {
   const tabs = [
     { key: "cheatsheet", label: "Cheatsheet", image: "/assets/care/feeding-cheatsheet.png", alt: "Baby feeding cheatsheet" },
-    { key: "hunger-cues", label: "Hunger Cues", image: "/assets/care/feeding-hunger-cues.png", alt: "Baby feeding hunger cues" }
+    { key: "hunger-cues", label: "Hunger Cues", image: "/assets/care/feeding-hunger-cues.png", alt: "Baby feeding hunger cues" },
+    { key: "boobie-positions", label: "Boobie Positions", image: "/assets/care/boobie-positions.png", alt: "Boobie breastfeeding positions" }
   ];
   const activeKey = state.selectedCareSubtab.eat || "cheatsheet";
   const activeTab = tabs.find((tab) => tab.key === activeKey) || tabs[0];
@@ -849,14 +1200,140 @@ function renderEatCareView(issue) {
         `).join("")}
       </div>
       <div class="care-image-viewer">
+        ${activeTab.key === "hunger-cues" ? renderHungerCuesQuickCardClean() : ""}
         <img src="${escapeAttr(activeTab.image)}" alt="${escapeAttr(activeTab.alt)}">
       </div>
     </section>
   `;
 }
 
+function renderHungerCuesQuickCard() {
+  const cues = ["Lip smacking", "Hands to mouth", "Rooting (turning head)", "Fussiness", "Crying (late sign)"];
+  return `
+    <section class="hunger-cues-quick" aria-label="Hunger cues quick guide">
+      <div class="hunger-cues-copy">
+        <h4>Hunger Cues</h4>
+        <p>(Watch for early signs)</p>
+        <ul>
+          ${cues.map((cue) => `<li><span aria-hidden="true">✓</span>${escapeHtml(cue)}</li>`).join("")}
+        </ul>
+      </div>
+      <div class="hunger-cues-bottle" aria-hidden="true">
+        <div class="bottle-cap"></div>
+        <div class="bottle-body">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderBabyCriesCard() {
+  const steps = [
+    { icon: "🍼", label: "Hungry?", note: "Time to feed" },
+    { icon: "🧷", label: "Wet diaper?", note: "Check and change" },
+    { icon: "👶", label: "Need burp?", note: "Burp gently" },
+    { icon: "🌡", label: "Too hot/cold?", note: "Adjust clothes or temperature" },
+    { icon: "💤", label: "Overtired?", note: "Too much stimulation" },
+    { icon: "➕", label: "Sick?", note: "Pain, illness, or discomfort" }
+  ];
+  const soothing = ["Hold close (skin-to-skin)", "White noise", "Walk or gentle movement", "Shush (loud \"shhh\")", "Swaddle (if not rolling)", "Dim lights"];
+
+  return `
+    <section class="baby-cries-card" aria-label="Baby cries algorithm">
+      <div class="baby-cries-title">
+        <span>4</span>
+        <strong>Baby cries?</strong>
+      </div>
+      <div class="baby-cries-body">
+        <div class="baby-cries-flow">
+          ${steps.map((step, index) => `
+            <div class="baby-cries-step">
+              <span class="baby-cries-number">${index + 1}</span>
+              <div class="baby-cries-icon" aria-hidden="true">${step.icon}</div>
+              <strong>${escapeHtml(step.label)}</strong>
+              <p>${escapeHtml(step.note)}</p>
+            </div>
+          `).join("")}
+        </div>
+        <aside class="baby-cries-soothe">
+          <h4>Still crying?</h4>
+          <p>Try soothing techniques:</p>
+          <ul>
+            ${soothing.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+          </ul>
+          <small>Crying is communication, not manipulation.</small>
+        </aside>
+      </div>
+      <p class="baby-cries-note"><strong>Remember:</strong> Witching hour (evening fussiness) is normal. Peaks around 6-8 weeks and improves.</p>
+    </section>
+  `;
+}
+
 function renderSleepCheatsheetImage(issue) {
   return renderCareCheatsheetImage(issue, "/assets/care/sleep-cheatsheet.png", "Baby sleep cheatsheet");
+}
+
+function renderHungerCuesQuickCardClean() {
+  const cues = ["Lip smacking", "Hands to mouth", "Rooting (turning head)", "Fussiness", "Crying (late sign)"];
+  return `
+    <section class="hunger-cues-quick" aria-label="Hunger cues quick guide">
+      <div class="hunger-cues-copy">
+        <h4>Hunger Cues</h4>
+        <p>(Watch for early signs)</p>
+        <ul>
+          ${cues.map((cue) => `<li><span aria-hidden="true">&#10003;</span>${escapeHtml(cue)}</li>`).join("")}
+        </ul>
+      </div>
+      <div class="hunger-cues-bottle" aria-hidden="true">
+        <div class="bottle-cap"></div>
+        <div class="bottle-body">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderBabyCriesCardClean() {
+  const steps = [
+    { icon: "&#127868;", label: "Hungry?", note: "Time to feed" },
+    { icon: "&#129527;", label: "Wet diaper?", note: "Check and change" },
+    { icon: "&#128118;", label: "Need burp?", note: "Burp gently" },
+    { icon: "&#127777;", label: "Too hot/cold?", note: "Adjust clothes or temperature" },
+    { icon: "Zz", label: "Overtired?", note: "Too much stimulation" },
+    { icon: "&#9877;", label: "Sick?", note: "Pain, illness, or discomfort" }
+  ];
+  const soothing = ["Hold close (skin-to-skin)", "White noise", "Walk or gentle movement", "Shush (loud \"shhh\")", "Swaddle (if not rolling)", "Dim lights"];
+
+  return `
+    <section class="baby-cries-card" aria-label="Baby cries algorithm">
+      <div class="baby-cries-title">
+        <strong>Baby cries?</strong>
+      </div>
+      <div class="baby-cries-body">
+        <div class="baby-cries-flow">
+          ${steps.map((step, index) => `
+            <div class="baby-cries-step" style="--step-index: ${index}">
+              <span class="baby-cries-number">${index + 1}</span>
+              <div class="baby-cries-icon" aria-hidden="true">${step.icon}</div>
+              <strong>${escapeHtml(step.label)}</strong>
+              <p>${escapeHtml(step.note)}</p>
+            </div>
+          `).join("")}
+        </div>
+        <aside class="baby-cries-soothe">
+          <h4>Still crying?</h4>
+          <p>Try soothing techniques:</p>
+          <ul>
+            ${soothing.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+          </ul>
+          <small>Crying is communication, not manipulation.</small>
+        </aside>
+      </div>
+      <p class="baby-cries-note"><strong>Remember:</strong> Witching hour (evening fussiness) is normal. Peaks around 6-8 weeks and improves.</p>
+    </section>
+  `;
 }
 
 function renderCareCheatsheetImage(issue, imagePath, altText) {
@@ -1157,6 +1634,12 @@ function babyAgeWeeks() {
   const birth = new Date(`${birthday}T00:00:00`);
   if (Number.isNaN(birth.getTime())) return NaN;
   return Math.floor((Date.now() - birth.getTime()) / (7 * 24 * 60 * 60 * 1000));
+}
+
+function babyAgeMonths() {
+  const days = babyAgeDays();
+  if (!Number.isFinite(days)) return NaN;
+  return days / 30.4375;
 }
 
 function displayAgeLabel(milestone) {
@@ -2598,6 +3081,7 @@ function startTicker() {
     if (state.activeTab === "home" && state.activeHomeTab === "dashboard") renderDashboard();
     updateActivityButtons();
     if (Date.now() - state.weatherLastUpdated > 30 * 60 * 1000) refreshWeather();
+    maybeRefreshBabyCriesAssistant();
     announceBathProgress();
     announceTummyProgress();
   }, 1000);
@@ -2778,6 +3262,7 @@ function openChatGptShortcut() {
 function renderActivityStats() {
   const stats = getActivityStats();
   updateSleepHeader();
+  updateMotionHeaders();
   Object.entries(stats).forEach(([key, stat]) => {
     const element = document.querySelector(`[data-card-info="${key}"]`);
     if (!element) return;
@@ -2788,6 +3273,23 @@ function renderActivityStats() {
         <small>${stat.helper}</small>
       `}
     `;
+  });
+}
+
+function updateMotionHeaders() {
+  const bath = getCurrentState("bath");
+  const tummy = getCurrentState("tummy_time");
+  const outdoor = getCurrentState("outdoor_time");
+  const states = {
+    bath: bath.status === "start",
+    tummy: tummy.status === "start",
+    outdoor: outdoor.status === "start"
+  };
+
+  Object.entries(states).forEach(([key, active]) => {
+    const card = document.querySelector(`[data-activity-card="${key}"]`);
+    if (!card) return;
+    card.classList.toggle(`${key}-active-header`, active);
   });
 }
 
@@ -2844,9 +3346,9 @@ function getActivityStats() {
   const bath = getCurrentState("bath");
   const todaySummary = summarizeLogsToday();
   const sleepLabel = sleep.status === "asleep" ? "Asleep" : "Awake";
-  const tummyLabel = tummy.status === "start" ? "Started" : "Ended";
-  const outdoorLabel = outdoor.status === "start" ? "Started" : "Ended";
-  const bathLabel = bath.status === "start" ? "Bathing" : "Stopped";
+  const tummyLabel = activityStatusLabel(tummy, "Started");
+  const outdoorLabel = activityStatusLabel(outdoor, "Started");
+  const bathLabel = activityStatusLabel(bath, "Bathing");
 
   return {
     sleep: {
@@ -2879,17 +3381,17 @@ function getActivityStats() {
       html: renderGrowthCardInfo()
     },
     bath: {
-      label: `${bathLabel} ${formatDuration(elapsedTodaySince(bath.log))}${formatSince(bath.log)}`,
+      label: bathLabel,
       value: formatTotalDuration(totalToday("bath", "start", "end")),
       helper: `Sound ${state.bathSoundEnabled ? "on" : "off"} - every ${formatReminderPeriod(state.bathReminderSeconds)}`
     },
     tummy: {
-      label: `${tummyLabel} ${formatDuration(elapsedTodaySince(tummy.log))}${formatSince(tummy.log)}`,
+      label: tummyLabel,
       value: formatTotalDuration(totalToday("tummy_time", "start", "end")),
       helper: `Sound ${state.tummySoundEnabled ? "on" : "off"} - every ${formatReminderPeriod(state.tummyReminderSeconds)}`
     },
     outdoor: {
-      label: `${outdoorLabel} ${formatDuration(elapsedTodaySince(outdoor.log))}${formatSince(outdoor.log)}`,
+      label: outdoorLabel,
       value: formatTotalDuration(totalToday("outdoor_time", "start", "end")),
       helper: `${todaySummary.outdoorTimeEvents} start/end taps today`
     },
@@ -2899,6 +3401,14 @@ function getActivityStats() {
       helper: "Play sessions today"
     }
   };
+}
+
+function activityStatusLabel(activity, activeLabel) {
+  if (activity.status === "start") {
+    return `${activeLabel} ${formatDuration(elapsedTodaySince(activity.log))}${formatSince(activity.log)}`;
+  }
+  const endTime = formatSinceTime(activity.log);
+  return `Ended since ${endTime === "not logged yet" ? "--" : endTime}`;
 }
 
 function summarizeLogsToday() {

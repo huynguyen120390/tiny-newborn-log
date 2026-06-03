@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Phương Nam Cu Tí</title>
-    <link rel="stylesheet" href="/styles.css?v=20260603-home-nav">
+    <link rel="stylesheet" href="/styles.css?v=20260603-llama-prompt-month">
   </head>
   <body>
     <div class="app-shell">
@@ -245,7 +245,10 @@
               </div>
               <label>
                 Every
-                <input id="bath-reminder-seconds" name="seconds" type="number" min="5" max="3600" step="1">
+                <span class="settings-unit-field">
+                  <input id="bath-reminder-seconds" name="seconds" type="number" min="5" max="3600" step="1">
+                  <span>seconds</span>
+                </span>
               </label>
               <button class="primary" type="submit">Save reminder</button>
             </form>
@@ -257,18 +260,25 @@
               </div>
               <label>
                 Every
-                <input id="tummy-reminder-seconds" name="seconds" type="number" min="5" max="3600" step="1">
+                <span class="settings-unit-field">
+                  <input id="tummy-reminder-seconds" name="seconds" type="number" min="5" max="3600" step="1">
+                  <span>seconds</span>
+                </span>
               </label>
               <button class="primary" type="submit">Save reminder</button>
             </form>
 
-            <div class="settings-card danger-zone">
+            <details class="settings-card danger-zone danger-expander">
+              <summary>
+                <span>Data</span>
+                <small>Clear local logs and progress</small>
+              </summary>
               <div>
                 <h3>Data</h3>
                 <p>Clear all local logs, milestone progress, and reset today totals.</p>
               </div>
               <button id="clear-data-button" class="danger-button" type="button">Clear data</button>
-            </div>
+            </details>
             <p id="settings-status" class="settings-status" aria-live="polite"></p>
             <div class="settings-bottom-tools">
               <h3>Tools</h3>
@@ -441,6 +451,6 @@
       </form>
     </template>
 
-    <script src="/app.js?v=20260603-home-nav"></script>
+    <script src="/app.js?v=20260603-llama-prompt-month"></script>
   </body>
 </html>
