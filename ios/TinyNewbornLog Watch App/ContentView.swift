@@ -57,6 +57,9 @@ struct ContentView: View {
                 .padding(.bottom, 10)
             }
             .navigationTitle("Tiny Log")
+            .task {
+                await store.retryPendingSyncs()
+            }
             .sheet(item: $activeSheet) { sheet in
                 sheetContent(sheet)
             }
@@ -225,7 +228,7 @@ struct ContentView: View {
         case "Syncing...":
             return "arrow.triangle.2.circlepath"
         default:
-            return "wifi"
+            return store.pendingSyncCount > 0 ? "clock.badge.exclamationmark" : "wifi"
         }
     }
 

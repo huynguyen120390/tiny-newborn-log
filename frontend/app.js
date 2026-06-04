@@ -63,6 +63,8 @@ const state = {
   selectedMilestoneId: null,
   ticker: null,
   pendingActionConfirm: null,
+  pendingLogSyncCount: 0,
+  pendingLogSyncing: false,
   currentDate: todayString(),
   weather: null,
   weatherLastUpdated: 0,
@@ -117,6 +119,8 @@ const quizTimerDurations = [
   { label: "15s", value: 15 },
   { label: "20s", value: 20 }
 ];
+
+const pendingLogQueueKey = "pendingLogQueue.v1";
 
 const weightUnits = {
   oz: { label: "oz", grams: 28.349523125 },
@@ -456,6 +460,9 @@ init().catch((error) => {
 });
 
 async function init() {
+  updatePendingLogSyncStatus();
+  window.addEventListener("online", () => retryPendingLogSyncs());
+  window.addEventListener("focus", () => retryPendingLogSyncs());
   renderActivities();
   await loadCareInfo();
   setupHistoryFilters();
@@ -468,6 +475,7 @@ async function init() {
   updateWeatherDisplay();
   refreshWeather();
   await refreshData();
+  await retryPendingLogSyncs({ quiet: true });
   startDashboardOverviewReviews();
 }
 
@@ -481,6 +489,7 @@ async function refreshData() {
 
   state.profile = appData.baby_profile || {};
   state.logs = appData.baby_log || [];
+  mergePendingLogsIntoState();
   state.recent = recent;
   state.summary = summary;
   state.poopColors = Array.isArray(poopColors) ? poopColors : [];
@@ -507,6 +516,153 @@ async function fetchJson(url, options) {
     }
   }
   return response.json();
+}
+
+function readPendingLogQueue() {
+  try {
+    const parsed = JSON.parse(storageGet(pendingLogQueueKey) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((item) => item?.payload?.type) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePendingLogQueue(queue) {
+  storageSet(pendingLogQueueKey, JSON.stringify(queue));
+  updatePendingLogSyncStatus(queue.length);
+}
+
+function updatePendingLogSyncStatus(count = readPendingLogQueue().length) {
+  state.pendingLogSyncCount = count;
+  const element = document.getElementById("pending-log-sync-status");
+  if (!element) return;
+  element.hidden = count <= 0;
+  element.textContent = state.pendingLogSyncing
+    ? `Syncing ${count}`
+    : `${count} pending`;
+}
+
+function makeClientLogId() {
+  const random = Math.random().toString(16).slice(2, 8);
+  return `web-${Date.now()}-${random}`;
+}
+
+function logTimestampParts(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  const safeDate = Number.isFinite(date.getTime()) ? date : new Date();
+  const year = safeDate.getFullYear();
+  const month = String(safeDate.getMonth() + 1).padStart(2, "0");
+  const day = String(safeDate.getDate()).padStart(2, "0");
+  const hour = String(safeDate.getHours()).padStart(2, "0");
+  const minute = String(safeDate.getMinutes()).padStart(2, "0");
+  return {
+    iso: safeDate.toISOString(),
+    date: `${year}-${month}-${day}`,
+    time: `${hour}:${minute}`
+  };
+}
+
+function prepareLogPayload(payload) {
+  const stamp = logTimestampParts(payload.createdAt);
+  return {
+    ...payload,
+    id: payload.id || makeClientLogId(),
+    date: payload.date || stamp.date,
+    time: payload.time || stamp.time,
+    createdAt: payload.createdAt || stamp.iso
+  };
+}
+
+function queuePendingLog(payload) {
+  const prepared = prepareLogPayload(payload);
+  const queue = readPendingLogQueue();
+  const item = {
+    id: prepared.id,
+    queuedAt: new Date().toISOString(),
+    payload: prepared
+  };
+  queue.push(item);
+  writePendingLogQueue(queue);
+  mergePendingLogsIntoState();
+  renderAll();
+  return item;
+}
+
+function localLogFromPendingItem(item) {
+  return {
+    ...item.payload,
+    id: item.id,
+    timestamp: item.payload.createdAt,
+    createdAt: item.payload.createdAt,
+    pendingSync: true
+  };
+}
+
+function mergePendingLogsIntoState() {
+  const pendingLogs = readPendingLogQueue().map(localLogFromPendingItem);
+  if (!pendingLogs.length) return;
+  const ids = new Set(state.logs.map((log) => log.id));
+  pendingLogs.forEach((log) => {
+    if (!ids.has(log.id)) state.logs.push(log);
+  });
+  state.logs.sort((a, b) => logTime(a) - logTime(b));
+}
+
+async function postLogPayload(payload) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  try {
+    return await fetchJson("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function shouldQueueLogError(error) {
+  if (!navigator.onLine) return true;
+  return !error.payload;
+}
+
+async function retryPendingLogSyncs({ quiet = false } = {}) {
+  let queue = readPendingLogQueue();
+  if (!queue.length || state.pendingLogSyncing) return;
+  if (navigator.onLine === false) {
+    updatePendingLogSyncStatus(queue.length);
+    return;
+  }
+
+  state.pendingLogSyncing = true;
+  updatePendingLogSyncStatus(queue.length);
+  let synced = 0;
+
+  try {
+    while (queue.length) {
+      const item = queue[0];
+      await postLogPayload(item.payload);
+      synced += 1;
+      queue = queue.slice(1);
+      writePendingLogQueue(queue);
+    }
+  } catch {
+    // Keep unsent logs queued. The next online/focus/log action will retry.
+  } finally {
+    state.pendingLogSyncing = false;
+    updatePendingLogSyncStatus(queue.length);
+  }
+
+  if (synced > 0) {
+    try {
+      await refreshData();
+    } catch {
+      renderAll();
+    }
+    if (!quiet) showToast(`Synced ${synced} saved log${synced === 1 ? "" : "s"}.`);
+  }
 }
 
 async function loadCareInfo() {
@@ -2971,26 +3127,30 @@ function storageRemove(key) {
 }
 
 async function createLog(payload, reminder) {
+  const logPayload = prepareLogPayload(payload);
   try {
-    const conflict = transitionConflict(payload);
+    const conflict = transitionConflict(logPayload);
     if (conflict) {
       showToast(conflict);
       return;
     }
 
-    const result = await fetchJson("/api/logs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
+    const result = await postLogPayload(logPayload);
 
     state.logs.push(result.log);
     state.recent = result.recent;
     state.summary = result.todaySummary;
     renderAll();
     showReaction("Yay, logged!", reminder || labelForLog(result.log));
+    await retryPendingLogSyncs({ quiet: true });
   } catch (error) {
-    showToast(`Could not log activity: ${error.message}`);
+    if (!shouldQueueLogError(error)) {
+      showToast(`Could not log activity: ${error.message}`);
+      return;
+    }
+
+    const queued = queuePendingLog(logPayload);
+    showReaction("Saved offline", labelForLog(localLogFromPendingItem(queued)));
   }
 }
 

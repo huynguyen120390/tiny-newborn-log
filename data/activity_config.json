@@ -1,0 +1,60 @@
+{
+  "eventCategories": {
+    "sleep": {
+      "label": "Sleep",
+      "kind": "period",
+      "start": "asleep",
+      "end": "awake",
+      "startLabel": "asleep",
+      "endLabel": "awake"
+    },
+    "feeding": {
+      "label": "Boobie",
+      "kind": "quick"
+    },
+    "bottle": {
+      "label": "Bottle",
+      "kind": "quick"
+    },
+    "diaper": {
+      "label": "Diaper",
+      "kind": "quick"
+    },
+    "routine": {
+      "label": "Routine",
+      "kind": "quick"
+    },
+    "growth_stats": {
+      "label": "Growth",
+      "kind": "quick"
+    },
+    "bath": {
+      "label": "Bath",
+      "kind": "period",
+      "start": "start",
+      "end": "end",
+      "startLabel": "in bath",
+      "endLabel": "out of bath"
+    },
+    "tummy_time": {
+      "label": "Tummy Time",
+      "kind": "period",
+      "start": "start",
+      "end": "end",
+      "startLabel": "doing tummy time",
+      "endLabel": "done with tummy time"
+    },
+    "outdoor_time": {
+      "label": "Outdoor",
+      "kind": "period",
+      "start": "start",
+      "end": "end",
+      "startLabel": "outside",
+      "endLabel": "inside"
+    },
+    "baby_gym": {
+      "label": "Baby Gym",
+      "kind": "quick"
+    }
+  }
+}

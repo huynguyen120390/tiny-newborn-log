@@ -6,7 +6,7 @@ actor WebLogSyncClient {
     private let baseURL = URL(string: "http://192.168.86.55:3002")!
 
     func logSleep(status: String) async throws {
-        try await postLog([
+        try await postLogPayload([
             "type": "sleep",
             "status": status,
             "notes": status == "asleep" ? "Baby fell asleep" : "Baby woke up"
@@ -15,7 +15,7 @@ actor WebLogSyncClient {
 
     func logNursing(side: NursingSide) async throws {
         let webSide = side == .right ? "right" : "left"
-        try await postLog([
+        try await postLogPayload([
             "type": "feeding",
             "method": "breast",
             "side": webSide,
@@ -25,7 +25,7 @@ actor WebLogSyncClient {
 
     func logBottle(amountML: Double) async throws {
         let ounces = (amountML / 29.5735 * 100).rounded() / 100
-        try await postLog([
+        try await postLogPayload([
             "type": "bottle",
             "ounces": ounces,
             "notes": "Bottle feed"
@@ -33,7 +33,7 @@ actor WebLogSyncClient {
     }
 
     func logDiaper(_ event: DiaperEvent) async throws {
-        try await postLog([
+        try await postLogPayload([
             "type": "diaper",
             "kind": event == .wee ? "pee" : "poop",
             "poop": event == .poo,
@@ -43,7 +43,7 @@ actor WebLogSyncClient {
 
     func logMeasurement(kind: MeasurementKind, value: Double) async throws {
         if kind == .weight {
-            try await postLog([
+            try await postLogPayload([
                 "type": "growth_stats",
                 "stat": "weight",
                 "weight": value,
@@ -51,7 +51,7 @@ actor WebLogSyncClient {
                 "notes": "\(kind.rawValue): \(value) \(kind.unit)"
             ])
         } else {
-            try await postLog([
+            try await postLogPayload([
                 "type": "growth_stats",
                 "stat": "height",
                 "height": value,
@@ -62,7 +62,7 @@ actor WebLogSyncClient {
     }
 
     func logRoutine(_ routine: RoutineKind) async throws {
-        try await postLog([
+        try await postLogPayload([
             "type": "routine",
             "routine": routine.payloadValue,
             "notes": "\(routine.rawValue) done"
@@ -79,7 +79,26 @@ actor WebLogSyncClient {
             payload["status"] = status
         }
 
-        try await postLog(payload)
+        try await postLogPayload(payload)
+    }
+
+    func postLogPayload(_ payload: [String: Any]) async throws {
+        let body = try JSONSerialization.data(withJSONObject: payload)
+        try await postLogData(body)
+    }
+
+    func postLogData(_ body: Data) async throws {
+        let url = baseURL.appending(path: "api/logs")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 8
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
     }
 
     private func webType(for kind: LogKind) -> String {
@@ -115,16 +134,4 @@ actor WebLogSyncClient {
         return "\(kind.title) logged"
     }
 
-    private func postLog(_ payload: [String: Any]) async throws {
-        let url = baseURL.appending(path: "api/logs")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-
-        let (_, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
-    }
 }

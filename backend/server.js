@@ -284,13 +284,15 @@ function validatePairedTransition(logs, candidate, excludeId, options = {}) {
 
 function buildLog(input) {
   const stamp = nowParts();
+  const inputCreatedAt = typeof input.createdAt === "string" ? new Date(input.createdAt) : null;
+  const createdAt = inputCreatedAt && Number.isFinite(inputCreatedAt.getTime()) ? inputCreatedAt.toISOString() : stamp.iso;
   const base = {
-    id: makeId(),
+    id: cleanText(input.id, makeId()),
     date: input.date || stamp.date,
     time: input.time || stamp.time,
     type: input.type,
-    timestamp: stamp.iso,
-    createdAt: stamp.iso
+    timestamp: createdAt,
+    createdAt
   };
 
   if (input.type === "sleep") {
@@ -2264,6 +2266,16 @@ async function handlePostLog(req, res) {
   const log = buildLog(input);
 
   data.baby_log = Array.isArray(data.baby_log) ? data.baby_log : [];
+  const existing = data.baby_log.find((item) => item.id === log.id);
+  if (existing) {
+    sendJson(res, 200, {
+      log: existing,
+      recent,
+      todaySummary: summarizeToday(data)
+    });
+    return;
+  }
+
   const conflict = validatePairedTransition(data.baby_log, log, undefined, {
     ignoreFutureNext: !input.date && !input.time
   });

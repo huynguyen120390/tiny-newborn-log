@@ -6,11 +6,14 @@ final class LogStore: ObservableObject {
     @Published private(set) var activeSleepStartedAt: Date?
     @Published private(set) var activeActivities: [LogKind: Date] = [:]
     @Published private(set) var syncStatus = "Ready"
+    @Published private(set) var pendingSyncCount = 0
 
     private let activeSleepKey = "activeSleepStartedAt"
     private let activeActivitiesKey = "activeActivityStartedAt"
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
+    private var pendingSyncItems: [PendingSyncItem] = []
+    private var isRetryingPendingSync = false
 
     init() {
         decoder.dateDecodingStrategy = .iso8601
@@ -18,6 +21,12 @@ final class LogStore: ObservableObject {
         loadEntries()
         loadActiveSleep()
         loadActiveActivities()
+        loadPendingSyncItems()
+        updatePendingSyncStatus()
+
+        Task {
+            await retryPendingSyncs()
+        }
     }
 
     var todaysEntries: [NewbornLogEntry] {
@@ -73,27 +82,32 @@ final class LogStore: ObservableObject {
 
     func logDiaper(_ event: DiaperEvent) {
         addEntry(NewbornLogEntry(kind: .diaper, detail: event.rawValue))
-        syncStatus = "Syncing..."
-        Task {
-            do {
-                try await WebLogSyncClient.shared.logDiaper(event)
-                await MainActor.run { syncStatus = "Synced" }
-            } catch {
-                await MainActor.run { syncStatus = "Sync failed" }
-            }
-        }
+        enqueueSync([
+            "type": "diaper",
+            "kind": event == .wee ? "pee" : "poop",
+            "poop": event == .poo,
+            "notes": event == .wee ? "Wee diaper" : "Poo diaper"
+        ])
     }
 
     func logMeasurement(kind: MeasurementKind, value: Double) {
         addEntry(NewbornLogEntry(kind: .babyStats, amountML: value, detail: kind.rawValue, amountUnit: kind.unit))
-        syncStatus = "Syncing..."
-        Task {
-            do {
-                try await WebLogSyncClient.shared.logMeasurement(kind: kind, value: value)
-                await MainActor.run { syncStatus = "Synced" }
-            } catch {
-                await MainActor.run { syncStatus = "Sync failed" }
-            }
+        if kind == .weight {
+            enqueueSync([
+                "type": "growth_stats",
+                "stat": "weight",
+                "weight": value,
+                "weightUnit": kind.unit,
+                "notes": "\(kind.rawValue): \(value) \(kind.unit)"
+            ])
+        } else {
+            enqueueSync([
+                "type": "growth_stats",
+                "stat": "height",
+                "height": value,
+                "heightUnit": kind.unit,
+                "notes": "\(kind.rawValue): \(value) \(kind.unit)"
+            ])
         }
     }
 
@@ -104,15 +118,11 @@ final class LogStore: ObservableObject {
 
     func logRoutine(_ routine: RoutineKind) {
         addEntry(NewbornLogEntry(kind: .routines, detail: routine.rawValue))
-        syncStatus = "Syncing..."
-        Task {
-            do {
-                try await WebLogSyncClient.shared.logRoutine(routine)
-                await MainActor.run { syncStatus = "Synced" }
-            } catch {
-                await MainActor.run { syncStatus = "Sync failed" }
-            }
-        }
+        enqueueSync([
+            "type": "routine",
+            "routine": routine.payloadValue,
+            "notes": "\(routine.rawValue) done"
+        ])
     }
 
     func toggleTimedActivity(_ kind: LogKind) {
@@ -173,57 +183,149 @@ final class LogStore: ObservableObject {
         return "\(minutes)m"
     }
 
+    func retryPendingSyncs() async {
+        guard !isRetryingPendingSync, !pendingSyncItems.isEmpty else {
+            updatePendingSyncStatus()
+            return
+        }
+
+        isRetryingPendingSync = true
+        syncStatus = "Syncing..."
+
+        while let item = pendingSyncItems.first {
+            do {
+                try await WebLogSyncClient.shared.postLogData(item.body)
+                pendingSyncItems.removeFirst()
+                savePendingSyncItems()
+            } catch {
+                break
+            }
+        }
+
+        isRetryingPendingSync = false
+        updatePendingSyncStatus()
+    }
+
     private func addEntry(_ entry: NewbornLogEntry) {
         entries.insert(entry, at: 0)
         saveEntries()
     }
 
     private func syncSleep(status: String) {
-        syncStatus = "Syncing..."
-        Task {
-            do {
-                try await WebLogSyncClient.shared.logSleep(status: status)
-                await MainActor.run { syncStatus = "Synced" }
-            } catch {
-                await MainActor.run { syncStatus = "Sync failed" }
-            }
-        }
+        enqueueSync([
+            "type": "sleep",
+            "status": status,
+            "notes": status == "asleep" ? "Baby fell asleep" : "Baby woke up"
+        ])
     }
 
     private func syncNursing(side: NursingSide) {
-        syncStatus = "Syncing..."
-        Task {
-            do {
-                try await WebLogSyncClient.shared.logNursing(side: side)
-                await MainActor.run { syncStatus = "Synced" }
-            } catch {
-                await MainActor.run { syncStatus = "Sync failed" }
-            }
-        }
+        let webSide = side == .right ? "right" : "left"
+        enqueueSync([
+            "type": "feeding",
+            "method": "breast",
+            "side": webSide,
+            "notes": "Started on \(webSide) side"
+        ])
     }
 
     private func syncBottle(amountML: Double) {
-        syncStatus = "Syncing..."
-        Task {
-            do {
-                try await WebLogSyncClient.shared.logBottle(amountML: amountML)
-                await MainActor.run { syncStatus = "Synced" }
-            } catch {
-                await MainActor.run { syncStatus = "Sync failed" }
-            }
-        }
+        let ounces = (amountML / 29.5735 * 100).rounded() / 100
+        enqueueSync([
+            "type": "bottle",
+            "ounces": ounces,
+            "notes": "Bottle feed"
+        ])
     }
 
     private func syncActivity(_ kind: LogKind, status: String? = nil) {
-        syncStatus = "Syncing..."
-        Task {
-            do {
-                try await WebLogSyncClient.shared.logActivity(kind: kind, status: status)
-                await MainActor.run { syncStatus = "Synced" }
-            } catch {
-                await MainActor.run { syncStatus = "Sync failed" }
-            }
+        var payload: [String: Any] = [
+            "type": webType(for: kind),
+            "notes": note(for: kind, status: status)
+        ]
+
+        if let status {
+            payload["status"] = status
         }
+
+        enqueueSync(payload)
+    }
+
+    private func enqueueSync(_ payload: [String: Any]) {
+        guard let body = try? JSONSerialization.data(withJSONObject: payload) else {
+            syncStatus = "Sync failed"
+            return
+        }
+
+        pendingSyncItems.append(PendingSyncItem(body: body))
+        savePendingSyncItems()
+        updatePendingSyncStatus()
+
+        Task {
+            await retryPendingSyncs()
+        }
+    }
+
+    private func webType(for kind: LogKind) -> String {
+        switch kind {
+        case .sleep:
+            return "sleep"
+        case .nursing:
+            return "feeding"
+        case .bottle:
+            return "bottle"
+        case .diaper:
+            return "diaper"
+        case .babyStats:
+            return "growth_stats"
+        case .bath:
+            return "bath"
+        case .tummyTime:
+            return "tummy_time"
+        case .outdoorTime:
+            return "outdoor_time"
+        case .babyGym:
+            return "baby_gym"
+        case .routines:
+            return "routine"
+        }
+    }
+
+    private func note(for kind: LogKind, status: String?) -> String {
+        if let status {
+            return "\(kind.title) \(status)"
+        }
+
+        return "\(kind.title) logged"
+    }
+
+    private func updatePendingSyncStatus() {
+        pendingSyncCount = pendingSyncItems.count
+
+        if pendingSyncCount > 0 {
+            syncStatus = pendingSyncCount == 1 ? "1 pending" : "\(pendingSyncCount) pending"
+        } else if syncStatus == "Syncing..." || syncStatus.contains("pending") || syncStatus == "Sync failed" {
+            syncStatus = "Synced"
+        }
+    }
+
+    private func loadPendingSyncItems() {
+        guard let data = try? Data(contentsOf: pendingSyncURL) else {
+            pendingSyncItems = []
+            pendingSyncCount = 0
+            return
+        }
+
+        pendingSyncItems = (try? decoder.decode([PendingSyncItem].self, from: data)) ?? []
+        pendingSyncCount = pendingSyncItems.count
+    }
+
+    private func savePendingSyncItems() {
+        guard let data = try? encoder.encode(pendingSyncItems) else {
+            return
+        }
+
+        try? data.write(to: pendingSyncURL, options: [.atomic])
     }
 
     private func loadEntries() {
@@ -272,5 +374,22 @@ final class LogStore: ObservableObject {
     private var entriesURL: URL {
         let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return directory.appendingPathComponent("newborn-log.json")
+    }
+
+    private var pendingSyncURL: URL {
+        let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return directory.appendingPathComponent("pending-sync-queue.json")
+    }
+}
+
+private struct PendingSyncItem: Identifiable, Codable, Hashable {
+    let id: UUID
+    var createdAt: Date
+    var body: Data
+
+    init(id: UUID = UUID(), createdAt: Date = Date(), body: Data) {
+        self.id = id
+        self.createdAt = createdAt
+        self.body = body
     }
 }

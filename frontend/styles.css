@@ -100,7 +100,8 @@ button {
 
 .current-clock,
 .topbar-baby-age,
-.topbar-baby-stats {
+.topbar-baby-stats,
+.pending-log-sync-status {
   border: 1px solid rgba(36, 117, 111, 0.16);
   border-radius: 999px;
   padding: 8px 12px;
@@ -109,6 +110,12 @@ button {
   font-size: 13px;
   font-weight: 850;
   white-space: nowrap;
+}
+
+.pending-log-sync-status {
+  border-color: rgba(184, 129, 22, 0.28);
+  background: rgba(255, 247, 220, 0.92);
+  color: #7a4f05;
 }
 
 .weather-shortcut {

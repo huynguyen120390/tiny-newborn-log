@@ -1,4 +1,5 @@
 data/*.json
+!data/activity_config.json
 backend/exports/*
 !backend/exports/.gitkeep
 node_modules/
