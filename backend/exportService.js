@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
+const { loadData } = require("./dataStore");
 
-const DATA_PATH = path.join(__dirname, "..", "data", "appData.json");
 const EXPORT_DIR = path.join(__dirname, "exports");
 
 function poopColorId(log) {
@@ -20,10 +20,6 @@ const WARNING_RULES = [
 
 function ensureExportDir() {
   fs.mkdirSync(EXPORT_DIR, { recursive: true });
-}
-
-function loadData() {
-  return JSON.parse(fs.readFileSync(DATA_PATH, "utf8").replace(/^\uFEFF/, ""));
 }
 
 function todayIso() {

@@ -4,3 +4,4 @@ backend/exports/*
 node_modules/
 *.log
 .env
+start-with-openai.bat

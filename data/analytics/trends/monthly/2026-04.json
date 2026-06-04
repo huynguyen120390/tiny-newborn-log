@@ -1,0 +1,261 @@
+{
+  "schemaVersion": 1,
+  "fieldGuide": {
+    "stdDev": "Standard deviation across daily values in this trend window.",
+    "perDayStats": "Averages include zero-value calendar days in the window.",
+    "flags": "Every local rule flag that happened during the window, with its date.",
+    "routines": "Routine fields count completed routine buttons from the Log tab: morning, naptime, bedtime."
+  },
+  "id": "2026-04",
+  "kind": "month",
+  "window": {
+    "startDate": "2026-04-01",
+    "endDate": "2026-04-30",
+    "dayCount": 30
+  },
+  "feeding": {
+    "feedCountPerDay": {
+      "count": 30,
+      "average": 7,
+      "stdDev": 0.68,
+      "min": 6,
+      "max": 8,
+      "total": 210
+    },
+    "breastFeedCountPerDay": {
+      "count": 30,
+      "average": 3.8,
+      "stdDev": 1.42,
+      "min": 0,
+      "max": 7,
+      "total": 114
+    },
+    "bottleFeedCountPerDay": {
+      "count": 30,
+      "average": 3.2,
+      "stdDev": 1.33,
+      "min": 0,
+      "max": 7,
+      "total": 96
+    },
+    "bottleOuncesPerDay": {
+      "count": 30,
+      "average": 13.72,
+      "stdDev": 5.78,
+      "min": 0,
+      "max": 31.7,
+      "total": 411.47
+    },
+    "averageBottleOunces": 4.29,
+    "averageFeedGapMinutes": {
+      "count": 30,
+      "average": 173.57,
+      "stdDev": 12.68,
+      "min": 153,
+      "max": 202,
+      "total": 5207.1
+    },
+    "breastSide": {
+      "left": {
+        "count": 30,
+        "average": 2.17,
+        "stdDev": 1.34,
+        "min": 0,
+        "max": 5,
+        "total": 65
+      },
+      "right": {
+        "count": 30,
+        "average": 1.63,
+        "stdDev": 1.25,
+        "min": 0,
+        "max": 4,
+        "total": 49
+      },
+      "leftPercent": 57,
+      "rightPercent": 43,
+      "leftMinusRight": {
+        "count": 30,
+        "average": 0.53,
+        "stdDev": 2.17,
+        "min": -3,
+        "max": 5,
+        "total": 16
+      }
+    }
+  },
+  "sleep": {
+    "totalSleepMinutesPerDay": {
+      "count": 30,
+      "average": 374.6,
+      "stdDev": 42.56,
+      "min": 289,
+      "max": 449,
+      "total": 11238
+    },
+    "daySleepMinutesPerDay": {
+      "count": 30,
+      "average": 234.93,
+      "stdDev": 32.8,
+      "min": 184,
+      "max": 315,
+      "total": 7048
+    },
+    "nightSleepMinutesPerDay": {
+      "count": 30,
+      "average": 139.67,
+      "stdDev": 24.58,
+      "min": 85,
+      "max": 197,
+      "total": 4190
+    },
+    "sleepSessionCountPerDay": {
+      "count": 30,
+      "average": 3,
+      "stdDev": 0,
+      "min": 3,
+      "max": 3,
+      "total": 90
+    },
+    "longestSleepStretchMinutes": {
+      "count": 30,
+      "average": 149.03,
+      "stdDev": 19.78,
+      "min": 105,
+      "max": 197,
+      "total": 4471
+    },
+    "sleepSessionMinutes": {
+      "count": 30,
+      "average": 124.87,
+      "stdDev": 14.19,
+      "min": 96.3,
+      "max": 149.7,
+      "total": 3746.1
+    },
+    "nightWakeupsPerDay": {
+      "count": 30,
+      "average": 2,
+      "stdDev": 0,
+      "min": 2,
+      "max": 2,
+      "total": 60
+    }
+  },
+  "diapers": {
+    "wetDiapersPerDay": {
+      "count": 30,
+      "average": 5.13,
+      "stdDev": 1.26,
+      "min": 2,
+      "max": 7,
+      "total": 154
+    },
+    "poopsPerDay": {
+      "count": 30,
+      "average": 2.4,
+      "stdDev": 1.25,
+      "min": 0,
+      "max": 4,
+      "total": 72
+    },
+    "latestPoopColor": null
+  },
+  "activities": {
+    "tummyTimeMinutesPerDay": {
+      "count": 30,
+      "average": 58.47,
+      "stdDev": 4.35,
+      "min": 49,
+      "max": 69,
+      "total": 1754
+    },
+    "outdoorTimeMinutesPerDay": {
+      "count": 30,
+      "average": 0,
+      "stdDev": 0,
+      "min": 0,
+      "max": 0,
+      "total": 0
+    },
+    "bathCountPerDay": {
+      "count": 30,
+      "average": 0.37,
+      "stdDev": 0.48,
+      "min": 0,
+      "max": 1,
+      "total": 11
+    },
+    "bathMinutesPerDay": {
+      "count": 30,
+      "average": 5.07,
+      "stdDev": 6.87,
+      "min": 0,
+      "max": 19,
+      "total": 152
+    },
+    "babyGymCountPerDay": {
+      "count": 30,
+      "average": 0.53,
+      "stdDev": 0.5,
+      "min": 0,
+      "max": 1,
+      "total": 16
+    }
+  },
+  "growth": {
+    "latestWeightGrams": null,
+    "weightChangeGrams": null,
+    "weightGainGramsPerDay": null,
+    "daysWithGrowth": 0
+  },
+  "routines": {
+    "totalPerDay": {
+      "count": 30,
+      "average": 0,
+      "stdDev": 0,
+      "min": 0,
+      "max": 0,
+      "total": 0
+    },
+    "morningPerDay": {
+      "count": 30,
+      "average": 0,
+      "stdDev": 0,
+      "min": 0,
+      "max": 0,
+      "total": 0
+    },
+    "naptimePerDay": {
+      "count": 30,
+      "average": 0,
+      "stdDev": 0,
+      "min": 0,
+      "max": 0,
+      "total": 0
+    },
+    "bedtimePerDay": {
+      "count": 30,
+      "average": 0,
+      "stdDev": 0,
+      "min": 0,
+      "max": 0,
+      "total": 0
+    },
+    "daysWithAnyRoutine": 0,
+    "daysWithMorningRoutine": 0,
+    "daysWithNaptimeRoutine": 0,
+    "daysWithBedtimeRoutine": 0
+  },
+  "flags": [],
+  "dataCompleteness": {
+    "daysWithLogs": 30,
+    "daysWithFeed": 30,
+    "daysWithCompletedSleep": 30,
+    "daysWithWetDiaper": 30,
+    "daysWithPoop": 27,
+    "daysWithTummyTime": 30,
+    "daysWithGrowth": 0
+  },
+  "vsPrevious": null
+}

@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "fieldGuide": {
+    "minutes": "All time fields ending in Minutes are minutes.",
+    "flags": "Local deterministic rule hits for this date; trend files keep flag dates."
+  },
+  "date": "2026-03-26",
+  "ageDays": 115,
+  "logCount": 36,
+  "eventTypeCounts": {
+    "sleep": 8,
+    "feeding": 5,
+    "diaper": 10,
+    "bottle": 4,
+    "tummy_time": 6,
+    "baby_gym": 1,
+    "bath": 2
+  },
+  "feeding": {
+    "feedCount": 9,
+    "breastFeedCount": 5,
+    "bottleFeedCount": 4,
+    "bottleOunces": 17.2,
+    "averageBottleOunces": 4.3,
+    "averageFeedGapMinutes": 172,
+    "longestFeedGapMinutes": 213,
+    "minutesSinceLastFeedAtDayEnd": 28,
+    "breastSideCounts": {
+      "right": 2,
+      "left": 3
+    }
+  },
+  "sleep": {
+    "totalSleepMinutes": 377,
+    "daySleepMinutes": 270,
+    "nightSleepMinutes": 107,
+    "sleepSessionCount": 3,
+    "longestSleepStretchMinutes": 136,
+    "averageSleepSessionMinutes": 125.7,
+    "nightWakeups": 2,
+    "unpairedSleepEvents": 2
+  },
+  "diapers": {
+    "diaperCount": 10,
+    "wetDiaperCount": 7,
+    "poopCount": 3,
+    "mixedDiaperCount": 0,
+    "hoursSinceLastPoopAtDayEnd": 3.3,
+    "latestPoopColor": null,
+    "poopColors": {
+      "unspecified": {
+        "count": 3,
+        "tag": null
+      }
+    }
+  },
+  "activities": {
+    "tummyTimeMinutes": 50,
+    "outdoorTimeMinutes": 0,
+    "bathCount": 1,
+    "bathMinutes": 13,
+    "babyGymCount": 1,
+    "readingMinutes": null,
+    "unpairedEvents": {
+      "sleep": 2
+    }
+  },
+  "growth": {
+    "growthLogCount": 0,
+    "weightLoggedToday": false,
+    "latestWeightGrams": null,
+    "previousWeightGrams": null,
+    "weightChangeGrams": null,
+    "weightGainGramsPerDay": null
+  },
+  "routines": {
+    "totalCount": 0,
+    "morningCount": 0,
+    "naptimeCount": 0,
+    "bedtimeCount": 0,
+    "otherCount": 0
+  },
+  "environment": {
+    "temperatureF": null
+  },
+  "flags": [],
+  "milestones": {
+    "progressCount": 0,
+    "statusCounts": {}
+  },
+  "dataCompleteness": {
+    "hasFeed": true,
+    "hasCompletedSleep": true,
+    "hasWetDiaper": true,
+    "hasPoop": true,
+    "hasTummyTime": true,
+    "hasGrowthToday": false,
+    "missing": [
+      "growth_today"
+    ]
+  }
+}

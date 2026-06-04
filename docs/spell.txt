@@ -1,0 +1,1 @@
+Humanize doctor_guideline.md from doctor_guideline.json: keep all pediatrician/safety guidance, schedules, sources, and care info; remove IT/app/AI terms; write it as a parent-friendly care guide.

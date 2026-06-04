@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "fieldGuide": {
+    "minutes": "All time fields ending in Minutes are minutes.",
+    "flags": "Local deterministic rule hits for this date; trend files keep flag dates."
+  },
+  "date": "2026-06-03",
+  "ageDays": 184,
+  "logCount": 16,
+  "eventTypeCounts": {
+    "bath": 3,
+    "tummy_time": 2,
+    "outdoor_time": 2,
+    "feeding": 3,
+    "bottle": 2,
+    "sleep": 3,
+    "diaper": 1
+  },
+  "feeding": {
+    "feedCount": 5,
+    "breastFeedCount": 3,
+    "bottleFeedCount": 2,
+    "bottleOunces": 4.5,
+    "averageBottleOunces": 2.25,
+    "averageFeedGapMinutes": 70.3,
+    "longestFeedGapMinutes": 235,
+    "minutesSinceLastFeedAtDayEnd": 679,
+    "breastSideCounts": {
+      "right": 2,
+      "left": 1
+    }
+  },
+  "sleep": {
+    "totalSleepMinutes": 330,
+    "daySleepMinutes": 193,
+    "nightSleepMinutes": 137,
+    "sleepSessionCount": 1,
+    "longestSleepStretchMinutes": 330,
+    "averageSleepSessionMinutes": 330,
+    "nightWakeups": 1,
+    "unpairedSleepEvents": 1
+  },
+  "diapers": {
+    "diaperCount": 1,
+    "wetDiaperCount": 0,
+    "poopCount": 1,
+    "mixedDiaperCount": 0,
+    "hoursSinceLastPoopAtDayEnd": 6.8,
+    "latestPoopColor": "red-blood",
+    "poopColors": {
+      "red-blood": {
+        "count": 1,
+        "tag": "call"
+      }
+    }
+  },
+  "activities": {
+    "tummyTimeMinutes": 0,
+    "outdoorTimeMinutes": 0,
+    "bathCount": 1,
+    "bathMinutes": 0,
+    "babyGymCount": 0,
+    "readingMinutes": null,
+    "unpairedEvents": {
+      "sleep": 1,
+      "bath": 1
+    }
+  },
+  "growth": {
+    "growthLogCount": 0,
+    "weightLoggedToday": false,
+    "latestWeightGrams": 2721.6,
+    "previousWeightGrams": 2721.6,
+    "weightChangeGrams": 0,
+    "weightGainGramsPerDay": 0
+  },
+  "routines": {
+    "totalCount": 0,
+    "morningCount": 0,
+    "naptimeCount": 0,
+    "bedtimeCount": 0,
+    "otherCount": 0
+  },
+  "environment": {
+    "temperatureF": null
+  },
+  "flags": [
+    {
+      "date": "2026-06-03",
+      "domain": "diapers",
+      "priority": "call_doctor",
+      "id": "poop_color_red-blood",
+      "count": 1
+    }
+  ],
+  "milestones": {
+    "progressCount": 1,
+    "statusCounts": {
+      "Confirmed": 1
+    }
+  },
+  "dataCompleteness": {
+    "hasFeed": true,
+    "hasCompletedSleep": true,
+    "hasWetDiaper": false,
+    "hasPoop": true,
+    "hasTummyTime": true,
+    "hasGrowthToday": false,
+    "missing": [
+      "wet_diaper",
+      "growth_today"
+    ]
+  }
+}

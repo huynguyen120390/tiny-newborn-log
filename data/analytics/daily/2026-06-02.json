@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "fieldGuide": {
+    "minutes": "All time fields ending in Minutes are minutes.",
+    "flags": "Local deterministic rule hits for this date; trend files keep flag dates."
+  },
+  "date": "2026-06-02",
+  "ageDays": 183,
+  "logCount": 8,
+  "eventTypeCounts": {
+    "sleep": 5,
+    "feeding": 2,
+    "bottle": 1
+  },
+  "feeding": {
+    "feedCount": 3,
+    "breastFeedCount": 2,
+    "bottleFeedCount": 1,
+    "bottleOunces": 2.37,
+    "averageBottleOunces": 2.37,
+    "averageFeedGapMinutes": 1,
+    "longestFeedGapMinutes": 2,
+    "minutesSinceLastFeedAtDayEnd": 248,
+    "breastSideCounts": {
+      "right": 2
+    }
+  },
+  "sleep": {
+    "totalSleepMinutes": 402,
+    "daySleepMinutes": 293,
+    "nightSleepMinutes": 109,
+    "sleepSessionCount": 2,
+    "longestSleepStretchMinutes": 402,
+    "averageSleepSessionMinutes": 201,
+    "nightWakeups": 2,
+    "unpairedSleepEvents": 1
+  },
+  "diapers": {
+    "diaperCount": 0,
+    "wetDiaperCount": 0,
+    "poopCount": 0,
+    "mixedDiaperCount": 0,
+    "hoursSinceLastPoopAtDayEnd": 38.6,
+    "latestPoopColor": null,
+    "poopColors": {}
+  },
+  "activities": {
+    "tummyTimeMinutes": 0,
+    "outdoorTimeMinutes": 0,
+    "bathCount": 0,
+    "bathMinutes": 0,
+    "babyGymCount": 0,
+    "readingMinutes": null,
+    "unpairedEvents": {
+      "sleep": 1
+    }
+  },
+  "growth": {
+    "growthLogCount": 0,
+    "weightLoggedToday": false,
+    "latestWeightGrams": 2721.6,
+    "previousWeightGrams": 2721.6,
+    "weightChangeGrams": 0,
+    "weightGainGramsPerDay": 0
+  },
+  "routines": {
+    "totalCount": 0,
+    "morningCount": 0,
+    "naptimeCount": 0,
+    "bedtimeCount": 0,
+    "otherCount": 0
+  },
+  "environment": {
+    "temperatureF": null
+  },
+  "flags": [],
+  "milestones": {
+    "progressCount": 0,
+    "statusCounts": {}
+  },
+  "dataCompleteness": {
+    "hasFeed": true,
+    "hasCompletedSleep": true,
+    "hasWetDiaper": false,
+    "hasPoop": false,
+    "hasTummyTime": false,
+    "hasGrowthToday": false,
+    "missing": [
+      "wet_diaper",
+      "poop",
+      "tummy_time",
+      "growth_today"
+    ]
+  }
+}

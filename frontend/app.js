@@ -26,6 +26,7 @@ const state = {
   selectedCareIssue: null,
   selectedCareSubtab: {},
   careInfo: {},
+  doctorGuideline: null,
   babyCriesAssistant: {
     open: false,
     inFlight: false,
@@ -36,6 +37,27 @@ const state = {
     updatedAt: "",
     error: "",
     prompt: ""
+  },
+  dashboardOverview: {
+    status: "idle",
+    lastInputHash: "",
+    serverInputHash: "",
+    publishedReview: null,
+    pendingReview: null,
+    source: "",
+    updatedAt: "",
+    error: "",
+    reviewTrace: null,
+    reviewTraceOpen: localStorage.getItem("tinyNewborn.dashboardOverview.reviewTraceOpen") === "1",
+    timerId: null
+  },
+  overviewSettings: {
+    reviewMode: "rules_only",
+    llamaModel: "llama3.2",
+    gptModel: "gpt-4.1-mini",
+    refreshIntervalMinutes: 5,
+    maxOutputTokens: 700,
+    reviewWindowDays: 3
   },
   milestoneProgress: {},
   selectedMilestoneId: null,
@@ -143,6 +165,17 @@ const activities = [
     ]
   },
   {
+    title: "Routines",
+    key: "routine",
+    icon: "star",
+    helper: "Mark routine steps as done.",
+    actions: [
+      { label: "Morning routine", icon: "routine-morning", payload: { type: "routine", routine: "morning" } },
+      { label: "Naptime routine", icon: "routine-naptime", payload: { type: "routine", routine: "naptime" } },
+      { label: "Bedtime routine", icon: "routine-bedtime", payload: { type: "routine", routine: "bedtime" } }
+    ]
+  },
+  {
     title: "Wee & Poo",
     key: "diaper",
     icon: "spark",
@@ -219,6 +252,7 @@ const historyEventTypes = [
   { value: "sleep", label: "Sleep" },
   { value: "feeding", label: "Boobie" },
   { value: "bottle", label: "Bottle" },
+  { value: "routine", label: "Routines" },
   { value: "diaper", label: "Diaper" },
   { value: "growth_stats", label: "Stats" },
   { value: "bath", label: "Bath" },
@@ -270,150 +304,60 @@ const eventCategoryConfig = {
   },
   feeding: { label: "Boobie", kind: "quick", color: "#d95f72", icon: "/assets/activity/icon-left.png" },
   bottle: { label: "Bottle", kind: "quick", color: "#24756f", icon: "/assets/activity/icon-bottle.png" },
+  routine: { label: "Routine", kind: "quick", color: "#6b6fd1", icon: "/assets/activity/icon-routine-morning.png" },
   diaper: { label: "Diaper", kind: "quick", color: "#d99a2b", icon: "/assets/activity/icon-pee.png" },
   growth_stats: { label: "Stats", kind: "quick", color: "#7d6d2f", icon: "/assets/activity/icon-weight.png" },
   baby_gym: { label: "Gym", kind: "quick", color: "#9b5bc0", icon: "/assets/activity/icon-gym.png" }
 };
 
-const milestoneDefinitions = [
-  {
-    id: "first-smile",
-    level: 1,
-    iconFile: "first-smile.png",
-    name: "First Smile",
-    ageStartWeeks: 6,
-    ageEndWeeks: 12,
-    ageLabel: "6–12 weeks",
-    exercises: ["Face-to-face talking", "Exaggerated smiles", "Singing", "Eye contact during feeding", "Mimic baby's facial expressions"]
-  },
-  {
-    id: "reaching-grabbing",
-    level: 1,
-    iconFile: "reaching-grabbing.png",
-    name: "Reaching & Grabbing",
-    ageStartWeeks: 13,
-    ageEndWeeks: 22,
-    ageLabel: "3–5 months",
-    exercises: ["Dangling toys", "Soft rattles", "Play gym", "Bring toys to midline", "Hand-to-hand toy transfer practice"]
-  },
-  {
-    id: "rolling-over",
-    level: 1,
-    iconFile: "rolling-over.png",
-    name: "Rolling Over",
-    ageStartWeeks: 17,
-    ageEndWeeks: 26,
-    ageLabel: "4–6 months",
-    exercises: ["Daily tummy time", "Place toys slightly to the side", "Encourage reaching across the body", "Side-lying play"]
-  },
-  {
-    id: "army-crawling",
-    level: 1,
-    iconFile: "army-crawling.png",
-    name: "Army Crawling / Scooting",
-    ageStartWeeks: 22,
-    ageEndWeeks: 35,
-    ageLabel: "5–8 months",
-    exercises: ["Extended tummy time", "Place favorite toy just out of reach", "Mirror play", "Encourage weight shifting on forearms"]
-  },
-  {
-    id: "sitting-up",
-    level: 1,
-    iconFile: "sitting-up.png",
-    name: "Sitting Up",
-    ageStartWeeks: 30,
-    ageEndWeeks: 39,
-    ageLabel: "7–9 months",
-    exercises: ["Supported sitting", "Sit between parent's legs", "Place toys around baby to encourage balance", "Tripod sitting hands forward"]
-  },
-  {
-    id: "crawling",
-    level: 1,
-    iconFile: "crawling.png",
-    name: "Crawling",
-    ageStartWeeks: 26,
-    ageEndWeeks: 43,
-    ageLabel: "6–10 months",
-    exercises: ["Tunnel games", "Toy just out of reach", "Obstacle pillows", "Encourage hands-and-knees rocking"]
-  },
-  {
-    id: "first-syllables",
-    level: 1,
-    iconFile: "first-syllables.png",
-    name: 'First Syllables ("ba", "ma", "da")',
-    ageStartWeeks: 39,
-    ageEndWeeks: 48,
-    ageLabel: "9–11 months",
-    exercises: ["Narrate daily activities", "Read books", "Imitate sounds", "Sing songs", "Pause and wait for baby to respond"]
-  },
-  {
-    id: "walking",
-    level: 1,
-    iconFile: "walking.png",
-    name: "Walking",
-    ageStartWeeks: 39,
-    ageEndWeeks: 65,
-    ageLabel: "9–15 months",
-    exercises: ["Cruise along furniture", "Push toys", "Stand-and-reach games", "Squat-and-stand play", "Barefoot time indoors"]
-  },
-  { id: "tracks-faces", level: 2, iconFile: "tracks-faces.png", name: "Tracks faces", ageStartWeeks: 4, ageEndWeeks: 9, ageLabel: "1–2 months", exercises: [] },
-  { id: "hands-to-mouth", level: 2, iconFile: "hands-to-mouth.png", name: "Hands to mouth", ageStartWeeks: 9, ageEndWeeks: 17, ageLabel: "2–4 months", exercises: [] },
-  { id: "responds-to-name", level: 2, iconFile: "responds-to-name.png", name: "Responds to name", ageStartWeeks: 26, ageEndWeeks: 39, ageLabel: "6–9 months", exercises: [] },
-  { id: "transfers-toy-hand-to-hand", level: 2, iconFile: "transfers-toy-hand-to-hand.png", name: "Transfers toy hand-to-hand", ageStartWeeks: 22, ageEndWeeks: 30, ageLabel: "5–7 months", exercises: [] },
-  { id: "peekaboo-understanding", level: 2, iconFile: "peekaboo-understanding.png", name: "Peek-a-boo understanding", ageStartWeeks: 30, ageEndWeeks: 43, ageLabel: "7–10 months", exercises: [] },
-  { id: "waves-bye-bye", level: 2, iconFile: "waves-bye-bye.png", name: "Waves bye-bye", ageStartWeeks: 35, ageEndWeeks: 52, ageLabel: "8–12 months", exercises: [] },
-  { id: "claps-hands", level: 2, iconFile: "claps-hands.png", name: "Claps hands", ageStartWeeks: 35, ageEndWeeks: 52, ageLabel: "8–12 months", exercises: [] },
-  { id: "finger-feeding", level: 2, iconFile: "finger-feeding.png", name: "Finger feeding", ageStartWeeks: 35, ageEndWeeks: 52, ageLabel: "8–12 months", exercises: [] },
-  { id: "drinks-from-cup", level: 2, iconFile: "drinks-from-cup.png", name: "Drinks from cup with help", ageStartWeeks: 26, ageEndWeeks: 52, ageLabel: "6–12 months", exercises: [] },
-  { id: "points-with-finger", level: 2, iconFile: "points-with-finger.png", name: "Points with finger", ageStartWeeks: 39, ageEndWeeks: 61, ageLabel: "9–14 months", exercises: [] },
-  { id: "eats-solids", level: 2, iconFile: "eats-solids.png", name: "Eats solids", ageStartWeeks: 17, ageEndWeeks: null, ageLabel: "4+ months", exercises: [] }
-];
+function milestoneGuide() {
+  return state.doctorGuideline?.milestoneGuide || {};
+}
 
-const exerciseLibrary = [
-  {
-    id: "tummy-time",
-    name: "Tummy Time",
-    purpose: ["Strengthens baby's neck, shoulder, back, and core muscles", "Helps prepare for rolling, sitting, army crawling, and crawling"],
-    timing: ["Start right after birth", "Continue until baby can sit up well"],
-    recommendedAmount: ["Newborn: a few minutes, a couple times per day", "2 months old: 10–15 minute sessions, total about 1 hour per day", "3 months old: 10–15 minute sessions, total about 1.5 hours per day"],
-    safety: ["Do not do right after feeding", "Always supervise", "Stop if baby is very upset"],
-    methods: ["Traditional tummy time: place baby on stomach on a safe flat surface", "Pillow tummy time: place baby over a U-shaped pillow, rolled blanket, or towel", "Tummy-to-tummy: parent reclines and baby lies on parent's chest"],
-    supportsMilestones: ["Rolling Over", "Army Crawling / Scooting", "Sitting Up", "Crawling"]
-  },
-  {
-    id: "baby-sit-ups",
-    name: "Baby Sit-ups",
-    purpose: ["Helps build neck strength, core strength, and trunk control"],
-    timing: [],
-    recommendedAmount: [],
-    safety: ["Only do this when baby has good head control", "Pull gently", "Never yank baby's arms", "Stop if baby looks uncomfortable"],
-    methods: ["Baby lies on back", "Gently hold baby's hands or arms", "Slowly pull baby upward", "Slowly lower baby down", "Pause when almost at the bottom"],
-    supportsMilestones: ["Sitting Up", "Crawling"]
-  },
-  {
-    id: "baby-floor-gym",
-    name: "Baby Floor Gym",
-    purpose: ["Supports visual tracking, reaching, grabbing, and hand-eye coordination"],
-    timing: [],
-    recommendedAmount: [],
-    safety: [],
-    methods: ["Let baby look at dangling toys", "Encourage baby to reach for toys", "Encourage baby to kick hanging toys", "Practice hand-to-hand toy transfer later"],
-    supportsMilestones: ["Reaching & Grabbing", "Tracks faces", "Hands to mouth", "Transfers toy hand-to-hand"]
-  }
-];
+function arrayGuideValue(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function objectGuideValue(value) {
+  return value && !Array.isArray(value) && typeof value === "object" ? value : {};
+}
+
+function milestoneDefinitions() {
+  return arrayGuideValue(milestoneGuide().definitions);
+}
+
+function exerciseLibrary() {
+  return arrayGuideValue(milestoneGuide().exerciseLibrary);
+}
+
+function milestoneStateMessages() {
+  return objectGuideValue(milestoneGuide().statusMessages);
+}
+
+function milestoneBehaviorDescriptions() {
+  return objectGuideValue(milestoneGuide().behaviorDescriptions);
+}
+
+function supportingMilestoneExercises() {
+  return objectGuideValue(milestoneGuide().supportingExercises);
+}
 
 const milestoneStates = ["Not Yet", "Maybe", "Practicing", "Confirmed"];
+const dashboardOverviewCacheKey = "tinyNewborn.dashboardOverview.publishedReview.v2";
+const overviewReviewModes = [
+  { value: "rules_only", label: "Fast local rules" },
+  { value: "ollama_strict", label: "Strict Ollama" },
+  { value: "gpt_strict", label: "Strict GPT" }
+];
+const overviewLlamaModels = ["llama3.2", "llama3.2:latest", "qwen2.5:0.5b", "qwen2.5:1.5b", "gemma2:2b"];
+const overviewGptModels = ["gpt-4.1-mini", "gpt-4.1", "gpt-4o-mini", "gpt-5.1", "gpt-5.4"];
+const overviewCareVoices = ["parent_friendly", "pediatrician_genz_professional"];
 const dashboardPlotBaseWidth = 884;
 const dashboardPlotLeft = 128;
 const dashboardMaxZoom = 8;
 const dashboardMinWindowMs = 15 * 60 * 1000;
 
-const milestoneStateMessages = {
-  "Not Yet": "Not started yet.",
-  Maybe: "Parent may have seen this skill, but is not certain yet.",
-  Practicing: "Baby can sometimes do this skill and is building consistency.",
-  Confirmed: "Parent is confident baby consistently demonstrates this skill."
-};
+
 
 const legacyMilestoneStatus = {
   Upcoming: "Not Yet",
@@ -425,41 +369,7 @@ const legacyMilestoneStatus = {
   confirmed: "Confirmed"
 };
 
-const milestoneBehaviorDescriptions = {
-  "first-smile": ["Smiles in response to a familiar face or voice.", "Makes eye contact during warm interaction.", "Shows brighter facial expression during social play."],
-  "reaching-grabbing": ["Brings hands toward toys at midline.", "Opens hands and bats at nearby objects.", "Begins to hold a soft toy briefly."],
-  "rolling-over": ["Rolls from tummy to back or back to tummy.", "Reaches across the body.", "Uses body rotation intentionally."],
-  "army-crawling": ["Pushes through forearms during tummy play.", "Shifts weight to reach for toys.", "Pulls or scoots the body forward on the floor."],
-  "sitting-up": ["Sits with minimal support.", "Maintains balance while reaching for toys.", "Uses hands for support and begins to recover balance."],
-  crawling: ["Gets onto hands and knees.", "Rocks forward and backward.", "Moves with alternating arms and legs or an emerging crawl pattern."],
-  "first-syllables": ["Babbles repeated consonant sounds.", "Uses voice to get attention.", "Copies simple sounds or takes turns vocalizing."],
-  walking: ["Pulls to stand and cruises along furniture.", "Stands briefly without support.", "Takes independent steps with improving balance."],
-  "tracks-faces": ["Watches a caregiver's face at close range.", "Follows a face or high-contrast object briefly.", "Turns eyes or head toward gentle movement."],
-  "hands-to-mouth": ["Brings hands toward mouth during calm awake time.", "Explores fingers by sucking or mouthing.", "Keeps hands more open and active at midline."],
-  "responds-to-name": ["Looks toward caregiver when name is called.", "Pauses activity after hearing familiar voice.", "Shows recognition through eye contact, smile, or vocal response."],
-  "transfers-toy-hand-to-hand": ["Moves a toy from one hand to the other.", "Uses both hands together at midline.", "Looks at and manipulates toys with growing control."],
-  "peekaboo-understanding": ["Anticipates a hidden face or toy returning.", "Smiles, laughs, or looks for a covered object.", "Shows early understanding that people and objects still exist when hidden."],
-  "waves-bye-bye": ["Copies a simple wave.", "Uses a hand gesture during greetings or goodbyes.", "Pairs gesture with eye contact or vocalizing."],
-  "claps-hands": ["Brings hands together repeatedly.", "Copies clapping during songs or games.", "Uses clapping to show excitement."],
-  "finger-feeding": ["Picks up safe soft foods with fingers.", "Brings food to mouth with improving accuracy.", "Uses raking grasp or early pincer grasp."],
-  "drinks-from-cup": ["Accepts small sips from an open cup with help.", "Brings lips to cup edge.", "Swallows small amounts with caregiver support."],
-  "points-with-finger": ["Extends index finger toward objects of interest.", "Points to request or share attention.", "Looks between caregiver and the object."],
-  "eats-solids": ["Shows interest in food and opens mouth for spoon.", "Moves purees or soft solids in the mouth.", "Sits with appropriate support during feeding."]
-};
 
-const supportingMilestoneExercises = {
-  "tracks-faces": ["Slow face tracking", "High-contrast card play", "Baby floor gym watching"],
-  "hands-to-mouth": ["Midline hand play", "Gentle hand-to-mouth guidance", "Baby floor gym reaching"],
-  "responds-to-name": ["Name games", "Call-and-pause play", "Face-to-face talking"],
-  "transfers-toy-hand-to-hand": ["Offer toys at midline", "Hand-to-hand toy transfer practice", "Baby floor gym reaching"],
-  "peekaboo-understanding": ["Peek-a-boo with cloth", "Hide-and-reveal toys", "Pause before revealing"],
-  "waves-bye-bye": ["Goodbye routine", "Model waving slowly", "Take-turn gesture games"],
-  "claps-hands": ["Pat-a-cake", "Song clapping", "Hand-over-hand clapping"],
-  "finger-feeding": ["Safe soft finger foods", "Tray exploration", "Practice pincer grasp with soft pieces"],
-  "drinks-from-cup": ["Tiny open-cup sips", "Model cup drinking", "Supported seated practice"],
-  "points-with-finger": ["Point-and-name objects", "Book pointing", "Choice games"],
-  "eats-solids": ["Supported seated meals", "Responsive spoon feeding", "Texture exploration when developmentally ready"]
-};
 
 state.visibleCards = loadVisibleCards();
 
@@ -558,6 +468,7 @@ async function init() {
   updateWeatherDisplay();
   refreshWeather();
   await refreshData();
+  startDashboardOverviewReviews();
 }
 
 async function refreshData() {
@@ -575,6 +486,7 @@ async function refreshData() {
   state.poopColors = Array.isArray(poopColors) ? poopColors : [];
   state.bathSoundEnabled = Boolean(appData.sound_settings?.bathSoundEnabled);
   state.tummySoundEnabled = Boolean(appData.sound_settings?.tummySoundEnabled);
+  state.overviewSettings = cleanOverviewSettings(appData.overview_settings);
   state.milestoneProgress = appData.milestone_progress || (Array.isArray(appData.milestones) ? {} : appData.milestones || {});
 
   renderAll();
@@ -586,7 +498,9 @@ async function fetchJson(url, options) {
     const text = await response.text();
     try {
       const payload = JSON.parse(text);
-      throw new Error(payload.error || text);
+      const error = new Error(payload.error || text);
+      error.payload = payload;
+      throw error;
     } catch (error) {
       if (error instanceof SyntaxError) throw new Error(text);
       throw error;
@@ -597,13 +511,12 @@ async function fetchJson(url, options) {
 
 async function loadCareInfo() {
   try {
-    state.careInfo.sleep = await fetchJson("/data/care/sleep-card-info.json");
+    const guideline = await fetchJson("/api/doctor-guideline");
+    state.doctorGuideline = guideline;
+    state.careInfo.sleep = guideline.careGuides?.sleep || null;
+    state.careInfo.eat = guideline.careGuides?.eat || null;
   } catch (error) {
     state.careInfo.sleep = null;
-  }
-  try {
-    state.careInfo.eat = await fetchJson("/data/care/feeding-cheatsheet.json");
-  } catch (error) {
     state.careInfo.eat = null;
   }
 }
@@ -1400,7 +1313,7 @@ function renderMilestones() {
   if (supporting) supporting.innerHTML = milestoneRecords(2).map((milestone, index, list) => renderMilestoneCard(milestone, next?.id, index, list.length)).join("");
 
   const exerciseContainer = document.getElementById("exercise-library");
-  if (exerciseContainer) exerciseContainer.innerHTML = exerciseLibrary.map(renderExerciseCard).join("");
+  if (exerciseContainer) exerciseContainer.innerHTML = exerciseLibrary().map(renderExerciseCard).join("");
 
   document.querySelectorAll("[data-milestone-id]").forEach((button) => {
     button.addEventListener("click", () => openMilestoneDialog(button.dataset.milestoneId));
@@ -1411,7 +1324,7 @@ function renderMilestones() {
 }
 
 function milestoneRecords(level) {
-  return milestoneDefinitions
+  return milestoneDefinitions()
     .filter((milestone) => milestone.level === level)
     .sort((a, b) => a.ageStartWeeks - b.ageStartWeeks)
     .map(mergeMilestoneProgress);
@@ -1508,11 +1421,11 @@ function renderExerciseGroup(label, items) {
 }
 
 function nextExpectedMilestone() {
-  return milestoneDefinitions.map(mergeMilestoneProgress).find((milestone) => milestone.status !== "Confirmed") || null;
+  return milestoneDefinitions().map(mergeMilestoneProgress).find((milestone) => milestone.status !== "Confirmed") || null;
 }
 
 function openMilestoneDialog(id) {
-  const definition = milestoneDefinitions.find((item) => item.id === id);
+  const definition = milestoneDefinitions().find((item) => item.id === id);
   if (!definition) return;
   const milestone = mergeMilestoneProgress(definition);
 
@@ -1533,7 +1446,7 @@ function openMilestoneDialog(id) {
 
 function renderMilestoneDialog(milestone) {
   const recommendations = recommendedExercisesForMilestone(milestone);
-  const behavior = milestoneBehaviorDescriptions[milestone.id] || [];
+  const behavior = milestoneBehaviorDescriptions()[milestone.id] || [];
   const exercises = milestoneExercises(milestone);
   return `
     <div class="milestone-dialog-hero">
@@ -1547,7 +1460,7 @@ function renderMilestoneDialog(milestone) {
     <div class="milestone-dialog-body">
       <div>
         <strong>Milestone Information</strong>
-        <p>${escapeHtml(milestoneStateMessages[milestone.status] || "")}</p>
+        <p>${escapeHtml(milestoneStateMessages()[milestone.status] || "")}</p>
       </div>
       ${behavior.length ? renderExerciseGroup("Baby Behavior Description", behavior) : ""}
       ${exercises.length ? renderExerciseGroup("Exercises", exercises) : ""}
@@ -1593,13 +1506,13 @@ async function updateMilestoneStatus(id, action, notes = "") {
 }
 
 function recommendedExercisesForMilestone(milestone) {
-  return exerciseLibrary
+  return exerciseLibrary()
     .filter((exercise) => exercise.supportsMilestones.includes(milestone.name))
     .slice(0, 4);
 }
 
 function milestoneExercises(milestone) {
-  return (milestone.exercises.length ? milestone.exercises : supportingMilestoneExercises[milestone.id] || []).slice(0, 5);
+  return (milestone.exercises.length ? milestone.exercises : supportingMilestoneExercises()[milestone.id] || []).slice(0, 5);
 }
 
 function renderExerciseLinks(label, exercises) {
@@ -1658,7 +1571,7 @@ function milestoneIconPath(milestone) {
 }
 
 function milestoneName(id) {
-  return milestoneDefinitions.find((milestone) => milestone.id === id)?.name || "Milestone";
+  return milestoneDefinitions().find((milestone) => milestone.id === id)?.name || "Milestone";
 }
 
 function statusClass(status) {
@@ -1801,6 +1714,7 @@ function activityIconForLog(log, cardKey) {
     sleep: log.status === "awake" ? "awake" : "asleep",
     feeding: log.side === "right" ? "right" : "left",
     bottle: "bottle",
+    routine: `routine-${log.routine || "morning"}`,
     diaper: log.poop ? "poop" : "pee",
     growth_stats: readHeightMm(log) > 0 && readWeightGrams(log) <= 0 ? "height" : "weight",
     bath: "bath",
@@ -1823,6 +1737,7 @@ function logsForActivityCard(cardKey) {
     sleep: (log) => log.type === "sleep",
     boobie: (log) => log.type === "feeding" && log.method === "breast",
     bottle: (log) => log.type === "bottle",
+    routine: (log) => log.type === "routine",
     diaper: (log) => log.type === "diaper",
     growth: (log) => log.type === "growth_stats",
     bath: (log) => log.type === "bath",
@@ -2137,12 +2052,18 @@ function updateDashboardTypeFilters(event) {
 
 function setupSettingsPanel() {
   document.getElementById("profile-form").addEventListener("submit", saveProfile);
+  document.getElementById("overview-settings-form").addEventListener("submit", saveOverviewSettings);
+  document.getElementById("overview-review-mode").addEventListener("change", () => {
+    syncOverviewSettingsVisibility(document.getElementById("overview-review-mode").value);
+  });
   document.getElementById("bath-reminder-form").addEventListener("submit", saveBathReminder);
   document.getElementById("tummy-reminder-form").addEventListener("submit", saveTummyReminder);
   document.getElementById("reminder-voice-select").addEventListener("change", saveReminderVoice);
   document.getElementById("settings-weight-unit").addEventListener("change", saveSettingsWeightUnit);
   document.getElementById("settings-height-unit").addEventListener("change", saveSettingsHeightUnit);
   document.getElementById("test-reminder-voice").addEventListener("click", testReminderVoice);
+  document.getElementById("generate-analytics-button").addEventListener("click", generateAnalyticsJson);
+  document.getElementById("generate-trends-button").addEventListener("click", generateTrendJson);
   document.getElementById("clear-data-button").addEventListener("click", clearData);
 }
 
@@ -2656,6 +2577,7 @@ function renderSettings() {
   const heightUnitSelect = document.getElementById("settings-height-unit");
   if (heightUnitSelect && document.activeElement !== heightUnitSelect) heightUnitSelect.value = state.heightUnit;
 
+  syncOverviewSettingsInputs();
   renderVoiceOptions();
 
   const container = document.getElementById("category-settings");
@@ -2680,6 +2602,94 @@ function renderSettings() {
       showSettingsStatus("Category cards updated.");
     });
   });
+}
+
+function cleanOverviewSettings(value = {}) {
+  const current = value && typeof value === "object" ? value : {};
+  const normalizedMode = current.reviewMode === "llama_strict" || current.reviewMode === "rules_then_llama" ? "ollama_strict" : current.reviewMode;
+  const reviewMode = overviewReviewModes.some((item) => item.value === normalizedMode) ? normalizedMode : "rules_only";
+  const llamaModel = overviewLlamaModels.includes(current.llamaModel) ? current.llamaModel : "llama3.2";
+  const gptModel = overviewGptModels.includes(current.gptModel) ? current.gptModel : "gpt-4.1-mini";
+  const careVoice = overviewCareVoices.includes(current.careVoice) ? current.careVoice : "parent_friendly";
+  return {
+    reviewMode,
+    llamaModel,
+    gptModel,
+    careVoice,
+    refreshIntervalMinutes: Math.max(1, Math.min(60, Math.round(Number(current.refreshIntervalMinutes) || 5))),
+    maxOutputTokens: Math.max(200, Math.min(1600, Math.round(Number(current.maxOutputTokens) || 700))),
+    reviewWindowDays: Math.max(1, Math.min(14, Math.round(Number(current.reviewWindowDays) || 3)))
+  };
+}
+
+function syncOverviewSettingsInputs() {
+  const settings = cleanOverviewSettings(state.overviewSettings);
+  const inputs = {
+    "overview-review-mode": settings.reviewMode,
+    "overview-llama-model": settings.llamaModel,
+    "overview-gpt-model": settings.gptModel,
+    "overview-care-voice": settings.careVoice,
+    "overview-refresh-interval": String(settings.refreshIntervalMinutes),
+    "overview-review-window": String(settings.reviewWindowDays),
+    "overview-output-tokens": String(settings.maxOutputTokens)
+  };
+  Object.entries(inputs).forEach(([id, value]) => {
+    const element = document.getElementById(id);
+    if (element && document.activeElement !== element) element.value = value;
+  });
+  syncOverviewSettingsVisibility(settings.reviewMode);
+}
+
+function syncOverviewSettingsVisibility(reviewMode) {
+  const mode = reviewMode === "llama_strict" || reviewMode === "rules_then_llama" ? "ollama_strict" : reviewMode;
+  document.querySelectorAll("[data-overview-setting]").forEach((element) => {
+    const scope = element.dataset.overviewSetting;
+    const visible = scope === "shared"
+      || (scope === "llama" && mode === "ollama_strict")
+      || (scope === "gpt" && mode === "gpt_strict")
+      || (scope === "auto" && mode !== "gpt_strict");
+    element.hidden = !visible;
+    element.classList.toggle("is-hidden", !visible);
+  });
+}
+
+function readOverviewSettingsInputs() {
+  return cleanOverviewSettings({
+    reviewMode: document.getElementById("overview-review-mode")?.value,
+    llamaModel: document.getElementById("overview-llama-model")?.value,
+    gptModel: document.getElementById("overview-gpt-model")?.value,
+    careVoice: document.getElementById("overview-care-voice")?.value,
+    refreshIntervalMinutes: document.getElementById("overview-refresh-interval")?.value,
+    reviewWindowDays: document.getElementById("overview-review-window")?.value,
+    maxOutputTokens: document.getElementById("overview-output-tokens")?.value
+  });
+}
+
+async function saveOverviewSettings(event) {
+  event.preventDefault();
+  const next = readOverviewSettingsInputs();
+  showSettingsStatus("Saving overview settings...");
+  try {
+    const result = await fetchJson("/api/overview-settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next)
+    });
+    state.overviewSettings = cleanOverviewSettings(result.overview_settings || next);
+    syncOverviewSettingsInputs();
+    state.dashboardOverview.lastInputHash = "";
+    state.dashboardOverview.serverInputHash = "";
+    startDashboardOverviewReviews();
+    renderDashboardOverview();
+    showSettingsStatus("Overview settings saved.");
+    showReaction("Overview settings saved", overviewReviewModeLabel(state.overviewSettings.reviewMode));
+  } catch (error) {
+    showSettingsStatus(`Save failed: ${error.message}`);
+  }
+}
+
+function overviewReviewModeLabel(value) {
+  return overviewReviewModes.find((item) => item.value === value)?.label || value;
 }
 
 function renderVoiceOptions() {
@@ -2759,6 +2769,41 @@ function saveTummyReminder(event) {
   showReaction("Tummy reminder saved", `Every ${formatReminderPeriod(state.tummyReminderSeconds)}`);
 }
 
+async function generateAnalyticsJson() {
+  const button = document.getElementById("generate-analytics-button");
+  const days = document.getElementById("analytics-days-select")?.value || "7";
+  if (button) button.disabled = true;
+  showSettingsStatus("Generating daily analytics JSONs...");
+  try {
+    const result = await fetchJson("/api/analytics/daily", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ days })
+    });
+    showSettingsStatus(`Generated ${result.filesWritten || 0} daily JSONs recently.`);
+    showReaction("Daily analytics generated", `${result.filesWritten || 0} files`);
+  } catch (error) {
+    showSettingsStatus(`Analytics failed: ${error.message}`);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function generateTrendJson() {
+  const button = document.getElementById("generate-trends-button");
+  if (button) button.disabled = true;
+  showSettingsStatus("Generating trend analytics JSONs...");
+  try {
+    const result = await fetchJson("/api/analytics/trends", { method: "POST" });
+    showSettingsStatus(`Generated ${result.filesWritten || 0} trend JSONs recently.`);
+    showReaction("Trend analytics generated", `${result.recentFilesWritten || 0} recent, ${result.monthlyFilesWritten || 0} monthly`);
+  } catch (error) {
+    showSettingsStatus(`Trend analytics failed: ${error.message}`);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 async function saveProfile(event) {
   event.preventDefault();
   const birthday = document.getElementById("birthday-input").value;
@@ -2829,7 +2874,8 @@ function loadVisibleCards() {
       if (filtered.length) {
         [
           ["outdoor", "visibleCardsOutdoorAdded"],
-          ["growth", "visibleCardsGrowthAdded"]
+          ["growth", "visibleCardsGrowthAdded"],
+          ["routine", "visibleCardsRoutineAdded"]
         ].forEach(([key, flag]) => {
           if (!filtered.includes(key) && storageGet(flag) !== "true") {
             filtered.push(key);
@@ -3126,7 +3172,7 @@ async function refreshWeather() {
   state.weatherLastUpdated = Date.now();
   try {
     const { latitude, longitude } = await weatherCoordinates();
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph`;
     const data = await fetchJson(url);
     const current = data.current || {};
     const weatherInfo = weatherCodeInfo(Number(current.weather_code), Number(current.wind_speed_10m));
@@ -3135,6 +3181,7 @@ async function refreshWeather() {
       latitude,
       longitude,
       temperature: Math.round(Number(current.temperature_2m)),
+      humidity: Number.isFinite(Number(current.relative_humidity_2m)) ? Math.round(Number(current.relative_humidity_2m)) : null,
       description: weatherInfo.description,
       icon: weatherInfo.icon,
       websiteUrl: `https://weather.com/weather/today/l/${latitude},${longitude}`
@@ -3369,6 +3416,15 @@ function getActivityStats() {
       value: `${todaySummary.bottleOunces} oz`,
       helper: `Last time ${formatSinceTime(lastLogOfType("bottle"))}`
     },
+    routine: {
+      html: `
+        <div class="hygiene-list stats-list">
+          <span><img src="/assets/activity/icon-routine-morning.png" alt="">${todaySummary.morningRoutines} morning</span>
+          <span><img src="/assets/activity/icon-routine-naptime.png" alt="">${todaySummary.naptimeRoutines} nap</span>
+          <span><img src="/assets/activity/icon-routine-bedtime.png" alt="">${todaySummary.bedtimeRoutines} bedtime</span>
+        </div>
+      `
+    },
     diaper: {
       html: `
         <div class="hygiene-list">
@@ -3419,6 +3475,10 @@ function summarizeLogsToday() {
   return {
     breastFeeds: count((log) => log.type === "feeding" && log.method === "breast"),
     bottleOunces: +sum((log) => log.type === "bottle", "ounces").toFixed(1),
+    routineEvents: count((log) => log.type === "routine"),
+    morningRoutines: count((log) => log.type === "routine" && log.routine === "morning"),
+    naptimeRoutines: count((log) => log.type === "routine" && log.routine === "naptime"),
+    bedtimeRoutines: count((log) => log.type === "routine" && log.routine === "bedtime"),
     wetDiapers: count((log) => log.type === "diaper" && log.pee),
     poops: count((log) => log.type === "diaper" && log.poop),
     baths: count((log) => log.type === "bath" && (log.status === "start" || !log.status)),
@@ -3922,6 +3982,7 @@ function renderTodaySummary() {
     ["Logs", state.summary.totalLogs || 0, "All activities"],
     ["Breast", state.summary.breastFeeds || 0, "Feeds"],
     ["Bottle", `${state.summary.bottleOunces || 0} oz`, "Today total"],
+    ["Routines", state.summary.routineEvents || 0, "Done"],
     ["Wee", state.summary.wetDiapers || 0, "Wee diapers"],
     ["Poo", state.summary.poops || 0, "Poo diapers"],
     ["Sleep", state.summary.sleepEvents || 0, "Sleep events"],
@@ -3975,8 +4036,477 @@ function renderHistory() {
   });
 }
 
+function renderDashboardOverview() {
+  const container = document.getElementById("dashboard-overview");
+  if (!container) return;
+  const overviewState = state.dashboardOverview;
+  const overview = overviewState.publishedReview;
+  if (!overview) {
+    const isReviewing = overviewState.status === "reviewing";
+    container.innerHTML = `
+      <div class="dashboard-overview-top">
+        <div>
+          <span>Overview</span>
+          <h3>${isReviewing ? "Preparing overview..." : "Overview not ready yet"}</h3>
+          <p>${overviewState.error ? escapeHtml(overviewState.error) : "Local baseline review will prepare first. Press Refresh for GPT when you want the deeper review."}</p>
+        </div>
+        <div class="dashboard-overview-actions">
+          <span class="overview-status status-insufficient-data">Insufficient data</span>
+          <button class="ghost" type="button" data-dashboard-overview-refresh ${isReviewing ? "disabled" : ""}>${isReviewing ? "Reviewing..." : "Refresh"}</button>
+        </div>
+      </div>
+    `;
+    container.querySelector("[data-dashboard-overview-refresh]")?.addEventListener("click", () => {
+      maybeRefreshDashboardOverview(true);
+    });
+    setupOverviewTraceToggle(container);
+    return;
+  }
+  const cards = overview?.cards || [];
+  const isReviewing = overviewState.status === "reviewing";
+  const source = overviewState.source === "gpt" ? "GPT" : overviewState.source === "llama" ? "Ollama" : overviewState.source === "rules" ? "Local rules" : "Local overview";
+  const updated = overviewUpdatedAt(overviewState, overview);
+  const priority = overview.overall?.priority || overview.overallStatus || "insufficient_data";
+  const statusClassName = overviewStatusClass(priority);
+  const statusMessage = isReviewing
+    ? "Reviewing in background..."
+    : overviewState.status === "error"
+      ? (overviewState.error || "Could not refresh review. Showing last review.")
+      : "";
+
+  container.innerHTML = `
+    <div class="dashboard-overview-top">
+      <div>
+        <span>Overview</span>
+        <h3>${escapeHtml(overviewHeadline(overview))}</h3>
+        <p>${escapeHtml(overviewSummary(overview))}</p>
+      </div>
+      <div class="dashboard-overview-actions">
+        <span class="overview-status status-${escapeAttr(statusClassName)}">${escapeHtml(overviewPriorityLabel(priority))}</span>
+        <button class="ghost" type="button" data-dashboard-overview-refresh ${isReviewing ? "disabled" : ""}>${isReviewing ? "Reviewing..." : "Refresh"}</button>
+      </div>
+    </div>
+    ${overview.summaryBullets?.length ? `
+      <ul class="dashboard-overview-bullets">
+        ${overview.summaryBullets.slice(0, 5).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+      </ul>
+    ` : ""}
+    ${overview.overall?.reviewText ? `
+      <div class="dashboard-overview-next">
+        <strong>Overall</strong>
+        <p>${escapeHtml(overview.overall.reviewText)}</p>
+      </div>
+    ` : ""}
+    ${cards.length ? `
+      <div class="dashboard-overview-grid">
+        ${cards.map((card) => renderDashboardOverviewCard(card)).join("")}
+      </div>
+    ` : ""}
+    ${overview?.parentNextSteps?.length ? `
+      <div class="dashboard-overview-next">
+        <strong>Parent next steps</strong>
+        <ul>${overview.parentNextSteps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ul>
+      </div>
+    ` : ""}
+    ${renderOverviewReviewTrace(overviewState.reviewTrace)}
+    <div class="dashboard-overview-meta">
+      <span>${escapeHtml(source)}</span>
+      <span>Last reviewed: ${escapeHtml(updated)}</span>
+      ${overview.dataQualityNotes?.length ? `<span>${escapeHtml(overview.dataQualityNotes[0])}</span>` : ""}
+      ${statusMessage ? `<span>${escapeHtml(statusMessage)}</span>` : ""}
+    </div>
+  `;
+
+  container.querySelector("[data-dashboard-overview-refresh]")?.addEventListener("click", () => {
+    maybeRefreshDashboardOverview(true);
+  });
+  setupOverviewTraceToggle(container);
+}
+
+function renderOverviewReviewTrace(trace) {
+  if (!trace || !Array.isArray(trace.steps) || !trace.steps.length) return "";
+  return `
+    <details class="dashboard-overview-trace" data-overview-trace ${state.dashboardOverview.reviewTraceOpen ? "open" : ""}>
+      <summary>
+        <span>Review log</span>
+        <span>${escapeHtml(formatDurationMs(trace.totalMs || 0))}</span>
+      </summary>
+      <div class="overview-trace-body">
+        <div class="overview-trace-row overview-trace-row-head">
+          <span>Step</span>
+          <span>Time</span>
+          <span>Details</span>
+        </div>
+        ${trace.steps.map((step) => `
+          <div class="overview-trace-row">
+            <span>${escapeHtml(formatTraceStepName(step.name))}</span>
+            <span>${escapeHtml(formatDurationMs(step.ms || 0))}</span>
+            <span>${escapeHtml(formatTraceDetails(step.details))}</span>
+          </div>
+        `).join("")}
+      </div>
+    </details>
+  `;
+}
+
+function setupOverviewTraceToggle(container) {
+  const trace = container.querySelector("[data-overview-trace]");
+  if (!trace) return;
+  trace.addEventListener("toggle", () => {
+    state.dashboardOverview.reviewTraceOpen = trace.open;
+    localStorage.setItem("tinyNewborn.dashboardOverview.reviewTraceOpen", trace.open ? "1" : "0");
+  });
+}
+
+function formatDurationMs(ms) {
+  const value = Math.max(0, Number(ms) || 0);
+  if (value < 1000) return `${Math.round(value)} ms`;
+  return `${(value / 1000).toFixed(value < 10000 ? 1 : 0)} s`;
+}
+
+function formatTraceStepName(value) {
+  return String(value || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatTraceDetails(details) {
+  if (!details || typeof details !== "object") return "";
+  return Object.entries(details)
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .map(([key, value]) => `${formatTraceStepName(key)}: ${Array.isArray(value) ? value.length : value}`)
+    .join(" | ");
+}
+
+function overviewHeadline(overview) {
+  return overview?.overall?.headline || overview?.summaryTitle || "Recent parent overview";
+}
+
+function overviewSummary(overview) {
+  return overview?.overall?.oneLineSummary || "Recent logs, care guidance, stool color actions, milestones, and weather in one parent-friendly board.";
+}
+
+function overviewUpdatedAt(overviewState, overview) {
+  const updatedAt = overviewState.updatedAt || overview?.updatedAt || overview?.reviewMeta?.generatedAt || overview?.overall?.lastReviewedAt || "";
+  return updatedAt ? formatAssistantUpdatedAt(updatedAt) : "--";
+}
+
+function overviewStatusClass(priority) {
+  return String(priority || "insufficient_data").toLowerCase().replace(/[^a-z]+/g, "-");
+}
+
+function overviewPriorityLabel(priority) {
+  const labels = {
+    ok: "No urgent flags",
+    watch: "Watch",
+    call_doctor: "Call doctor",
+    urgent: "Urgent",
+    insufficient_data: "Insufficient data"
+  };
+  return labels[priority] || String(priority || "Insufficient data");
+}
+
+function renderDashboardOverviewCard(card) {
+  if (card.id) return renderCautiousDashboardOverviewCard(card);
+  const confidence = String(card.confidence || "Low").toLowerCase();
+  return `
+    <article class="dashboard-overview-card">
+      <div class="dashboard-overview-card-head">
+        <h4>${escapeHtml(card.section || "Overview")}</h4>
+        <span class="overview-confidence confidence-${escapeAttr(confidence)}">${escapeHtml(card.confidence || "Low")}</span>
+      </div>
+      <dl>
+        <div>
+          <dt>Recent</dt>
+          <dd>${escapeHtml(card.recentPattern || "No recent information found.")}</dd>
+        </div>
+        <div>
+          <dt>Meaning</dt>
+          <dd>${escapeHtml(card.meaning || "Not enough information yet.")}</dd>
+        </div>
+        <div>
+          <dt>Recommendation</dt>
+          <dd>${escapeHtml(card.recommendation || "Keep logging and watch baby cues.")}</dd>
+        </div>
+      </dl>
+      ${card.flags?.length ? `<div class="overview-flags">${card.flags.map((flag) => `<span>${escapeHtml(flag)}</span>`).join("")}</div>` : ""}
+    </article>
+  `;
+}
+
+function renderCautiousDashboardOverviewCard(card) {
+  const confidence = String(card.confidence || "low").toLowerCase();
+  if (card.review) {
+    return `
+      <article class="dashboard-overview-card">
+        <div class="dashboard-overview-card-head">
+          <h4>${escapeHtml(card.title || "Overview")}</h4>
+          <span class="overview-confidence confidence-${escapeAttr(confidence)}">${escapeHtml(card.confidence || "low")}</span>
+        </div>
+        <p>${escapeHtml(card.review)}</p>
+        ${card.citations?.length ? `
+          <div>
+            <dt>Sources</dt>
+            <dd>${renderOverviewCitations(card.citations)}</dd>
+          </div>
+        ` : ""}
+      </article>
+    `;
+  }
+  return `
+    <article class="dashboard-overview-card">
+      <div class="dashboard-overview-card-head">
+        <h4>${escapeHtml(card.title || "Overview")}</h4>
+        <span class="overview-confidence confidence-${escapeAttr(confidence)}">${escapeHtml(card.confidence || "low")}</span>
+      </div>
+      <dl>
+        <div>
+          <dt>Observed</dt>
+          <dd>${renderOverviewList(card.observed, "No recent information found.")}</dd>
+        </div>
+        <div>
+          <dt>Meaning</dt>
+          <dd>${escapeHtml(card.meaning || "Not enough information yet.")}</dd>
+        </div>
+        ${card.cannotConclude?.length ? `
+          <div>
+            <dt>Cannot conclude</dt>
+            <dd>${renderOverviewList(card.cannotConclude, "")}</dd>
+          </div>
+        ` : ""}
+        ${card.recommendations?.length ? `
+          <div>
+            <dt>Recommendations</dt>
+            <dd>${renderOverviewList(card.recommendations, "")}</dd>
+          </div>
+        ` : ""}
+        ${card.whenToCallDoctor?.length ? `
+          <div>
+            <dt>When to call</dt>
+            <dd>${renderOverviewList(card.whenToCallDoctor, "")}</dd>
+          </div>
+        ` : ""}
+        ${card.citations?.length ? `
+          <div>
+            <dt>Sources</dt>
+            <dd>${renderOverviewCitations(card.citations)}</dd>
+          </div>
+        ` : ""}
+      </dl>
+    </article>
+  `;
+}
+
+function renderOverviewCitations(citations) {
+  const safeCitations = Array.isArray(citations) ? citations.filter((citation) => citation?.url && citation?.title).slice(0, 3) : [];
+  if (!safeCitations.length) return "";
+  return `<ul class="overview-sources">${safeCitations.map((citation) => `
+    <li><a href="${escapeAttr(citation.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(citation.title)}</a></li>
+  `).join("")}</ul>`;
+}
+
+function renderOverviewList(items, fallback) {
+  const list = Array.isArray(items) ? items.filter(Boolean).slice(0, 3) : [];
+  if (!list.length) return escapeHtml(fallback);
+  if (list.length === 1) return escapeHtml(list[0]);
+  return `<ul>${list.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
+}
+
+function dashboardOverviewSignature() {
+  const cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000;
+  const guideline = state.doctorGuideline || {};
+  const milestoneGuide = guideline.milestoneGuide || {};
+  const recentLogs = state.logs
+    .slice()
+    .filter((log) => logTime(log) >= cutoff)
+    .sort((a, b) => logTime(b) - logTime(a))
+    .slice(0, 90)
+    .map((log) => ({
+      id: log.id,
+      type: log.type,
+      date: log.date,
+      time: log.time,
+      status: log.status || "",
+      method: log.method || "",
+      side: log.side || "",
+      ounces: log.ounces || "",
+      pee: Boolean(log.pee),
+      poop: Boolean(log.poop),
+      stat: log.stat || "",
+      poopColorId: log.poopColorId || log.poopColor || "",
+      notes: log.notes || ""
+    }));
+  return JSON.stringify({
+    birthday: state.profile.birthday || "",
+    recent: state.recent || {},
+    overviewSettings: state.overviewSettings || {},
+    weather: state.weather ? {
+      temperature: state.weather.temperature,
+      humidity: state.weather.humidity,
+      description: state.weather.description
+    } : null,
+    milestoneProgress: state.milestoneProgress || {},
+    doctorGuideline: {
+      updatedAt: guideline.updatedAt || "",
+      recommendations: arrayGuideValue(guideline.recommendations).map((item) => item.id || item.summary || ""),
+      careGuides: Object.keys(objectGuideValue(guideline.careGuides)),
+      milestoneDefinitions: arrayGuideValue(milestoneGuide.definitions).map((item) => item.id || item.name || "")
+    },
+    poopColors: state.poopColors.map((item) => ({
+      id: item.id,
+      category: item.category,
+      parentAction: item.parentAction
+    })),
+    recentLogs
+  });
+}
+
+function dashboardOverviewReviewFromPayload(payload) {
+  return payload?.publishedReview || payload?.review || payload?.overview || null;
+}
+
+function validateDashboardOverviewPayload(payload) {
+  const review = dashboardOverviewReviewFromPayload(payload);
+  const allowedPriorities = new Set(["ok", "watch", "call_doctor", "urgent", "insufficient_data"]);
+  const allowedConfidence = new Set(["high", "medium", "low"]);
+  const requiredCards = ["eat", "sleep", "hygiene_diaper", "health", "safety", "exercise", "play"];
+  const allowedCards = new Set(requiredCards);
+  if (!review || review.schemaVersion !== 1 || review.reviewStatus !== "ready") return false;
+  if (!review.overall || !allowedPriorities.has(review.overall.priority) || !allowedConfidence.has(review.overall.confidence)) return false;
+  if (!review.overall.headline || !review.overall.oneLineSummary || !review.overall.dataWindowLabel || !review.overall.lastReviewedAt) return false;
+  if (!review.overall.reviewText) return false;
+  if (!Array.isArray(review.cards) || review.cards.length !== requiredCards.length) return false;
+  if (!requiredCards.every((id, index) => review.cards[index]?.id === id)) return false;
+  if (!Array.isArray(review.parentNextSteps) || review.parentNextSteps.length < 1 || review.parentNextSteps.length > 10) return false;
+  return review.cards.every((card) => (
+    allowedCards.has(card.id)
+    && card.title
+    && allowedPriorities.has(card.priority)
+    && allowedConfidence.has(card.confidence)
+    && card.review
+  ));
+}
+
+function loadDashboardOverviewCache() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(dashboardOverviewCacheKey) || "null");
+    if (!cached || !validateDashboardOverviewPayload({ review: cached.publishedReview })) return false;
+    const overviewState = state.dashboardOverview;
+    overviewState.publishedReview = cached.publishedReview;
+    overviewState.pendingReview = null;
+    overviewState.status = "ready";
+    overviewState.source = cached.source || "rules";
+    overviewState.updatedAt = cached.updatedAt || cached.publishedReview.updatedAt || "";
+    overviewState.lastInputHash = cached.lastInputHash || "";
+    overviewState.serverInputHash = cached.serverInputHash || "";
+    overviewState.reviewTrace = cached.reviewTrace || null;
+    overviewState.error = "";
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function saveDashboardOverviewCache() {
+  const overviewState = state.dashboardOverview;
+  if (!overviewState.publishedReview) return;
+  try {
+    localStorage.setItem(dashboardOverviewCacheKey, JSON.stringify({
+      publishedReview: overviewState.publishedReview,
+      source: overviewState.source || "rules",
+      updatedAt: overviewState.updatedAt || overviewState.publishedReview.updatedAt || "",
+      lastInputHash: overviewState.lastInputHash || "",
+      serverInputHash: overviewState.serverInputHash || "",
+      reviewTrace: overviewState.reviewTrace || null
+    }));
+  } catch (error) {
+    // Cache failures should never block the displayed review.
+  }
+}
+
+function publishDashboardOverviewReviewAtomically(payload, clientInputHash) {
+  const overviewState = state.dashboardOverview;
+  const pendingReview = overviewState.pendingReview;
+  if (!pendingReview) throw new Error("Overview review was not staged.");
+  overviewState.publishedReview = pendingReview;
+  overviewState.pendingReview = null;
+  overviewState.status = "ready";
+  overviewState.source = payload.source || "rules";
+  overviewState.updatedAt = payload.updatedAt || pendingReview.updatedAt || new Date().toISOString();
+  overviewState.lastInputHash = clientInputHash;
+  overviewState.serverInputHash = payload.inputHash || "";
+  overviewState.reviewTrace = payload.reviewTrace || null;
+  overviewState.error = "";
+  saveDashboardOverviewCache();
+}
+
+function startDashboardOverviewReviews() {
+  const overviewState = state.dashboardOverview;
+  const loadedFromCache = !overviewState.publishedReview && loadDashboardOverviewCache();
+  if (loadedFromCache) renderDashboardOverview();
+  if (overviewState.timerId) clearInterval(overviewState.timerId);
+  const isManualOnly = state.overviewSettings?.reviewMode === "gpt_strict";
+  if (!overviewState.publishedReview) {
+    maybeRefreshDashboardOverview(false, isManualOnly ? "rules_only" : "");
+  }
+  const intervalMinutes = Math.max(1, Math.min(60, Number(state.overviewSettings?.refreshIntervalMinutes) || 5));
+  overviewState.timerId = setInterval(() => {
+    if (state.overviewSettings?.reviewMode === "gpt_strict") return;
+    maybeRefreshDashboardOverview(false);
+  }, intervalMinutes * 60 * 1000);
+}
+
+async function maybeRefreshDashboardOverview(force = false, reviewModeOverride = "") {
+  const overviewState = state.dashboardOverview;
+  if (overviewState.status === "reviewing") {
+    renderDashboardOverview();
+    return;
+  }
+  const inputHash = dashboardOverviewSignature();
+  if (!force && !reviewModeOverride && overviewState.publishedReview && state.overviewSettings?.reviewMode === "gpt_strict") return;
+  if (!force && overviewState.publishedReview && inputHash === overviewState.lastInputHash) return;
+  const requestOverviewSettings = {
+    ...(state.overviewSettings || {}),
+    ...(reviewModeOverride ? { reviewMode: reviewModeOverride } : {})
+  };
+
+  overviewState.status = "reviewing";
+  overviewState.pendingReview = null;
+  overviewState.error = "";
+  renderDashboardOverview();
+
+  try {
+    const payload = await fetchJson("/api/dashboard-overview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        days: requestOverviewSettings.reviewWindowDays || 3,
+        overviewSettings: requestOverviewSettings,
+        weather: state.weather ? {
+          temperature: state.weather.temperature,
+          humidity: state.weather.humidity,
+          description: state.weather.description,
+          icon: state.weather.icon
+        } : null
+      })
+    });
+    if (!validateDashboardOverviewPayload(payload)) throw new Error("Overview response did not pass validation.");
+    overviewState.pendingReview = dashboardOverviewReviewFromPayload(payload);
+    publishDashboardOverviewReviewAtomically(payload, inputHash);
+  } catch (error) {
+    overviewState.pendingReview = null;
+    overviewState.status = "error";
+    overviewState.reviewTrace = error.payload?.reviewTrace || overviewState.reviewTrace;
+    overviewState.error = overviewState.publishedReview
+      ? `Could not refresh review: ${error.message}. Showing last review.`
+      : `Could not prepare overview: ${error.message}.`;
+  }
+  renderDashboardOverview();
+}
+
 function renderDashboard() {
   syncDashboardDateInputs();
+  renderDashboardOverview();
 
   const chart = document.getElementById("dashboard-chart");
   const detail = document.getElementById("dashboard-event-detail");
@@ -5006,6 +5536,7 @@ async function saveHistoryCorrection(event) {
 function labelForLog(log) {
   if (log.type === "feeding") return `Boobie, ${log.side || "unknown"} side`;
   if (log.type === "bottle") return `Bottle, ${log.ounces} oz`;
+  if (log.type === "routine") return `${routineLabel(log.routine)} done`;
   if (log.type === "growth_stats") {
     if (readWeightGrams(log) > 0 && (log.stat === "weight" || !log.stat)) return `Weight, ${formatWeightLog(log)}`;
     if (readHeightMm(log) > 0) return `Height, ${formatHeightLog(log)}`;
@@ -5044,7 +5575,17 @@ function eventCategory(type) {
 function iconForLog(log) {
   if (log.type === "feeding") return `/assets/activity/icon-${log.side === "right" ? "right" : "left"}.png`;
   if (log.type === "diaper") return `/assets/activity/icon-${log.poop ? "poop" : "pee"}.png`;
+  if (log.type === "routine") return `/assets/activity/icon-routine-${log.routine || "morning"}.png`;
   return eventCategory(log.type).icon;
+}
+
+function routineLabel(routine) {
+  const labels = {
+    morning: "Morning routine",
+    naptime: "Naptime routine",
+    bedtime: "Bedtime routine"
+  };
+  return labels[routine] || "Routine";
 }
 
 function formatWhen(value) {
