@@ -56,7 +56,6 @@ struct ContentView: View {
                 .padding(.top, 4)
                 .padding(.bottom, 10)
             }
-            .navigationTitle("Tiny Log")
             .task {
                 await store.retryPendingSyncs()
             }
@@ -68,8 +67,19 @@ struct ContentView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Quick log")
-                .font(.headline)
+            HStack(spacing: 6) {
+                Image("AppLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 22, height: 22)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+                Text("TinyNewbornLog")
+                    .font(.headline)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+
             Text("Tap a card, log the moment.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
