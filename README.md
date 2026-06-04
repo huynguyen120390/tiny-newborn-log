@@ -6,6 +6,7 @@ The MVP uses:
 
 - Web frontend: static HTML, CSS, and JavaScript
 - Backend: Node.js built-in `http` server
+- Native app: SwiftUI iPhone companion and Apple Watch app in `ios/`
 - Local data: JSON files in `data/`
 - Windows launcher: `start.bat`
 
@@ -29,6 +30,22 @@ Then open:
 
 ```text
 http://localhost:3002
+```
+
+## Run Apple Watch App
+
+Open this project in Xcode:
+
+```text
+ios/TinyNewbornLog.xcodeproj
+```
+
+For a real Apple Watch, select the `TinyNewbornLog iPhone App` scheme and choose the paired iPhone as the run destination. Xcode installs the Watch app through the iPhone.
+
+The Watch app syncs logs to the local web server endpoint:
+
+```text
+http://192.168.86.55:3002/api/logs
 ```
 
 The project standard port is 3002:

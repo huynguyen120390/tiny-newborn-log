@@ -5,3 +5,9 @@ node_modules/
 *.log
 .env
 start-with-openai.bat
+.DS_Store
+DerivedData/
+build/
+xcuserdata/
+*.xcuserstate
+*.moved-aside
