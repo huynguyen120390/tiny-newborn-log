@@ -14,6 +14,20 @@ private func formatElapsed(_ elapsed: TimeInterval) -> String {
     return "\(minutes):\(String(format: "%02d", seconds))"
 }
 
+private func formatDurationSummary(_ elapsed: TimeInterval) -> String {
+    let totalSeconds = max(Int(elapsed.rounded()), 0)
+    if totalSeconds < 60 {
+        return totalSeconds == 1 ? "1 sec" : "\(totalSeconds) sec"
+    }
+
+    let minutes = totalSeconds / 60
+    if minutes < 60 {
+        return "\(minutes)m"
+    }
+
+    return "\(minutes / 60)h \(minutes % 60)m"
+}
+
 private extension Color {
     init(hex: UInt32) {
         self.init(
@@ -29,12 +43,15 @@ struct ContentView: View {
     @StateObject private var store = LogStore()
     @StateObject private var reminderPlayer = ReminderPlayer()
     @State private var bottleML = 60.0
+    @State private var bottleMilkType: BottleMilkType = .formula
     @State private var measurementKind: MeasurementKind = .weight
     @State private var measurementValue = 8.0
     @AppStorage("bathSoundEnabled") private var bathSoundEnabled = false
     @AppStorage("bathReminderSeconds") private var bathReminderSeconds = 300
     @AppStorage("tummySoundEnabled") private var tummySoundEnabled = false
     @AppStorage("tummyReminderSeconds") private var tummyReminderSeconds = 300
+    @AppStorage("outdoorSoundEnabled") private var outdoorSoundEnabled = false
+    @AppStorage("outdoorReminderSeconds") private var outdoorReminderSeconds = 300
     @AppStorage(SyncServerMode.storageKey) private var syncServerMode: SyncServerMode = .automatic
     @State private var activeSheet: LoggerSheet?
     @State private var selectedLogFilter: LogKind?
@@ -81,6 +98,24 @@ struct ContentView: View {
             }
             .onReceive(syncRetryTimer) { _ in
                 requestSyncRetry()
+            }
+            .onChange(of: bathSoundEnabled) { _, _ in
+                configureReminder(for: .bath)
+            }
+            .onChange(of: bathReminderSeconds) { _, _ in
+                configureReminder(for: .bath, announceImmediately: false)
+            }
+            .onChange(of: tummySoundEnabled) { _, _ in
+                configureReminder(for: .tummyTime)
+            }
+            .onChange(of: tummyReminderSeconds) { _, _ in
+                configureReminder(for: .tummyTime, announceImmediately: false)
+            }
+            .onChange(of: outdoorSoundEnabled) { _, _ in
+                configureReminder(for: .outdoorTime)
+            }
+            .onChange(of: outdoorReminderSeconds) { _, _ in
+                configureReminder(for: .outdoorTime, announceImmediately: false)
             }
             .sheet(item: $activeSheet) { sheet in
                 sheetContent(sheet)
@@ -149,12 +184,15 @@ struct ContentView: View {
     }
 
     private var sleepCard: some View {
-        LoggerCard(
+        let activeStartedAt = store.activeSleepStartedAt
+
+        return LoggerCard(
             title: store.activeSleepStartedAt == nil ? "Sleep" : "Awake",
-            value: "",
-            subtitle: sleepSubtitle,
+            value: activeStartedAt == nil ? store.lastCompletedDurationText(for: .sleep) : "",
+            subtitle: "today \(store.todaysDurationText(for: .sleep))",
             symbolName: LogKind.sleep.symbolName,
-            color: store.activeSleepStartedAt == nil ? .indigo : .orange
+            color: store.activeSleepStartedAt == nil ? .indigo : .orange,
+            timerStartedAt: activeStartedAt
         ) {
             activeSheet = .sleep
         }
@@ -164,7 +202,7 @@ struct ContentView: View {
         LoggerCard(
             title: "Boobie",
             value: "",
-            subtitle: "Left or Right",
+            subtitle: store.lastSummary(for: .nursing),
             symbolName: LogKind.nursing.symbolName,
             color: .pink
         ) {
@@ -175,8 +213,8 @@ struct ContentView: View {
     private var bottleCard: some View {
         LoggerCard(
             title: "Bottle",
-            value: "\(Int(bottleML))",
-            subtitle: "ml",
+            value: "\(Int(store.latestBottleAmount(for: bottleMilkType)))",
+            subtitle: "\(bottleMilkType.rawValue) last",
             symbolName: LogKind.bottle.symbolName,
             color: .teal
         ) {
@@ -188,7 +226,7 @@ struct ContentView: View {
         LoggerCard(
             title: "Wee & Poo",
             value: "\(store.todaysCount(for: .diaper))",
-            subtitle: "today",
+            subtitle: store.lastSummary(for: .diaper),
             symbolName: LogKind.diaper.symbolName,
             color: .brown
         ) {
@@ -200,7 +238,7 @@ struct ContentView: View {
         LoggerCard(
             title: "Baby Stats",
             value: measurementKind.rawValue,
-            subtitle: "\(measurementValueText) \(measurementKind.unit)",
+            subtitle: store.lastSummary(for: .babyStats),
             symbolName: LogKind.babyStats.symbolName,
             color: .blue
         ) {
@@ -209,14 +247,15 @@ struct ContentView: View {
     }
 
     private func timedCard(_ kind: LogKind, color: Color) -> some View {
-        let isActive = store.activeActivities[kind] != nil
+        let activeStartedAt = store.activeActivities[kind]
 
         return LoggerCard(
             title: kind.title,
-            value: "",
-            subtitle: isActive ? activeElapsedText(for: kind) : "\(store.todaysCount(for: kind)) today",
+            value: activeStartedAt == nil ? store.lastCompletedDurationText(for: kind) : "",
+            subtitle: "today \(store.todaysDurationText(for: kind))",
             symbolName: kind.symbolName,
-            color: color
+            color: color,
+            timerStartedAt: activeStartedAt
         ) {
             activeSheet = .timed(kind)
         }
@@ -226,7 +265,7 @@ struct ContentView: View {
         LoggerCard(
             title: "Routines",
             value: "",
-            subtitle: "\(store.todaysCount(for: .routines)) today",
+            subtitle: store.lastSummary(for: .routines),
             symbolName: LogKind.routines.symbolName,
             color: .purple
         ) {
@@ -238,7 +277,7 @@ struct ContentView: View {
         LoggerCard(
             title: kind.title,
             value: "Log",
-            subtitle: "\(store.todaysCount(for: kind)) today",
+            subtitle: store.lastSummary(for: kind),
             symbolName: kind.symbolName,
             color: color
         ) {
@@ -429,30 +468,44 @@ struct ContentView: View {
         case .sleep:
             SleepSheet(
                 isAsleep: store.activeSleepStartedAt != nil,
-                detail: sleepSubtitle
+                detail: sleepSubtitle,
+                startedAt: store.activeSleepStartedAt,
+                todayDuration: store.todaysDurationText(for: .sleep),
+                lastDuration: store.lastCompletedDurationText(for: .sleep),
+                lastEndedAt: store.lastCompletedDuration(for: .sleep)?.endedAt
             ) {
                 store.toggleSleep()
                 activeSheet = nil
             }
         case .boobie:
-            BoobieSheet { side in
+            BoobieSheet(totalToday: store.todaysTotalText(for: .nursing)) { side in
                 store.logNursing(side: side)
                 activeSheet = nil
             }
         case .bottle:
-            BottleSheet(bottleML: $bottleML) {
-                store.logBottle(amountML: bottleML)
+            BottleSheet(bottleML: $bottleML, milkType: $bottleMilkType, totalToday: store.todaysTotalText(for: .bottle), presetAmount: { milkType in
+                store.latestBottleAmount(for: milkType)
+            }) {
+                store.logBottle(amountML: bottleML, milkType: bottleMilkType)
                 activeSheet = nil
             }
+            .onAppear {
+                bottleML = store.latestBottleAmount(for: bottleMilkType)
+            }
         case .diaper:
-            DiaperSheet { event, poopColor in
+            DiaperSheet(totalToday: store.todaysTotalText(for: .diaper)) { event, poopColor in
                 store.logDiaper(event, poopColor: poopColor)
                 activeSheet = nil
             }
         case .babyStats:
-            BabyStatsSheet(kind: $measurementKind, value: $measurementValue) {
+            BabyStatsSheet(kind: $measurementKind, value: $measurementValue, totalToday: store.todaysTotalText(for: .babyStats), presetValue: { kind in
+                store.latestMeasurementValue(for: kind)
+            }) {
                 store.logMeasurement(kind: measurementKind, value: measurementValue)
                 activeSheet = nil
+            }
+            .onAppear {
+                measurementValue = store.latestMeasurementValue(for: measurementKind)
             }
         case .timed(let kind):
             TimedActivitySheet(
@@ -460,25 +513,27 @@ struct ContentView: View {
                 isActive: store.activeActivities[kind] != nil,
                 startedAt: store.activeActivities[kind],
                 detail: activeSubtitle(for: kind),
+                todayDuration: store.todaysDurationText(for: kind),
+                lastDuration: store.lastCompletedDurationText(for: kind),
+                lastEndedAt: store.lastCompletedDuration(for: kind)?.endedAt,
                 soundEnabled: soundBinding(for: kind),
                 reminderSeconds: reminderBinding(for: kind)
             ) {
                 let wasActive = store.activeActivities[kind] != nil
-                let shouldStart = !wasActive
                 store.toggleTimedActivity(kind)
-                updateReminder(for: kind, shouldStart: shouldStart)
+                configureReminder(for: kind)
 
                 if wasActive {
                     activeSheet = nil
                 }
             }
         case .quick(let kind):
-            QuickActivitySheet(kind: kind) {
+            QuickActivitySheet(kind: kind, totalToday: store.todaysTotalText(for: kind)) {
                 store.logQuickActivity(kind)
                 activeSheet = nil
             }
         case .routines:
-            RoutinesSheet { routine in
+            RoutinesSheet(totalToday: store.todaysTotalText(for: .routines)) { routine in
                 store.logRoutine(routine)
                 activeSheet = nil
             }
@@ -508,6 +563,8 @@ struct ContentView: View {
             return $bathSoundEnabled
         case .tummyTime:
             return $tummySoundEnabled
+        case .outdoorTime:
+            return $outdoorSoundEnabled
         default:
             return .constant(false)
         }
@@ -519,21 +576,55 @@ struct ContentView: View {
             return $bathReminderSeconds
         case .tummyTime:
             return $tummyReminderSeconds
+        case .outdoorTime:
+            return $outdoorReminderSeconds
         default:
             return .constant(300)
         }
     }
 
-    private func updateReminder(for kind: LogKind, shouldStart: Bool) {
-        guard kind == .bath || kind == .tummyTime else {
+    private func supportsSoundReminder(_ kind: LogKind) -> Bool {
+        kind == .bath || kind == .tummyTime || kind == .outdoorTime
+    }
+
+    private func soundEnabled(for kind: LogKind) -> Bool {
+        switch kind {
+        case .bath:
+            return bathSoundEnabled
+        case .tummyTime:
+            return tummySoundEnabled
+        case .outdoorTime:
+            return outdoorSoundEnabled
+        default:
+            return false
+        }
+    }
+
+    private func reminderSeconds(for kind: LogKind) -> Int {
+        switch kind {
+        case .bath:
+            return bathReminderSeconds
+        case .tummyTime:
+            return tummyReminderSeconds
+        case .outdoorTime:
+            return outdoorReminderSeconds
+        default:
+            return 300
+        }
+    }
+
+    private func configureReminder(for kind: LogKind, announceImmediately: Bool = true) {
+        guard supportsSoundReminder(kind) else {
             return
         }
 
-        let soundEnabled = kind == .bath ? bathSoundEnabled : tummySoundEnabled
-        let seconds = kind == .bath ? bathReminderSeconds : tummyReminderSeconds
-
-        if shouldStart && soundEnabled {
-            reminderPlayer.start(kind: kind, everySeconds: seconds)
+        if let startedAt = store.activeActivities[kind], soundEnabled(for: kind) {
+            reminderPlayer.start(
+                kind: kind,
+                everySeconds: reminderSeconds(for: kind),
+                startedAt: startedAt,
+                announceImmediately: announceImmediately
+            )
         } else {
             reminderPlayer.stop(kind: kind)
         }
@@ -670,6 +761,7 @@ private struct LoggerCard: View {
     var subtitle: String
     var symbolName: String
     var color: Color
+    var timerStartedAt: Date? = nil
     var action: () -> Void
 
     var body: some View {
@@ -696,6 +788,15 @@ private struct LoggerCard: View {
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
+                    } else if let timerStartedAt {
+                        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                            Text(formatDurationSummary(timeline.date.timeIntervalSince(timerStartedAt)))
+                                .font(.headline.weight(.bold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                                .monospacedDigit()
+                        }
                     }
 
                     Text(subtitle)
@@ -720,6 +821,10 @@ private struct LoggerCard: View {
 private struct SleepSheet: View {
     var isAsleep: Bool
     var detail: String
+    var startedAt: Date?
+    var todayDuration: String
+    var lastDuration: String
+    var lastEndedAt: Date?
     var onLog: () -> Void
 
     var body: some View {
@@ -728,6 +833,16 @@ private struct SleepSheet: View {
                 Label(detail, systemImage: "clock")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                if isAsleep, let startedAt {
+                    ElapsedTimerRow(startedAt: startedAt)
+                }
+
+                DurationSummaryRows(
+                    todayDuration: todayDuration,
+                    lastDuration: lastDuration,
+                    lastEndedAt: lastEndedAt
+                )
 
                 Button(action: onLog) {
                     Label(isAsleep ? "Log Awake" : "Log Sleep", systemImage: isAsleep ? "sun.max.fill" : "moon.zzz.fill")
@@ -740,11 +855,16 @@ private struct SleepSheet: View {
 }
 
 private struct BoobieSheet: View {
+    var totalToday: String
     var onLog: (NursingSide) -> Void
 
     var body: some View {
         NavigationStack {
             List {
+                Label(totalToday, systemImage: "sum")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Button {
                     onLog(.left)
                 } label: {
@@ -766,11 +886,27 @@ private struct BoobieSheet: View {
 
 private struct BottleSheet: View {
     @Binding var bottleML: Double
+    @Binding var milkType: BottleMilkType
+    var totalToday: String
+    var presetAmount: (BottleMilkType) -> Double
     var onLog: () -> Void
 
     var body: some View {
         NavigationStack {
             List {
+                Label(totalToday, systemImage: "sum")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Picker("Milk", selection: $milkType) {
+                    ForEach(BottleMilkType.allCases) { type in
+                        Text(type.rawValue).tag(type)
+                    }
+                }
+                .onChange(of: milkType) { _, newType in
+                    bottleML = presetAmount(newType)
+                }
+
                 CompactStepper(
                     title: "Amount",
                     value: "\(Int(bottleML))",
@@ -790,11 +926,16 @@ private struct BottleSheet: View {
 }
 
 private struct DiaperSheet: View {
+    var totalToday: String
     var onLog: (DiaperEvent, PoopColorOption?) -> Void
 
     var body: some View {
         NavigationStack {
             List {
+                Label(totalToday, systemImage: "sum")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Button {
                     onLog(.wee, nil)
                 } label: {
@@ -849,6 +990,7 @@ private struct EditLogSheet: View {
     @State private var eventDate: Date
     @State private var amount: Double
     @State private var side: NursingSide
+    @State private var milkType: BottleMilkType
     @State private var poopColorID: String
     @State private var measurementKind: MeasurementKind
     let detailText: String
@@ -860,6 +1002,7 @@ private struct EditLogSheet: View {
         self._eventDate = State(initialValue: entry.endedAt ?? entry.startedAt)
         self._amount = State(initialValue: entry.amountML ?? 0)
         self._side = State(initialValue: entry.side ?? .left)
+        self._milkType = State(initialValue: entry.milkType ?? BottleMilkType.fromPayload(entry.detail))
         self._poopColorID = State(initialValue: entry.poopColorID ?? PoopColorOption.all.first?.id ?? "")
         self._measurementKind = State(initialValue: entry.detail == "Height" ? .height : .weight)
         self.detailText = detailText
@@ -884,6 +1027,11 @@ private struct EditLogSheet: View {
                         }
                     }
                 case .bottle:
+                    Picker("Milk", selection: $milkType) {
+                        ForEach(BottleMilkType.allCases) { type in
+                            Text(type.rawValue).tag(type)
+                        }
+                    }
                     CompactStepper(title: "Milk", value: "\(Int(amount))", unit: "ml", onMinus: { amount = max(5, amount - 5) }, onPlus: { amount = min(300, amount + 5) })
                 case .diaper:
                     Picker("Kind", selection: $entry.detail) {
@@ -917,6 +1065,10 @@ private struct EditLogSheet: View {
                     }
                     updated.amountML = amount > 0 ? amount : updated.amountML
                     updated.side = updated.kind == .nursing ? side : updated.side
+                    if updated.kind == .bottle {
+                        updated.milkType = milkType
+                        updated.detail = milkType.rawValue
+                    }
                     if updated.kind == .diaper {
                         let isWee = updated.detail == "Wee"
                         updated.poopColorID = isWee ? nil : poopColorID
@@ -944,6 +1096,8 @@ private struct EditLogSheet: View {
 private struct BabyStatsSheet: View {
     @Binding var kind: MeasurementKind
     @Binding var value: Double
+    var totalToday: String
+    var presetValue: (MeasurementKind) -> Double
     var onLog: () -> Void
 
     private var bounds: ClosedRange<Double> {
@@ -953,6 +1107,10 @@ private struct BabyStatsSheet: View {
     var body: some View {
         NavigationStack {
             List {
+                Label(totalToday, systemImage: "sum")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Picker("Type", selection: $kind) {
                     ForEach(MeasurementKind.allCases) { measurement in
                         Text(measurement.rawValue).tag(measurement)
@@ -974,7 +1132,7 @@ private struct BabyStatsSheet: View {
             }
             .navigationTitle("Baby Stats")
             .onChange(of: kind) { _, newKind in
-                value = newKind == .weight ? 8.0 : 20.0
+                value = presetValue(newKind)
             }
         }
     }
@@ -985,12 +1143,15 @@ private struct TimedActivitySheet: View {
     var isActive: Bool
     var startedAt: Date?
     var detail: String
+    var todayDuration: String
+    var lastDuration: String
+    var lastEndedAt: Date?
     @Binding var soundEnabled: Bool
     @Binding var reminderSeconds: Int
     var onLog: () -> Void
 
     private var supportsSound: Bool {
-        kind == .bath || kind == .tummyTime
+        kind == .bath || kind == .tummyTime || kind == .outdoorTime
     }
 
     var body: some View {
@@ -1003,6 +1164,12 @@ private struct TimedActivitySheet: View {
                 if isActive, let startedAt {
                     ElapsedTimerRow(startedAt: startedAt)
                 }
+
+                DurationSummaryRows(
+                    todayDuration: todayDuration,
+                    lastDuration: lastDuration,
+                    lastEndedAt: lastEndedAt
+                )
 
                 if supportsSound {
                     Toggle("Sound reminder", isOn: $soundEnabled)
@@ -1036,6 +1203,39 @@ private struct TimedActivitySheet: View {
     }
 }
 
+private struct DurationSummaryRows: View {
+    var todayDuration: String
+    var lastDuration: String
+    var lastEndedAt: Date?
+
+    var body: some View {
+        Section {
+            HStack {
+                Label("Today", systemImage: "sum")
+                Spacer()
+                Text(todayDuration)
+                    .font(.body.weight(.semibold))
+                    .monospacedDigit()
+            }
+
+            HStack {
+                Label("Last", systemImage: "clock.arrow.circlepath")
+                Spacer()
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(lastDuration)
+                        .font(.body.weight(.semibold))
+                        .monospacedDigit()
+                    if let lastEndedAt {
+                        Text(lastEndedAt.formatted(date: .omitted, time: .shortened))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+}
+
 private struct ElapsedTimerRow: View {
     var startedAt: Date
 
@@ -1053,11 +1253,16 @@ private struct ElapsedTimerRow: View {
 }
 
 private struct RoutinesSheet: View {
+    var totalToday: String
     var onLog: (RoutineKind) -> Void
 
     var body: some View {
         NavigationStack {
             List {
+                Label(totalToday, systemImage: "sum")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 ForEach(RoutineKind.allCases) { routine in
                     Button {
                         onLog(routine)
@@ -1151,11 +1356,16 @@ private struct SecondsEditor: View {
 
 private struct QuickActivitySheet: View {
     var kind: LogKind
+    var totalToday: String
     var onLog: () -> Void
 
     var body: some View {
         NavigationStack {
             List {
+                Label(totalToday, systemImage: "sum")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Label("Ready to log", systemImage: kind.symbolName)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -1231,10 +1441,18 @@ private final class ReminderPlayer: NSObject, ObservableObject, AVSpeechSynthesi
         synthesizer.delegate = self
     }
 
-    func start(kind: LogKind, everySeconds seconds: Int) {
+    func start(
+        kind: LogKind,
+        everySeconds seconds: Int,
+        startedAt activityStartedAt: Date,
+        announceImmediately: Bool = true
+    ) {
         stop(kind: kind)
-        startedAt[kind] = Date()
-        announce(kind)
+        startedAt[kind] = activityStartedAt
+
+        if announceImmediately {
+            announce(kind)
+        }
 
         timers[kind] = Timer.scheduledTimer(withTimeInterval: TimeInterval(max(seconds, 5)), repeats: true) { [weak self] _ in
             Task { @MainActor in

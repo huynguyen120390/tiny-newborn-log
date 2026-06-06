@@ -430,11 +430,14 @@ document.getElementById("bottle-slider").addEventListener("input", (event) => {
   document.getElementById("bottle-value").textContent = Number(event.target.value).toFixed(2).replace(/0$/, "");
 });
 
+document.getElementById("bottle-milk-type").addEventListener("change", updateBottleDefaults);
+
 document.getElementById("bottle-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const ounces = Number(document.getElementById("bottle-slider").value);
+  const milkType = document.getElementById("bottle-milk-type").value;
   document.getElementById("bottle-dialog").close();
-  await createLog({ type: "bottle", ounces }, feedingBurpReminder);
+  await createLog({ type: "bottle", ounces, milkType }, feedingBurpReminder);
 });
 
 document.getElementById("weight-form").addEventListener("submit", async (event) => {
@@ -1852,7 +1855,7 @@ async function saveActivityLogEdit(event, log, cardKey) {
     const result = await fetchJson(`/api/logs/${encodeURIComponent(log.id)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ time: data.time, notes: data.notes })
+      body: JSON.stringify(data)
     });
 
     const index = state.logs.findIndex((item) => item.id === result.log.id);
@@ -3253,7 +3256,9 @@ function statusLabel(status) {
 
 function updateBottleDefaults() {
   const slider = document.getElementById("bottle-slider");
-  const amount = Math.min(8, Math.max(0, Number(state.recent.bottleOunces || 3)));
+  const milkType = document.getElementById("bottle-milk-type")?.value || "formula";
+  const recentAmount = milkType === "breast_milk" ? state.recent.breastMilkBottleOunces : state.recent.formulaBottleOunces;
+  const amount = Math.min(8, Math.max(0, Number(recentAmount || state.recent.bottleOunces || 3)));
   slider.value = amount;
   document.getElementById("bottle-value").textContent = amount.toFixed(2).replace(/0$/, "");
 }
@@ -3568,7 +3573,9 @@ function getActivityStats() {
     boobie: {
       label: "Breast feeds",
       value: todaySummary.breastFeeds,
-      helper: `<small>➡️ Next side with good latch (breast should not be too full): ${state.recent.nextBreastSide || "left"}</small>
+      helper: `<small>${lastLogSummary("feeding")}</small>
+              <br>
+              <small>➡️ Next side with good latch (breast should not be too full): ${state.recent.nextBreastSide || "left"}</small>
               <br>
               <small> 
                <small>🌙 Empty breasts before sleep</small>`
@@ -3576,7 +3583,7 @@ function getActivityStats() {
     bottle: {
       label: "Bottle total",
       value: `${todaySummary.bottleOunces} oz`,
-      helper: `Last time ${formatSinceTime(lastLogOfType("bottle"))}`
+      helper: lastLogSummary("bottle")
     },
     routine: {
       html: `
@@ -3584,6 +3591,7 @@ function getActivityStats() {
           <span><img src="/assets/activity/icon-routine-morning.png" alt="">${todaySummary.morningRoutines} morning</span>
           <span><img src="/assets/activity/icon-routine-naptime.png" alt="">${todaySummary.naptimeRoutines} nap</span>
           <span><img src="/assets/activity/icon-routine-bedtime.png" alt="">${todaySummary.bedtimeRoutines} bedtime</span>
+          <span>${lastLogSummary("routine")}</span>
         </div>
       `
     },
@@ -3592,6 +3600,7 @@ function getActivityStats() {
         <div class="hygiene-list">
           <span><img src="/assets/activity/icon-pee.png" alt="">${todaySummary.wetDiapers} wee</span>
           <span><img src="/assets/activity/icon-poop.png" alt="">${todaySummary.poops} poo</span>
+          <span>${lastLogSummary("diaper")}</span>
         </div>
       `
     },
@@ -3616,9 +3625,14 @@ function getActivityStats() {
     gym: {
       label: "Baby gym",
       value: todaySummary.babyGymEvents,
-      helper: "Play sessions today"
+      helper: lastLogSummary("baby_gym")
     }
   };
+}
+
+function lastLogSummary(type) {
+  const log = lastLogOfType(type);
+  return log ? `Last time: ${formatWhen(log.createdAt || `${log.date}T${log.time || "00:00"}`)} ${labelForLog(log)}` : "Last time: not logged yet";
 }
 
 function activityStatusLabel(activity, activeLabel) {
@@ -3665,6 +3679,7 @@ function renderGrowthCardInfo() {
     <div class="hygiene-list stats-list">
       <span>Weight: ${weight ? formatWeightLog(weight) : "--"}</span>
       <span>Height: ${height ? formatHeightLog(height) : "--"}</span>
+      <span>${lastLogSummary("growth_stats")}</span>
     </div>
   `;
 }
@@ -5668,6 +5683,13 @@ function renderCorrectionField(log) {
   if (log.type === "bottle") {
     return `
       <label>
+        Milk
+        <select name="milkType">
+          <option value="formula"${(log.milkType || "formula") === "formula" ? " selected" : ""}>Formula</option>
+          <option value="breast_milk"${log.milkType === "breast_milk" ? " selected" : ""}>Breast Milk</option>
+        </select>
+      </label>
+      <label>
         Ounces
         <input name="ounces" type="number" min="0" max="8" step="0.25" value="${escapeAttr(log.ounces || 0)}">
       </label>
@@ -5763,7 +5785,7 @@ async function saveHistoryCorrection(event) {
 
 function labelForLog(log) {
   if (log.type === "feeding") return `Boobie, ${log.side || "unknown"} side`;
-  if (log.type === "bottle") return `Bottle, ${log.ounces} oz`;
+  if (log.type === "bottle") return `${milkTypeLabel(log.milkType)} bottle, ${log.ounces} oz`;
   if (log.type === "routine") return `${routineLabel(log.routine)} done`;
   if (log.type === "growth_stats") {
     if (readWeightGrams(log) > 0 && (log.stat === "weight" || !log.stat)) return `Weight, ${formatWeightLog(log)}`;
@@ -5781,6 +5803,10 @@ function labelForLog(log) {
   if (log.type === "baby_gym") return "Baby gym time";
   if (log.type === "bath") return `Bath: ${log.status === "end" ? "stop" : "start"}`;
   return (log.type || "activity").replaceAll("_", " ");
+}
+
+function milkTypeLabel(milkType) {
+  return milkType === "breast_milk" ? "Breast Milk" : "Formula";
 }
 
 function labelForType(type) {

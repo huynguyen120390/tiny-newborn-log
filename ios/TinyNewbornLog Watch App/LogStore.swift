@@ -43,9 +43,7 @@ final class LogStore: ObservableObject {
     }
 
     var todaysSleepSeconds: TimeInterval {
-        todaysEntries
-            .filter { $0.kind == .sleep }
-            .reduce(0) { $0 + $1.durationSeconds }
+        todaysDurationSeconds(for: .sleep)
     }
 
     var todaysNursingCount: Int {
@@ -58,8 +56,86 @@ final class LogStore: ObservableObject {
             .reduce(0, +)
     }
 
+    func latestEntry(for kind: LogKind) -> NewbornLogEntry? {
+        entries
+            .filter { $0.kind == kind }
+            .sorted { $0.startedAt > $1.startedAt }
+            .first
+    }
+
+    func latestBottleAmount(for milkType: BottleMilkType) -> Double {
+        latestBottleEntry(for: milkType)?.amountML ?? 60
+    }
+
+    func latestMeasurementValue(for kind: MeasurementKind) -> Double {
+        entries
+            .filter { $0.kind == .babyStats && $0.detail == kind.rawValue }
+            .sorted { $0.startedAt > $1.startedAt }
+            .first?.amountML ?? (kind == .weight ? 8.0 : 20.0)
+    }
+
+    func todaysTotalText(for kind: LogKind) -> String {
+        switch kind {
+        case .nursing:
+            return "\(todaysCount(for: .nursing)) feeds today"
+        case .bottle:
+            return "\(Int(todaysBottleML)) ml today"
+        case .diaper:
+            let wees = todaysEntries.filter { $0.kind == .diaper && $0.poopColorID == nil && ($0.detail ?? "Wee") == "Wee" }.count
+            let poos = todaysEntries.filter { $0.kind == .diaper && ($0.poopColorID != nil || ($0.detail ?? "").contains("Poo")) }.count
+            return "\(wees) wee, \(poos) poo today"
+        case .babyStats:
+            return "\(todaysCount(for: .babyStats)) stats today"
+        case .babyGym:
+            return "\(todaysCount(for: .babyGym)) gym today"
+        case .routines:
+            return "\(todaysCount(for: .routines)) routines today"
+        default:
+            return "\(todaysCount(for: kind)) today"
+        }
+    }
+
+    func lastSummary(for kind: LogKind) -> String {
+        guard let entry = latestEntry(for: kind) else {
+            return "Last time: none"
+        }
+
+        return "Last: \(entry.startedAt.formatted(date: .abbreviated, time: .shortened)) \(detailText(for: entry))"
+    }
+
     func todaysCount(for kind: LogKind) -> Int {
         todayEntries(matching: kind).count
+    }
+
+    func todaysDurationSeconds(for kind: LogKind) -> TimeInterval {
+        let completed = entries
+            .filter { $0.kind == kind && $0.endedAt != nil }
+            .reduce(0) { $0 + clippedDuration($1, inDayOffset: 0) }
+
+        return completed + activeDurationSeconds(for: kind, inDayOffset: 0)
+    }
+
+    func todaysDurationText(for kind: LogKind) -> String {
+        formatDuration(todaysDurationSeconds(for: kind))
+    }
+
+    func lastCompletedDuration(for kind: LogKind) -> (startedAt: Date, endedAt: Date, seconds: TimeInterval)? {
+        entries
+            .filter { $0.kind == kind && $0.endedAt != nil }
+            .sorted { ($0.endedAt ?? $0.startedAt) > ($1.endedAt ?? $1.startedAt) }
+            .first
+            .flatMap { entry in
+                guard let endedAt = entry.endedAt else { return nil }
+                return (entry.startedAt, endedAt, entry.durationSeconds)
+            }
+    }
+
+    func lastCompletedDurationText(for kind: LogKind) -> String {
+        guard let last = lastCompletedDuration(for: kind) else {
+            return "0m"
+        }
+
+        return formatDuration(last.seconds)
     }
 
     func todayEntries(matching filter: LogKind?) -> [NewbornLogEntry] {
@@ -91,11 +167,14 @@ final class LogStore: ObservableObject {
     func logNursing(side: NursingSide) {
         let entry = addEntry(NewbornLogEntry(kind: .nursing, side: side))
         syncNursing(side: side, entryID: entry.id)
+        Task {
+            await notifyBoobieReminder(after: side)
+        }
     }
 
-    func logBottle(amountML: Double) {
-        let entry = addEntry(NewbornLogEntry(kind: .bottle, amountML: amountML))
-        syncBottle(amountML: amountML, entryID: entry.id)
+    func logBottle(amountML: Double, milkType: BottleMilkType) {
+        let entry = addEntry(NewbornLogEntry(kind: .bottle, amountML: amountML, detail: milkType.rawValue, amountUnit: "ml", milkType: milkType))
+        syncBottle(amountML: amountML, milkType: milkType, entryID: entry.id)
     }
 
     func logDiaper(_ event: DiaperEvent, poopColor: PoopColorOption? = nil) {
@@ -177,7 +256,8 @@ final class LogStore: ObservableObject {
             let side = entry.side?.rawValue ?? "Side"
             return side
         case .bottle:
-            return "\(Int(entry.amountML ?? 0)) ml"
+            let type = entry.milkType?.rawValue ?? entry.detail ?? "Milk"
+            return "\(Int(entry.amountML ?? 0)) ml \(type)"
         case .diaper:
             if let label = PoopColorOption.label(for: entry.poopColorID) {
                 return "Poo: \(label)"
@@ -357,13 +437,14 @@ final class LogStore: ObservableObject {
         ], entryID: entryID, title: "\(side.rawValue) boobie")
     }
 
-    private func syncBottle(amountML: Double, entryID: UUID) {
+    private func syncBottle(amountML: Double, milkType: BottleMilkType, entryID: UUID) {
         let ounces = (amountML / 29.5735 * 100).rounded() / 100
         enqueueSync([
             "type": "bottle",
             "ounces": ounces,
-            "notes": "Bottle feed"
-        ], entryID: entryID, title: "\(Int(amountML)) ml bottle")
+            "milkType": milkType.payloadValue,
+            "notes": "\(milkType.rawValue) bottle feed"
+        ], entryID: entryID, title: "\(Int(amountML)) ml \(milkType.rawValue)")
     }
 
     private func syncActivity(_ kind: LogKind, status: String? = nil, entryID: UUID) {
@@ -458,6 +539,7 @@ final class LogStore: ObservableObject {
             payload["side"] = entry.side == .right ? "right" : "left"
         case .bottle:
             payload["ounces"] = ((entry.amountML ?? 0) / 29.5735 * 100).rounded() / 100
+            payload["milkType"] = (entry.milkType ?? BottleMilkType.fromPayload(entry.detail)).payloadValue
         case .diaper:
             let isPoo = entry.detail?.lowercased().contains("poo") == true || entry.poopColorID != nil
             payload["kind"] = isPoo ? "poop" : "pee"
@@ -489,12 +571,39 @@ final class LogStore: ObservableObject {
     }
 
     private func isVisible(_ entry: NewbornLogEntry, inDayOffset offset: Int) -> Bool {
+        let range = dayRange(offset: offset)
+        let entryEnd = effectiveEndDate(for: entry)
+        return entry.startedAt < range.end && entryEnd >= range.start
+    }
+
+    private func dayRange(offset: Int) -> (start: Date, end: Date) {
         let calendar = Calendar.current
         let todayStart = calendar.startOfDay(for: Date())
         let start = calendar.date(byAdding: .day, value: offset, to: todayStart) ?? todayStart
         let end = calendar.date(byAdding: .day, value: 1, to: start) ?? Date()
-        let entryEnd = effectiveEndDate(for: entry)
-        return entry.startedAt < end && entryEnd >= start
+        return (start, end)
+    }
+
+    private func clippedDuration(_ entry: NewbornLogEntry, inDayOffset offset: Int) -> TimeInterval {
+        let range = dayRange(offset: offset)
+        let startedAt = max(entry.startedAt, range.start)
+        let endedAt = min(effectiveEndDate(for: entry), range.end)
+        return max(endedAt.timeIntervalSince(startedAt), 0)
+    }
+
+    private func activeDurationSeconds(for kind: LogKind, inDayOffset offset: Int) -> TimeInterval {
+        let startedAt: Date?
+        if kind == .sleep {
+            startedAt = activeSleepStartedAt
+        } else {
+            startedAt = activeActivities[kind]
+        }
+
+        guard let startedAt else {
+            return 0
+        }
+
+        return clippedDuration(NewbornLogEntry(kind: kind, startedAt: startedAt, endedAt: Date(), syncState: .synced), inDayOffset: offset)
     }
 
     private func effectiveEndDate(for entry: NewbornLogEntry) -> Date {
@@ -596,30 +705,76 @@ final class LogStore: ObservableObject {
         var knownRemoteIDs = Set(next.compactMap(\.remoteID))
         knownRemoteIDs.formUnion(next.map { $0.id.uuidString })
 
-        for remote in remoteLogs {
-            guard let entry = remote.localEntry else {
-                continue
-            }
+        for entry in pairedRemoteEntries(from: remoteLogs) {
 
-            if let uuid = UUID(uuidString: remote.id),
+            if let uuid = UUID(uuidString: entry.remoteID ?? entry.id.uuidString),
                let index = next.firstIndex(where: { $0.id == uuid }) {
                 next[index].syncState = pendingEntryIDs.contains(uuid) ? .pending : .synced
-                next[index].remoteID = remote.id
+                next[index].remoteID = entry.remoteID
+                next[index].startedAt = entry.startedAt
+                next[index].endedAt = entry.endedAt
                 continue
             }
 
-            guard !knownRemoteIDs.contains(remote.id) else {
+            guard let remoteID = entry.remoteID, !knownRemoteIDs.contains(remoteID) else {
                 continue
             }
 
             next.append(entry)
-            knownRemoteIDs.insert(remote.id)
+            knownRemoteIDs.insert(remoteID)
         }
 
         entries = next.sorted { $0.startedAt > $1.startedAt }
         applyRemoteActiveState(remoteLogs)
         pruneCachedEntries()
         saveEntries()
+    }
+
+    private func pairedRemoteEntries(from remoteLogs: [RemoteBabyLog]) -> [NewbornLogEntry] {
+        let sorted = remoteLogs.sorted { $0.eventDate < $1.eventDate }
+        var entries: [NewbornLogEntry] = []
+        var openDurations: [String: RemoteBabyLog] = [:]
+        let durationTypes = Set(["sleep", "bath", "tummy_time", "outdoor_time"])
+
+        for remote in sorted {
+            guard durationTypes.contains(remote.type) else {
+                if let entry = remote.localEntry {
+                    entries.append(entry)
+                }
+                continue
+            }
+
+            if remote.status == "asleep" || remote.status == "start" {
+                openDurations[remote.type] = remote
+                continue
+            }
+
+            if remote.status == "awake" || remote.status == "end" {
+                if let started = openDurations[remote.type],
+                   var entry = remote.localEntry {
+                    entry.startedAt = started.eventDate
+                    entry.endedAt = remote.eventDate
+                    entry.detail = "Ended"
+                    entries.append(entry)
+                    openDurations[remote.type] = nil
+                } else if let entry = remote.localEntry {
+                    entries.append(entry)
+                }
+                continue
+            }
+
+            if let entry = remote.localEntry {
+                entries.append(entry)
+            }
+        }
+
+        for remote in openDurations.values {
+            if let entry = remote.localEntry {
+                entries.append(entry)
+            }
+        }
+
+        return entries
     }
 
     private func applyRemoteActiveState(_ remoteLogs: [RemoteBabyLog]) {
@@ -655,7 +810,7 @@ final class LogStore: ObservableObject {
         case .nursing:
             return "\(entry.side?.rawValue ?? "") boobie".trimmingCharacters(in: .whitespaces)
         case .bottle:
-            return "\(Int(entry.amountML ?? 0)) ml bottle"
+            return "\(Int(entry.amountML ?? 0)) ml \(entry.milkType?.rawValue ?? entry.detail ?? "bottle")"
         case .diaper:
             return entry.detail ?? entry.kind.title
         case .babyStats:
@@ -672,6 +827,23 @@ final class LogStore: ObservableObject {
         } catch {
             // Notification permission is optional; sync should still work.
         }
+    }
+
+    private func latestBottleEntry(for milkType: BottleMilkType) -> NewbornLogEntry? {
+        entries
+            .filter { $0.kind == .bottle && ($0.milkType ?? BottleMilkType.fromPayload($0.detail)) == milkType }
+            .sorted { $0.startedAt > $1.startedAt }
+            .first
+    }
+
+    private func notifyBoobieReminder(after side: NursingSide) async {
+        let nextSide = side == .left ? "right" : "left"
+        let content = UNMutableNotificationContent()
+        content.title = "Boobie reminder"
+        content.body = "Drain breasts. Try \(nextSide) next time. Warm breast. Cool breast."
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: "boobie-\(UUID().uuidString)", content: content, trigger: nil)
+        try? await UNUserNotificationCenter.current().add(request)
     }
 
     private func notifyTransferredLogs(_ items: [PendingSyncItem]) async {

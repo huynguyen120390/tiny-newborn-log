@@ -136,6 +136,31 @@ enum MeasurementKind: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum BottleMilkType: String, Codable, CaseIterable, Identifiable {
+    case formula = "Formula"
+    case breastMilk = "Breast Milk"
+
+    var id: String { rawValue }
+
+    var payloadValue: String {
+        switch self {
+        case .formula:
+            return "formula"
+        case .breastMilk:
+            return "breast_milk"
+        }
+    }
+
+    static func fromPayload(_ value: String?) -> BottleMilkType {
+        switch value {
+        case "breast_milk", "breast milk", "Breast Milk":
+            return .breastMilk
+        default:
+            return .formula
+        }
+    }
+}
+
 struct NewbornLogEntry: Identifiable, Codable, Hashable {
     let id: UUID
     var remoteID: String?
@@ -146,6 +171,7 @@ struct NewbornLogEntry: Identifiable, Codable, Hashable {
     var amountML: Double?
     var detail: String?
     var amountUnit: String?
+    var milkType: BottleMilkType?
     var poopColorID: String?
     var syncState: LogSyncState
 
@@ -159,6 +185,7 @@ struct NewbornLogEntry: Identifiable, Codable, Hashable {
         case amountML
         case detail
         case amountUnit
+        case milkType
         case poopColorID
         case syncState
     }
@@ -173,6 +200,7 @@ struct NewbornLogEntry: Identifiable, Codable, Hashable {
         amountML: Double? = nil,
         detail: String? = nil,
         amountUnit: String? = nil,
+        milkType: BottleMilkType? = nil,
         poopColorID: String? = nil,
         syncState: LogSyncState = .pending
     ) {
@@ -185,6 +213,7 @@ struct NewbornLogEntry: Identifiable, Codable, Hashable {
         self.amountML = amountML
         self.detail = detail
         self.amountUnit = amountUnit
+        self.milkType = milkType
         self.poopColorID = poopColorID
         self.syncState = syncState
     }
@@ -200,6 +229,7 @@ struct NewbornLogEntry: Identifiable, Codable, Hashable {
         amountML = try container.decodeIfPresent(Double.self, forKey: .amountML)
         detail = try container.decodeIfPresent(String.self, forKey: .detail)
         amountUnit = try container.decodeIfPresent(String.self, forKey: .amountUnit)
+        milkType = try container.decodeIfPresent(BottleMilkType.self, forKey: .milkType)
         poopColorID = try container.decodeIfPresent(String.self, forKey: .poopColorID)
         syncState = try container.decodeIfPresent(LogSyncState.self, forKey: .syncState) ?? .synced
     }

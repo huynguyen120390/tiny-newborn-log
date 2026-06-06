@@ -210,6 +210,7 @@ function flattenLog(log) {
     method: log.method || "",
     minutes: log.minutes || "",
     ounces: log.ounces || "",
+    milkType: log.milkType || "",
     pee: log.pee === undefined ? "" : log.pee,
     poop: log.poop === undefined ? "" : log.poop,
     poopColor: log.poopColor || "",

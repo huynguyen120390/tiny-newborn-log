@@ -331,7 +331,9 @@ function buildLog(input) {
   }
 
   if (input.type === "bottle") {
-    return { ...base, ounces: cleanNumber(input.ounces, 0), notes: "Bottle feed" };
+    const milkType = ["formula", "breast_milk"].includes(input.milkType) ? input.milkType : "formula";
+    const milkLabel = milkType === "breast_milk" ? "Breast Milk" : "Formula";
+    return { ...base, ounces: cleanNumber(input.ounces, 0), milkType, notes: `${milkLabel} bottle feed` };
   }
 
   if (input.type === "routine") {
@@ -412,6 +414,8 @@ function updateRecent(recent, log) {
   if (log.type === "bottle") {
     recent.lastFeedAt = log.createdAt;
     recent.bottleOunces = log.ounces;
+    if (log.milkType === "breast_milk") recent.breastMilkBottleOunces = log.ounces;
+    else recent.formulaBottleOunces = log.ounces;
   }
 
   return recent;
@@ -420,6 +424,8 @@ function updateRecent(recent, log) {
 function rebuildRecent(data) {
   const recent = {
     bottleOunces: 2.5,
+    formulaBottleOunces: 2.5,
+    breastMilkBottleOunces: 2.5,
     nextBreastSide: "left",
     lastActivityAt: null,
     lastFeedAt: null,
@@ -508,6 +514,7 @@ function compactLog(log) {
     method: log.method || undefined,
     side: log.side || undefined,
     ounces: log.ounces || undefined,
+    milkType: log.milkType || undefined,
     routine: log.routine || undefined,
     pee: log.pee || undefined,
     poop: log.poop || undefined,
@@ -2384,6 +2391,10 @@ async function handleUpdateLog(req, res, id) {
 
   if (current.type === "bottle") {
     next.ounces = cleanNumber(input.ounces, current.ounces || 0);
+    if (["formula", "breast_milk"].includes(input.milkType)) {
+      next.milkType = input.milkType;
+      next.notes = input.milkType === "breast_milk" ? "Breast Milk bottle feed" : "Formula bottle feed";
+    }
   }
 
   if (current.type === "diaper") {

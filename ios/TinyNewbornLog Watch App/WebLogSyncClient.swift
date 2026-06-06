@@ -359,6 +359,7 @@ struct RemoteBabyLog: Decodable {
     let poopColorId: String?
     let poopColor: String?
     let ounces: Double?
+    let milkType: String?
     let weight: Double?
     let weightUnit: String?
     let height: Double?
@@ -395,6 +396,7 @@ struct RemoteBabyLog: Decodable {
         case "bottle":
             kind = .bottle
             amount = (ounces ?? 0) * 29.5735
+            detail = BottleMilkType.fromPayload(milkType).rawValue
             unit = "ml"
         case "diaper":
             kind = .diaper
@@ -443,6 +445,7 @@ struct RemoteBabyLog: Decodable {
             amountML: amount,
             detail: detail,
             amountUnit: unit,
+            milkType: type == "bottle" ? BottleMilkType.fromPayload(milkType) : nil,
             poopColorID: poopColorId ?? poopColor,
             syncState: .synced
         )

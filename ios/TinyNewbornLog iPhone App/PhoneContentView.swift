@@ -12,6 +12,20 @@ private func readableElapsed(_ elapsed: TimeInterval) -> String {
     return "\(seconds / 60):\(String(format: "%02d", seconds % 60))"
 }
 
+private func readableDurationSummary(_ elapsed: TimeInterval) -> String {
+    let seconds = max(Int(elapsed.rounded()), 0)
+    if seconds < 60 {
+        return seconds == 1 ? "1 sec" : "\(seconds) sec"
+    }
+
+    let minutes = seconds / 60
+    if minutes < 60 {
+        return "\(minutes)m"
+    }
+
+    return "\(minutes / 60)h \(minutes % 60)m"
+}
+
 private extension Color {
     init(hex: UInt32) {
         self.init(
@@ -196,6 +210,27 @@ enum PhoneMeasurementKind: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum PhoneBottleMilkType: String, Codable, CaseIterable, Identifiable {
+    case formula = "Formula"
+    case breastMilk = "Breast Milk"
+
+    var id: String { rawValue }
+
+    var payloadValue: String {
+        switch self {
+        case .formula: "formula"
+        case .breastMilk: "breast_milk"
+        }
+    }
+
+    static func fromPayload(_ value: String?) -> PhoneBottleMilkType {
+        switch value {
+        case "breast_milk", "breast milk", "Breast Milk": .breastMilk
+        default: .formula
+        }
+    }
+}
+
 enum PhoneLogSyncState: String, Codable, Hashable {
     case pending
     case synced
@@ -211,6 +246,7 @@ struct PhoneLogEntry: Identifiable, Codable, Hashable {
     var amount: Double?
     var detail: String?
     var unit: String?
+    var milkType: PhoneBottleMilkType?
     var poopColorID: String?
     var syncState: PhoneLogSyncState
 
@@ -224,6 +260,7 @@ struct PhoneLogEntry: Identifiable, Codable, Hashable {
         amount: Double? = nil,
         detail: String? = nil,
         unit: String? = nil,
+        milkType: PhoneBottleMilkType? = nil,
         poopColorID: String? = nil,
         syncState: PhoneLogSyncState = .pending
     ) {
@@ -236,6 +273,7 @@ struct PhoneLogEntry: Identifiable, Codable, Hashable {
         self.amount = amount
         self.detail = detail
         self.unit = unit
+        self.milkType = milkType
         self.poopColorID = poopColorID
         self.syncState = syncState
     }
@@ -271,6 +309,7 @@ struct PhoneContentView: View {
     @AppStorage(PhoneAppearance.storageKey) private var appearanceRaw = PhoneAppearance.system.rawValue
     @State private var activeSheet: PhoneLoggerSheet?
     @State private var bottleML = 60.0
+    @State private var bottleMilkType: PhoneBottleMilkType = .formula
     @State private var measurementKind: PhoneMeasurementKind = .weight
     @State private var measurementValue = 8.0
     @State private var selectedLogFilter: PhoneLogKind?
@@ -392,31 +431,34 @@ struct PhoneContentView: View {
     }
 
     private var sleepCard: some View {
-        PhoneLoggerCard(
+        let activeStartedAt = store.activeSleepStartedAt
+
+        return PhoneLoggerCard(
             title: store.activeSleepStartedAt == nil ? "Sleep" : "Awake",
-            value: "",
-            subtitle: store.activeSleepStartedAt == nil ? "baby awake" : "sleeping now",
+            value: activeStartedAt == nil ? store.lastCompletedDurationText(for: .sleep) : "",
+            subtitle: "today \(store.todaysDurationText(for: .sleep))",
             symbolName: PhoneLogKind.sleep.symbolName,
-            color: store.activeSleepStartedAt == nil ? .indigo : .orange
+            color: store.activeSleepStartedAt == nil ? .indigo : .orange,
+            timerStartedAt: activeStartedAt
         ) {
             activeSheet = .sleep
         }
     }
 
     private var boobieCard: some View {
-        PhoneLoggerCard(title: "Boobie", value: "", subtitle: "Left or Right", symbolName: PhoneLogKind.nursing.symbolName, color: .pink) {
+        PhoneLoggerCard(title: "Boobie", value: "", subtitle: store.lastSummary(for: .nursing), symbolName: PhoneLogKind.nursing.symbolName, color: .pink) {
             activeSheet = .boobie
         }
     }
 
     private var bottleCard: some View {
-        PhoneLoggerCard(title: "Bottle", value: "\(Int(bottleML))", subtitle: "ml", symbolName: PhoneLogKind.bottle.symbolName, color: .teal) {
+        PhoneLoggerCard(title: "Bottle", value: "\(Int(store.latestBottleAmount(for: bottleMilkType)))", subtitle: "\(bottleMilkType.rawValue) last", symbolName: PhoneLogKind.bottle.symbolName, color: .teal) {
             activeSheet = .bottle
         }
     }
 
     private var diaperCard: some View {
-        PhoneLoggerCard(title: "Wee & Poo", value: "\(store.todaysCount(for: .diaper))", subtitle: "today", symbolName: PhoneLogKind.diaper.symbolName, color: .brown) {
+        PhoneLoggerCard(title: "Wee & Poo", value: "\(store.todaysCount(for: .diaper))", subtitle: store.lastSummary(for: .diaper), symbolName: PhoneLogKind.diaper.symbolName, color: .brown) {
             activeSheet = .diaper
         }
     }
@@ -425,7 +467,7 @@ struct PhoneContentView: View {
         PhoneLoggerCard(
             title: "Baby Stats",
             value: measurementKind.rawValue,
-            subtitle: "\(String(format: "%.1f", measurementValue)) \(measurementKind.unit)",
+            subtitle: store.lastSummary(for: .babyStats),
             symbolName: PhoneLogKind.babyStats.symbolName,
             color: .blue
         ) {
@@ -437,23 +479,24 @@ struct PhoneContentView: View {
         let startedAt = store.activeActivities[kind]
         return PhoneLoggerCard(
             title: kind.title,
-            value: "",
-            subtitle: startedAt.map { readableElapsed(Date().timeIntervalSince($0)) } ?? "\(store.todaysCount(for: kind)) today",
+            value: startedAt == nil ? store.lastCompletedDurationText(for: kind) : "",
+            subtitle: "today \(store.todaysDurationText(for: kind))",
             symbolName: kind.symbolName,
-            color: color
+            color: color,
+            timerStartedAt: startedAt
         ) {
             activeSheet = .timed(kind)
         }
     }
 
     private func quickCard(_ kind: PhoneLogKind, color: Color) -> some View {
-        PhoneLoggerCard(title: kind.title, value: "Log", subtitle: "\(store.todaysCount(for: kind)) today", symbolName: kind.symbolName, color: color) {
+        PhoneLoggerCard(title: kind.title, value: "Log", subtitle: store.lastSummary(for: kind), symbolName: kind.symbolName, color: color) {
             activeSheet = .quick(kind)
         }
     }
 
     private var routinesCard: some View {
-        PhoneLoggerCard(title: "Routines", value: "", subtitle: "\(store.todaysCount(for: .routines)) today", symbolName: PhoneLogKind.routines.symbolName, color: .purple) {
+        PhoneLoggerCard(title: "Routines", value: "", subtitle: store.lastSummary(for: .routines), symbolName: PhoneLogKind.routines.symbolName, color: .purple) {
             activeSheet = .routines
         }
     }
@@ -566,50 +609,70 @@ struct PhoneContentView: View {
     private func sheetView(_ sheet: PhoneLoggerSheet) -> some View {
         switch sheet {
         case .sleep:
-            PhoneConfirmSheet(
+            PhoneDurationSheet(
                 title: store.activeSleepStartedAt == nil ? "Sleep" : "Awake",
-                detail: store.activeSleepStartedAt == nil ? "Log baby sleeping." : "Log baby awake.",
-                buttonTitle: "Log"
+                detail: store.activeSleepStartedAt == nil ? "Baby awake" : "Sleeping now",
+                buttonTitle: "Log",
+                isActive: store.activeSleepStartedAt != nil,
+                startedAt: store.activeSleepStartedAt,
+                todayDuration: store.todaysDurationText(for: .sleep),
+                lastDuration: store.lastCompletedDurationText(for: .sleep),
+                lastEndedAt: store.lastCompletedDuration(for: .sleep)?.endedAt
             ) {
                 store.toggleSleep()
                 activeSheet = nil
             }
         case .boobie:
-            PhoneChoiceSheet(title: "Boobie", choices: PhoneNursingSide.allCases.map(\.rawValue)) { choice in
+            PhoneChoiceSheet(title: "Boobie", detail: store.todaysTotalText(for: .nursing), choices: PhoneNursingSide.allCases.map(\.rawValue)) { choice in
                 store.logNursing(side: choice == "Right" ? .right : .left)
                 activeSheet = nil
             }
         case .bottle:
-            PhoneBottleSheet(amount: $bottleML) {
-                store.logBottle(amountML: bottleML)
+            PhoneBottleSheet(amount: $bottleML, milkType: $bottleMilkType, totalToday: store.todaysTotalText(for: .bottle), presetAmount: { milkType in
+                store.latestBottleAmount(for: milkType)
+            }) {
+                store.logBottle(amountML: bottleML, milkType: bottleMilkType)
                 activeSheet = nil
             }
+            .onAppear {
+                bottleML = store.latestBottleAmount(for: bottleMilkType)
+            }
         case .diaper:
-            PhoneDiaperSheet { event, poopColor in
+            PhoneDiaperSheet(totalToday: store.todaysTotalText(for: .diaper)) { event, poopColor in
                 store.logDiaper(event, poopColor: poopColor)
                 activeSheet = nil
             }
         case .babyStats:
-            PhoneStatsSheet(kind: $measurementKind, value: $measurementValue) {
+            PhoneStatsSheet(kind: $measurementKind, value: $measurementValue, totalToday: store.todaysTotalText(for: .babyStats), presetValue: { kind in
+                store.latestMeasurementValue(for: kind)
+            }) {
                 store.logMeasurement(kind: measurementKind, value: measurementValue)
                 activeSheet = nil
             }
+            .onAppear {
+                measurementValue = store.latestMeasurementValue(for: measurementKind)
+            }
         case .timed(let kind):
-            PhoneConfirmSheet(
+            PhoneDurationSheet(
                 title: store.activeActivities[kind] == nil ? "Start \(kind.title)" : "End \(kind.title)",
-                detail: store.activeActivities[kind].map { "Started \($0.formatted(date: .omitted, time: .shortened))" } ?? "Ready.",
-                buttonTitle: store.activeActivities[kind] == nil ? "Start" : "End"
+                detail: store.activeActivities[kind].map { "Started \($0.formatted(date: .omitted, time: .shortened))" } ?? "Ready",
+                buttonTitle: store.activeActivities[kind] == nil ? "Start" : "End",
+                isActive: store.activeActivities[kind] != nil,
+                startedAt: store.activeActivities[kind],
+                todayDuration: store.todaysDurationText(for: kind),
+                lastDuration: store.lastCompletedDurationText(for: kind),
+                lastEndedAt: store.lastCompletedDuration(for: kind)?.endedAt
             ) {
                 store.toggleTimedActivity(kind)
                 activeSheet = nil
             }
         case .quick(let kind):
-            PhoneConfirmSheet(title: kind.title, detail: "Log this moment.", buttonTitle: "Log") {
+            PhoneConfirmSheet(title: kind.title, detail: store.todaysTotalText(for: kind), buttonTitle: "Log") {
                 store.logQuickActivity(kind)
                 activeSheet = nil
             }
         case .routines:
-            PhoneChoiceSheet(title: "Routines", choices: PhoneRoutineKind.allCases.map(\.rawValue)) { choice in
+            PhoneChoiceSheet(title: "Routines", detail: store.todaysTotalText(for: .routines), choices: PhoneRoutineKind.allCases.map(\.rawValue)) { choice in
                 let routine = PhoneRoutineKind.allCases.first { $0.rawValue == choice } ?? .morning
                 store.logRoutine(routine)
                 activeSheet = nil
@@ -677,6 +740,7 @@ private struct PhoneLoggerCard: View {
     var subtitle: String
     var symbolName: String
     var color: Color
+    var timerStartedAt: Date? = nil
     var action: () -> Void
 
     var body: some View {
@@ -701,6 +765,14 @@ private struct PhoneLoggerCard: View {
                             .font(.title3.weight(.bold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
+                    } else if let timerStartedAt {
+                        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                            Text(readableDurationSummary(timeline.date.timeIntervalSince(timerStartedAt)))
+                                .font(.title3.weight(.bold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                                .monospacedDigit()
+                        }
                     }
                     Text(subtitle)
                         .font(.caption)
@@ -761,21 +833,112 @@ private struct PhoneConfirmSheet: View {
     }
 }
 
+private struct PhoneDurationSheet: View {
+    let title: String
+    let detail: String
+    let buttonTitle: String
+    let isActive: Bool
+    let startedAt: Date?
+    let todayDuration: String
+    let lastDuration: String
+    let lastEndedAt: Date?
+    let onConfirm: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Label(detail, systemImage: "clock")
+                        .foregroundStyle(.secondary)
+
+                    if isActive, let startedAt {
+                        PhoneElapsedTimerRow(startedAt: startedAt)
+                    }
+                }
+
+                Section {
+                    PhoneDurationSummaryRow(title: "Today", systemImage: "sum", value: todayDuration)
+                    PhoneDurationSummaryRow(title: "Last", systemImage: "clock.arrow.circlepath", value: lastDuration, endedAt: lastEndedAt)
+                }
+
+                Button(action: onConfirm) {
+                    Label(buttonTitle, systemImage: isActive ? "stop.fill" : "play.fill")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .tint(isActive ? .orange : .green)
+            }
+            .navigationTitle(title)
+        }
+    }
+}
+
+private struct PhoneDurationSummaryRow: View {
+    let title: String
+    let systemImage: String
+    let value: String
+    var endedAt: Date? = nil
+
+    var body: some View {
+        HStack {
+            Label(title, systemImage: systemImage)
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(value)
+                    .font(.headline.weight(.semibold))
+                    .monospacedDigit()
+                if let endedAt {
+                    Text(endedAt.formatted(date: .omitted, time: .shortened))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
+private struct PhoneElapsedTimerRow: View {
+    let startedAt: Date
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+            HStack {
+                Label("Timer", systemImage: "timer")
+                Spacer()
+                Text(readableDurationSummary(timeline.date.timeIntervalSince(startedAt)))
+                    .font(.title2.weight(.bold))
+                    .monospacedDigit()
+            }
+        }
+    }
+}
+
 private struct PhoneChoiceSheet: View {
     let title: String
+    var detail: String?
     let choices: [String]
     let onChoose: (String) -> Void
 
     var body: some View {
         NavigationStack {
-            List(choices, id: \.self) { choice in
-                Button {
-                    onChoose(choice)
-                } label: {
-                    Text(choice)
-                        .font(.title3.weight(.semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 8)
+            List {
+                if let detail {
+                    Label(detail, systemImage: "sum")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                ForEach(choices, id: \.self) { choice in
+                    Button {
+                        onChoose(choice)
+                    } label: {
+                        Text(choice)
+                            .font(.title3.weight(.semibold))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 8)
+                    }
                 }
             }
             .navigationTitle(title)
@@ -784,11 +947,16 @@ private struct PhoneChoiceSheet: View {
 }
 
 private struct PhoneDiaperSheet: View {
+    let totalToday: String
     let onLog: (PhoneDiaperEvent, PhonePoopColorOption?) -> Void
 
     var body: some View {
         NavigationStack {
             List {
+                Label(totalToday, systemImage: "sum")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
                 Button {
                     onLog(.wee, nil)
                 } label: {
@@ -844,6 +1012,7 @@ private struct PhoneEditLogSheet: View {
     @State private var eventDate: Date
     @State private var amount: Double
     @State private var side: PhoneNursingSide
+    @State private var milkType: PhoneBottleMilkType
     @State private var poopColorID: String
     @State private var measurementKind: PhoneMeasurementKind
     let detailText: String
@@ -855,6 +1024,7 @@ private struct PhoneEditLogSheet: View {
         self._eventDate = State(initialValue: entry.endedAt ?? entry.startedAt)
         self._amount = State(initialValue: entry.amount ?? 0)
         self._side = State(initialValue: entry.side ?? .left)
+        self._milkType = State(initialValue: entry.milkType ?? PhoneBottleMilkType.fromPayload(entry.detail))
         self._poopColorID = State(initialValue: entry.poopColorID ?? PhonePoopColorOption.all.first?.id ?? "")
         self._measurementKind = State(initialValue: entry.detail == "Height" ? .height : .weight)
         self.detailText = detailText
@@ -880,6 +1050,11 @@ private struct PhoneEditLogSheet: View {
                         }
                     }
                 case .bottle:
+                    Picker("Milk", selection: $milkType) {
+                        ForEach(PhoneBottleMilkType.allCases) { type in
+                            Text(type.rawValue).tag(type)
+                        }
+                    }
                     Stepper(value: $amount, in: 5...300, step: 5) {
                         Text("\(Int(amount)) ml")
                     }
@@ -917,6 +1092,10 @@ private struct PhoneEditLogSheet: View {
                     }
                     updated.amount = amount > 0 ? amount : updated.amount
                     updated.side = updated.kind == .nursing ? side : updated.side
+                    if updated.kind == .bottle {
+                        updated.milkType = milkType
+                        updated.detail = milkType.rawValue
+                    }
                     if updated.kind == .diaper {
                         let isWee = updated.detail == "Wee"
                         updated.poopColorID = isWee ? nil : poopColorID
@@ -943,11 +1122,27 @@ private struct PhoneEditLogSheet: View {
 
 private struct PhoneBottleSheet: View {
     @Binding var amount: Double
+    @Binding var milkType: PhoneBottleMilkType
+    let totalToday: String
+    let presetAmount: (PhoneBottleMilkType) -> Double
     let onLog: () -> Void
 
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    Label(totalToday, systemImage: "sum")
+                        .foregroundStyle(.secondary)
+                }
+                Picker("Milk", selection: $milkType) {
+                    ForEach(PhoneBottleMilkType.allCases) { type in
+                        Text(type.rawValue).tag(type)
+                    }
+                }
+                .onChange(of: milkType) { _, newType in
+                    amount = presetAmount(newType)
+                }
+
                 Section("Bottle") {
                     Stepper(value: $amount, in: 5...300, step: 5) {
                         Text("\(Int(amount)) ml")
@@ -965,15 +1160,24 @@ private struct PhoneBottleSheet: View {
 private struct PhoneStatsSheet: View {
     @Binding var kind: PhoneMeasurementKind
     @Binding var value: Double
+    let totalToday: String
+    let presetValue: (PhoneMeasurementKind) -> Double
     let onLog: () -> Void
 
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    Label(totalToday, systemImage: "sum")
+                        .foregroundStyle(.secondary)
+                }
                 Picker("Type", selection: $kind) {
                     ForEach(PhoneMeasurementKind.allCases) { kind in
                         Text(kind.rawValue).tag(kind)
                     }
+                }
+                .onChange(of: kind) { _, newKind in
+                    value = presetValue(newKind)
                 }
                 Section(kind.rawValue) {
                     Stepper(value: $value, in: kind == .weight ? 1...40 : 10...60, step: kind == .weight ? 0.1 : 0.25) {
@@ -1075,6 +1279,52 @@ final class PhoneLogStore: ObservableObject {
         todaysEntries.compactMap { $0.kind == .bottle ? $0.amount : nil }.reduce(0, +)
     }
 
+    func latestEntry(for kind: PhoneLogKind) -> PhoneLogEntry? {
+        entries.filter { $0.kind == kind }.sorted { $0.startedAt > $1.startedAt }.first
+    }
+
+    func latestBottleAmount(for milkType: PhoneBottleMilkType) -> Double {
+        entries
+            .filter { $0.kind == .bottle && ($0.milkType ?? PhoneBottleMilkType.fromPayload($0.detail)) == milkType }
+            .sorted { $0.startedAt > $1.startedAt }
+            .first?.amount ?? 60
+    }
+
+    func latestMeasurementValue(for kind: PhoneMeasurementKind) -> Double {
+        entries
+            .filter { $0.kind == .babyStats && $0.detail == kind.rawValue }
+            .sorted { $0.startedAt > $1.startedAt }
+            .first?.amount ?? (kind == .weight ? 8.0 : 20.0)
+    }
+
+    func todaysTotalText(for kind: PhoneLogKind) -> String {
+        switch kind {
+        case .nursing:
+            return "\(todaysCount(for: .nursing)) feeds today"
+        case .bottle:
+            return "\(Int(todaysBottleML)) ml today"
+        case .diaper:
+            let wees = todaysEntries.filter { $0.kind == .diaper && $0.poopColorID == nil && ($0.detail ?? "Wee") == "Wee" }.count
+            let poos = todaysEntries.filter { $0.kind == .diaper && ($0.poopColorID != nil || ($0.detail ?? "").contains("Poo")) }.count
+            return "\(wees) wee, \(poos) poo today"
+        case .babyStats:
+            return "\(todaysCount(for: .babyStats)) stats today"
+        case .babyGym:
+            return "\(todaysCount(for: .babyGym)) gym today"
+        case .routines:
+            return "\(todaysCount(for: .routines)) routines today"
+        default:
+            return "\(todaysCount(for: kind)) today"
+        }
+    }
+
+    func lastSummary(for kind: PhoneLogKind) -> String {
+        guard let entry = latestEntry(for: kind) else {
+            return "Last time: none"
+        }
+        return "Last: \(entry.startedAt.formatted(date: .abbreviated, time: .shortened)) \(detailText(for: entry))"
+    }
+
     func start() async {
         _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
         await retryPendingSyncs()
@@ -1082,6 +1332,37 @@ final class PhoneLogStore: ObservableObject {
 
     func todaysCount(for kind: PhoneLogKind) -> Int {
         todayEntries(matching: kind).count
+    }
+
+    func todaysDurationSeconds(for kind: PhoneLogKind) -> TimeInterval {
+        let completed = entries
+            .filter { $0.kind == kind && $0.endedAt != nil }
+            .reduce(0) { $0 + clippedDuration($1, inDayOffset: 0) }
+
+        return completed + activeDurationSeconds(for: kind, inDayOffset: 0)
+    }
+
+    func todaysDurationText(for kind: PhoneLogKind) -> String {
+        formatDuration(todaysDurationSeconds(for: kind))
+    }
+
+    func lastCompletedDuration(for kind: PhoneLogKind) -> (startedAt: Date, endedAt: Date, seconds: TimeInterval)? {
+        entries
+            .filter { $0.kind == kind && $0.endedAt != nil }
+            .sorted { ($0.endedAt ?? $0.startedAt) > ($1.endedAt ?? $1.startedAt) }
+            .first
+            .flatMap { entry in
+                guard let endedAt = entry.endedAt else { return nil }
+                return (entry.startedAt, endedAt, entry.durationSeconds)
+            }
+    }
+
+    func lastCompletedDurationText(for kind: PhoneLogKind) -> String {
+        guard let last = lastCompletedDuration(for: kind) else {
+            return "0m"
+        }
+
+        return formatDuration(last.seconds)
     }
 
     func todayEntries(matching filter: PhoneLogKind?) -> [PhoneLogEntry] {
@@ -1114,12 +1395,15 @@ final class PhoneLogStore: ObservableObject {
     func logNursing(side: PhoneNursingSide) {
         let entry = addEntry(PhoneLogEntry(kind: .nursing, side: side))
         enqueue(["type": "feeding", "method": "breast", "side": side == .right ? "right" : "left", "notes": "Started on \(side.rawValue.lowercased()) side"], entryID: entry.id, title: "\(side.rawValue) boobie")
+        Task {
+            await notifyBoobieReminder(after: side)
+        }
     }
 
-    func logBottle(amountML: Double) {
-        let entry = addEntry(PhoneLogEntry(kind: .bottle, amount: amountML, unit: "ml"))
+    func logBottle(amountML: Double, milkType: PhoneBottleMilkType) {
+        let entry = addEntry(PhoneLogEntry(kind: .bottle, amount: amountML, detail: milkType.rawValue, unit: "ml", milkType: milkType))
         let ounces = (amountML / 29.5735 * 100).rounded() / 100
-        enqueue(["type": "bottle", "ounces": ounces, "notes": "Bottle feed"], entryID: entry.id, title: "\(Int(amountML)) ml bottle")
+        enqueue(["type": "bottle", "ounces": ounces, "milkType": milkType.payloadValue, "notes": "\(milkType.rawValue) bottle feed"], entryID: entry.id, title: "\(Int(amountML)) ml \(milkType.rawValue)")
     }
 
     func logDiaper(_ event: PhoneDiaperEvent, poopColor: PhonePoopColorOption? = nil) {
@@ -1179,7 +1463,8 @@ final class PhoneLogStore: ObservableObject {
         case .nursing:
             return entry.side?.rawValue ?? "Side"
         case .bottle:
-            return "\(Int(entry.amount ?? 0)) ml"
+            let type = entry.milkType?.rawValue ?? entry.detail ?? "Milk"
+            return "\(Int(entry.amount ?? 0)) ml \(type)"
         case .diaper:
             if let label = PhonePoopColorOption.label(for: entry.poopColorID) {
                 return "Poo: \(label)"
@@ -1408,30 +1693,76 @@ final class PhoneLogStore: ObservableObject {
         var knownRemoteIDs = Set(next.compactMap(\.remoteID))
         knownRemoteIDs.formUnion(next.map { $0.id.uuidString })
 
-        for remote in remoteLogs {
-            guard let entry = remote.localEntry else {
-                continue
-            }
+        for entry in pairedRemoteEntries(from: remoteLogs) {
 
-            if let uuid = UUID(uuidString: remote.id),
+            if let uuid = UUID(uuidString: entry.remoteID ?? entry.id.uuidString),
                let index = next.firstIndex(where: { $0.id == uuid }) {
                 next[index].syncState = pendingEntryIDs.contains(uuid) ? .pending : .synced
-                next[index].remoteID = remote.id
+                next[index].remoteID = entry.remoteID
+                next[index].startedAt = entry.startedAt
+                next[index].endedAt = entry.endedAt
                 continue
             }
 
-            guard !knownRemoteIDs.contains(remote.id) else {
+            guard let remoteID = entry.remoteID, !knownRemoteIDs.contains(remoteID) else {
                 continue
             }
 
             next.append(entry)
-            knownRemoteIDs.insert(remote.id)
+            knownRemoteIDs.insert(remoteID)
         }
 
         entries = next.sorted { $0.startedAt > $1.startedAt }
         applyRemoteActiveState(remoteLogs)
         pruneCachedEntries()
         saveEntries()
+    }
+
+    private func pairedRemoteEntries(from remoteLogs: [PhoneRemoteLog]) -> [PhoneLogEntry] {
+        let sorted = remoteLogs.sorted { $0.eventDate < $1.eventDate }
+        var entries: [PhoneLogEntry] = []
+        var openDurations: [String: PhoneRemoteLog] = [:]
+        let durationTypes = Set(["sleep", "bath", "tummy_time", "outdoor_time"])
+
+        for remote in sorted {
+            guard durationTypes.contains(remote.type) else {
+                if let entry = remote.localEntry {
+                    entries.append(entry)
+                }
+                continue
+            }
+
+            if remote.status == "asleep" || remote.status == "start" {
+                openDurations[remote.type] = remote
+                continue
+            }
+
+            if remote.status == "awake" || remote.status == "end" {
+                if let started = openDurations[remote.type],
+                   var entry = remote.localEntry {
+                    entry.startedAt = started.eventDate
+                    entry.endedAt = remote.eventDate
+                    entry.detail = "Ended"
+                    entries.append(entry)
+                    openDurations[remote.type] = nil
+                } else if let entry = remote.localEntry {
+                    entries.append(entry)
+                }
+                continue
+            }
+
+            if let entry = remote.localEntry {
+                entries.append(entry)
+            }
+        }
+
+        for remote in openDurations.values {
+            if let entry = remote.localEntry {
+                entries.append(entry)
+            }
+        }
+
+        return entries
     }
 
     private func applyRemoteActiveState(_ remoteLogs: [PhoneRemoteLog]) {
@@ -1482,12 +1813,39 @@ final class PhoneLogStore: ObservableObject {
     }
 
     private func isVisible(_ entry: PhoneLogEntry, inDayOffset offset: Int) -> Bool {
+        let range = dayRange(offset: offset)
+        let entryEnd = effectiveEndDate(for: entry)
+        return entry.startedAt < range.end && entryEnd >= range.start
+    }
+
+    private func dayRange(offset: Int) -> (start: Date, end: Date) {
         let calendar = Calendar.current
         let todayStart = calendar.startOfDay(for: Date())
         let start = calendar.date(byAdding: .day, value: offset, to: todayStart) ?? todayStart
         let end = calendar.date(byAdding: .day, value: 1, to: start) ?? Date()
-        let entryEnd = effectiveEndDate(for: entry)
-        return entry.startedAt < end && entryEnd >= start
+        return (start, end)
+    }
+
+    private func clippedDuration(_ entry: PhoneLogEntry, inDayOffset offset: Int) -> TimeInterval {
+        let range = dayRange(offset: offset)
+        let startedAt = max(entry.startedAt, range.start)
+        let endedAt = min(effectiveEndDate(for: entry), range.end)
+        return max(endedAt.timeIntervalSince(startedAt), 0)
+    }
+
+    private func activeDurationSeconds(for kind: PhoneLogKind, inDayOffset offset: Int) -> TimeInterval {
+        let startedAt: Date?
+        if kind == .sleep {
+            startedAt = activeSleepStartedAt
+        } else {
+            startedAt = activeActivities[kind]
+        }
+
+        guard let startedAt else {
+            return 0
+        }
+
+        return clippedDuration(PhoneLogEntry(kind: kind, startedAt: startedAt, endedAt: Date(), syncState: .synced), inDayOffset: offset)
     }
 
     private func effectiveEndDate(for entry: PhoneLogEntry) -> Date {
@@ -1543,6 +1901,7 @@ final class PhoneLogStore: ObservableObject {
             payload["side"] = entry.side == .right ? "right" : "left"
         case .bottle:
             payload["ounces"] = ((entry.amount ?? 0) / 29.5735 * 100).rounded() / 100
+            payload["milkType"] = (entry.milkType ?? PhoneBottleMilkType.fromPayload(entry.detail)).payloadValue
         case .diaper:
             let isPoo = entry.detail?.lowercased().contains("poo") == true || entry.poopColorID != nil
             payload["kind"] = isPoo ? "poop" : "pee"
@@ -1619,6 +1978,15 @@ final class PhoneLogStore: ObservableObject {
         content.body = titles.isEmpty ? "Transferred to server." : titles.joined(separator: ", ")
         content.sound = .default
         try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "phone-sync-\(UUID().uuidString)", content: content, trigger: nil))
+    }
+
+    private func notifyBoobieReminder(after side: PhoneNursingSide) async {
+        let nextSide = side == .left ? "right" : "left"
+        let content = UNMutableNotificationContent()
+        content.title = "Boobie reminder"
+        content.body = "Drain breasts. Try \(nextSide) next time. Warm breast. Cool breast."
+        content.sound = .default
+        try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "phone-boobie-\(UUID().uuidString)", content: content, trigger: nil))
     }
 
     private func updatePendingStatus() {
@@ -1999,6 +2367,7 @@ private struct PhoneRemoteLog: Decodable {
     let poopColorId: String?
     let poopColor: String?
     let ounces: Double?
+    let milkType: String?
     let weight: Double?
     let weightUnit: String?
     let height: Double?
@@ -2036,6 +2405,7 @@ private struct PhoneRemoteLog: Decodable {
         case "bottle":
             kind = .bottle
             amount = (ounces ?? 0) * 29.5735
+            detail = PhoneBottleMilkType.fromPayload(milkType).rawValue
             unit = "ml"
         case "diaper":
             kind = .diaper
@@ -2084,6 +2454,7 @@ private struct PhoneRemoteLog: Decodable {
             amount: amount,
             detail: detail,
             unit: unit,
+            milkType: type == "bottle" ? PhoneBottleMilkType.fromPayload(milkType) : nil,
             poopColorID: poopColorId ?? poopColor,
             syncState: .synced
         )
