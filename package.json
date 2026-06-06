@@ -5,7 +5,19 @@
   "description": "Local newborn activity logger for Phuong Nam.",
   "main": "backend/server.js",
   "scripts": {
-    "start": "node backend/server.js"
+    "start": "node backend/server.js",
+    "start:dev": "node scripts/start-mode.js dev 3003",
+    "start:stage": "node scripts/start-mode.js staging 3004",
+    "start:prod": "node scripts/start-mode.js prod 3002",
+    "start:real": "node scripts/start-mode.js prod 3002",
+    "data:stage": "node scripts/data-mode.js use staging",
+    "data:refresh-stage": "node scripts/create-staging-data.js",
+    "data:list": "node scripts/data-mode.js list",
+    "data:dev": "node scripts/data-mode.js use dev",
+    "data:prod": "node scripts/data-mode.js use prod",
+    "data:demo": "node scripts/data-mode.js use dev",
+    "data:real": "node scripts/data-mode.js use prod",
+    "data:snapshot": "node scripts/data-mode.js snapshot"
   },
   "dependencies": {}
 }

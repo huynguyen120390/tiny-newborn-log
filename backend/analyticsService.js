@@ -2,7 +2,10 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT_DIR = path.join(__dirname, "..");
-const DATA_DIR = path.join(ROOT_DIR, "data");
+const DEFAULT_DATA_ROOT = path.join("C:", "codelab", "databases", "TinyNewbornLog");
+const DATA_ROOT = process.env.DATA_ROOT ? path.resolve(process.env.DATA_ROOT) : DEFAULT_DATA_ROOT;
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(DATA_ROOT, "prod");
+const SHARED_DATA_DIR = process.env.SHARED_DATA_DIR ? path.resolve(process.env.SHARED_DATA_DIR) : path.join(DATA_ROOT, "shared");
 const ANALYTICS_DIR = path.join(DATA_DIR, "analytics");
 const DAILY_ANALYTICS_DIR = path.join(ANALYTICS_DIR, "daily");
 const TRENDS_ANALYTICS_DIR = path.join(ANALYTICS_DIR, "trends");
@@ -215,8 +218,8 @@ function balanceStats(leftValues, rightValues) {
 function buildContext() {
   const logs = readJson(path.join(DATA_DIR, "baby_log.json"), []).sort((a, b) => logTime(a) - logTime(b));
   const appData = readJson(path.join(DATA_DIR, "app_data.json"), {});
-  const activityConfig = readJson(path.join(DATA_DIR, "activity_config.json"), { eventCategories: {} });
-  const poopColors = readJson(path.join(DATA_DIR, "poop-colors.json"), []);
+  const activityConfig = readJson(path.join(SHARED_DATA_DIR, "activity_config.json"), { eventCategories: {} });
+  const poopColors = readJson(path.join(SHARED_DATA_DIR, "poop-colors.json"), []);
   const milestoneData = readJson(path.join(DATA_DIR, "milestone_log.json"), {});
   return { logs, appData, activityConfig, poopColors, milestoneData };
 }

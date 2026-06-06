@@ -2,15 +2,18 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT_DIR = path.join(__dirname, "..");
-const DATA_DIR = path.join(ROOT_DIR, "data");
+const DEFAULT_DATA_ROOT = path.join("C:", "codelab", "databases", "TinyNewbornLog");
+const DATA_ROOT = process.env.DATA_ROOT ? path.resolve(process.env.DATA_ROOT) : DEFAULT_DATA_ROOT;
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(DATA_ROOT, "prod");
+const SHARED_DATA_DIR = process.env.SHARED_DATA_DIR ? path.resolve(process.env.SHARED_DATA_DIR) : path.join(DATA_ROOT, "shared");
 
 const LEGACY_DATA_PATH = path.join(DATA_DIR, "appData.json");
 const LEGACY_RECENT_PATH = path.join(DATA_DIR, "recentInfo.json");
 const APP_DATA_PATH = path.join(DATA_DIR, "app_data.json");
 const BABY_LOG_PATH = path.join(DATA_DIR, "baby_log.json");
 const MILESTONE_LOG_PATH = path.join(DATA_DIR, "milestone_log.json");
-const DOCTOR_GUIDELINE_PATH = path.join(DATA_DIR, "doctor_guideline.json");
-const POOP_COLORS_PATH = path.join(DATA_DIR, "poop-colors.json");
+const DOCTOR_GUIDELINE_PATH = path.join(SHARED_DATA_DIR, "doctor_guideline.json");
+const POOP_COLORS_PATH = path.join(SHARED_DATA_DIR, "poop-colors.json");
 
 const DEFAULT_PROFILE = {
   name: "Phuong Nam Cu Ti",
@@ -270,6 +273,8 @@ function saveData(data) {
 
 module.exports = {
   paths: {
+    DATA_ROOT,
+    DATA_DIR,
     APP_DATA_PATH,
     BABY_LOG_PATH,
     MILESTONE_LOG_PATH,
