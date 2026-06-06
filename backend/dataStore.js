@@ -183,6 +183,7 @@ function loadAppData() {
     ...data,
     baby_profile: { ...DEFAULT_PROFILE, ...objectMap(data.baby_profile) },
     recent_state: cleanRecentState(data.recent_state),
+    unit_settings: { ...DEFAULT_UNIT_SETTINGS, ...objectMap(data.unit_settings) },
     overview_settings: { ...DEFAULT_OVERVIEW_SETTINGS, ...objectMap(data.overview_settings) }
   };
 }
