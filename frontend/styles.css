@@ -2380,8 +2380,6 @@ main {
 }
 
 .dashboard-overview {
-  display: grid;
-  gap: 12px;
   margin-bottom: 14px;
   padding: 16px;
   border: 1px solid rgba(36, 117, 111, 0.16);
@@ -2392,11 +2390,55 @@ main {
   box-shadow: 0 12px 30px rgba(31, 41, 38, 0.07);
 }
 
+.dashboard-overview-expander {
+  display: grid;
+  gap: 12px;
+}
+
+.dashboard-overview-expander summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.dashboard-overview-expander summary::-webkit-details-marker {
+  display: none;
+}
+
 .dashboard-overview-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.dashboard-overview-top::before {
+  content: "›";
+  flex: 0 0 auto;
+  margin-top: 18px;
+  color: var(--primary-dark);
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+  transition: transform 0.16s ease;
+}
+
+.dashboard-overview-top > div:first-of-type {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dashboard-overview-expander[open] > .dashboard-overview-top::before {
+  transform: rotate(90deg);
+}
+
+.dashboard-overview-body {
+  display: grid;
+  gap: 12px;
+}
+
+.dashboard-overview-toolbar {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .dashboard-overview-top span {
@@ -2424,6 +2466,11 @@ main {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.dashboard-overview-updated {
+  align-self: center;
+  text-transform: none;
 }
 
 .dashboard-overview-actions .ghost {
@@ -2545,6 +2592,36 @@ main {
   font-weight: 700;
   line-height: 1.42;
   overflow-wrap: anywhere;
+}
+
+.dashboard-overview-card .overview-card-headline {
+  color: var(--primary-dark);
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.32;
+}
+
+.overview-card-details {
+  display: grid;
+  gap: 7px;
+}
+
+.overview-card-details summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.overview-card-details ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.38;
 }
 
 .dashboard-overview-card dd ul {

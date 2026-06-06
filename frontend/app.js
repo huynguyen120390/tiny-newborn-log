@@ -48,7 +48,9 @@ const state = {
     updatedAt: "",
     error: "",
     reviewTrace: null,
+    overviewOpen: localStorage.getItem("tinyNewborn.dashboardOverview.overviewOpen") !== "0",
     reviewTraceOpen: localStorage.getItem("tinyNewborn.dashboardOverview.reviewTraceOpen") === "1",
+    openCardDetails: new Set(JSON.parse(localStorage.getItem("tinyNewborn.dashboardOverview.openCardDetails") || "[]")),
     timerId: null
   },
   overviewSettings: {
@@ -4204,21 +4206,26 @@ function renderDashboardOverview() {
   if (!overview) {
     const isReviewing = overviewState.status === "reviewing";
     container.innerHTML = `
-      <div class="dashboard-overview-top">
-        <div>
-          <span>Overview</span>
-          <h3>${isReviewing ? "Preparing overview..." : "Overview not ready yet"}</h3>
-          <p>${overviewState.error ? escapeHtml(overviewState.error) : "Local baseline review will prepare first. Press Refresh for GPT when you want the deeper review."}</p>
-        </div>
-        <div class="dashboard-overview-actions">
-          <span class="overview-status status-insufficient-data">Insufficient data</span>
+      <details class="dashboard-overview-expander" data-dashboard-overview-expander ${overviewState.overviewOpen ? "open" : ""}>
+        <summary class="dashboard-overview-top">
+          <div>
+            <span>Overview</span>
+            <h3>${isReviewing ? "Preparing overview..." : "Overview not ready yet"}</h3>
+            <p>${overviewState.error ? escapeHtml(overviewState.error) : "Local baseline review will prepare first. Press Refresh for GPT when you want the deeper review."}</p>
+          </div>
+          <div class="dashboard-overview-actions">
+            <span class="overview-status status-insufficient-data">Insufficient data</span>
+          </div>
+        </summary>
+        <div class="dashboard-overview-body">
           <button class="ghost" type="button" data-dashboard-overview-refresh ${isReviewing ? "disabled" : ""}>${isReviewing ? "Reviewing..." : "Refresh"}</button>
         </div>
-      </div>
+      </details>
     `;
     container.querySelector("[data-dashboard-overview-refresh]")?.addEventListener("click", () => {
       maybeRefreshDashboardOverview(true);
     });
+    setupOverviewExpanderToggle(container);
     setupOverviewTraceToggle(container);
     return;
   }
@@ -4235,51 +4242,60 @@ function renderDashboardOverview() {
       : "";
 
   container.innerHTML = `
-    <div class="dashboard-overview-top">
-      <div>
-        <span>Overview</span>
-        <h3>${escapeHtml(overviewHeadline(overview))}</h3>
-        <p>${escapeHtml(overviewSummary(overview))}</p>
+    <details class="dashboard-overview-expander" data-dashboard-overview-expander ${overviewState.overviewOpen ? "open" : ""}>
+      <summary class="dashboard-overview-top">
+        <div>
+          <span>Overview</span>
+          <h3>${escapeHtml(overviewHeadline(overview))}</h3>
+          <p>${escapeHtml(overviewSummary(overview))}</p>
+        </div>
+        <div class="dashboard-overview-actions">
+          <span class="overview-status status-${escapeAttr(statusClassName)}">${escapeHtml(overviewPriorityLabel(priority))}</span>
+          <span class="dashboard-overview-updated">${escapeHtml(updated)}</span>
+        </div>
+      </summary>
+      <div class="dashboard-overview-body">
+        <div class="dashboard-overview-toolbar">
+          <button class="ghost" type="button" data-dashboard-overview-refresh ${isReviewing ? "disabled" : ""}>${isReviewing ? "Reviewing..." : "Refresh"}</button>
+        </div>
+        ${overview.summaryBullets?.length ? `
+          <ul class="dashboard-overview-bullets">
+            ${overview.summaryBullets.slice(0, 5).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+          </ul>
+        ` : ""}
+        ${overview.overall?.reviewText ? `
+          <div class="dashboard-overview-next">
+            <strong>Overall</strong>
+            ${renderOverviewBulletsFromText(overview.overall.reviewText)}
+          </div>
+        ` : ""}
+        ${cards.length ? `
+          <div class="dashboard-overview-grid">
+            ${cards.map((card) => renderDashboardOverviewCard(card)).join("")}
+          </div>
+        ` : ""}
+        ${overview?.parentNextSteps?.length ? `
+          <div class="dashboard-overview-next">
+            <strong>Parent next steps</strong>
+            <ul>${overview.parentNextSteps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ul>
+          </div>
+        ` : ""}
+        ${renderOverviewReviewTrace(overviewState.reviewTrace)}
+        <div class="dashboard-overview-meta">
+          <span>${escapeHtml(source)}</span>
+          <span>Last reviewed: ${escapeHtml(updated)}</span>
+          ${overview.dataQualityNotes?.length ? `<span>${escapeHtml(overview.dataQualityNotes[0])}</span>` : ""}
+          ${statusMessage ? `<span>${escapeHtml(statusMessage)}</span>` : ""}
+        </div>
       </div>
-      <div class="dashboard-overview-actions">
-        <span class="overview-status status-${escapeAttr(statusClassName)}">${escapeHtml(overviewPriorityLabel(priority))}</span>
-        <button class="ghost" type="button" data-dashboard-overview-refresh ${isReviewing ? "disabled" : ""}>${isReviewing ? "Reviewing..." : "Refresh"}</button>
-      </div>
-    </div>
-    ${overview.summaryBullets?.length ? `
-      <ul class="dashboard-overview-bullets">
-        ${overview.summaryBullets.slice(0, 5).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
-      </ul>
-    ` : ""}
-    ${overview.overall?.reviewText ? `
-      <div class="dashboard-overview-next">
-        <strong>Overall</strong>
-        <p>${escapeHtml(overview.overall.reviewText)}</p>
-      </div>
-    ` : ""}
-    ${cards.length ? `
-      <div class="dashboard-overview-grid">
-        ${cards.map((card) => renderDashboardOverviewCard(card)).join("")}
-      </div>
-    ` : ""}
-    ${overview?.parentNextSteps?.length ? `
-      <div class="dashboard-overview-next">
-        <strong>Parent next steps</strong>
-        <ul>${overview.parentNextSteps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ul>
-      </div>
-    ` : ""}
-    ${renderOverviewReviewTrace(overviewState.reviewTrace)}
-    <div class="dashboard-overview-meta">
-      <span>${escapeHtml(source)}</span>
-      <span>Last reviewed: ${escapeHtml(updated)}</span>
-      ${overview.dataQualityNotes?.length ? `<span>${escapeHtml(overview.dataQualityNotes[0])}</span>` : ""}
-      ${statusMessage ? `<span>${escapeHtml(statusMessage)}</span>` : ""}
-    </div>
+    </details>
   `;
 
   container.querySelector("[data-dashboard-overview-refresh]")?.addEventListener("click", () => {
     maybeRefreshDashboardOverview(true);
   });
+  setupOverviewExpanderToggle(container);
+  setupOverviewCardDetailsToggle(container);
   setupOverviewTraceToggle(container);
 }
 
@@ -4317,6 +4333,34 @@ function setupOverviewTraceToggle(container) {
     localStorage.setItem("tinyNewborn.dashboardOverview.reviewTraceOpen", trace.open ? "1" : "0");
   });
 }
+
+function setupOverviewExpanderToggle(container) {
+  const expander = container.querySelector("[data-dashboard-overview-expander]");
+  if (!expander) return;
+  expander.addEventListener("toggle", () => {
+    state.dashboardOverview.overviewOpen = expander.open;
+    localStorage.setItem("tinyNewborn.dashboardOverview.overviewOpen", expander.open ? "1" : "0");
+  });
+}
+
+function setupOverviewCardDetailsToggle(container) {
+  container.querySelectorAll("[data-overview-card-details]").forEach((details) => {
+    details.addEventListener("toggle", () => {
+      const cardId = details.dataset.overviewCardDetails;
+      if (!cardId) return;
+      if (details.open) {
+        state.dashboardOverview.openCardDetails.add(cardId);
+      } else {
+        state.dashboardOverview.openCardDetails.delete(cardId);
+      }
+      localStorage.setItem(
+        "tinyNewborn.dashboardOverview.openCardDetails",
+        JSON.stringify(Array.from(state.dashboardOverview.openCardDetails))
+      );
+    });
+  });
+}
+
 
 function formatDurationMs(ms) {
   const value = Math.max(0, Number(ms) || 0);
@@ -4397,19 +4441,22 @@ function renderDashboardOverviewCard(card) {
 function renderCautiousDashboardOverviewCard(card) {
   const confidence = String(card.confidence || "low").toLowerCase();
   if (card.review) {
+    const headline = card.headline || card.title || "Overview updated";
+    const detailBullets = overviewDetailBullets(card);
+    const detailsId = card.id || card.title || "overview";
+    const detailsOpen = state.dashboardOverview.openCardDetails.has(detailsId);
     return `
       <article class="dashboard-overview-card">
         <div class="dashboard-overview-card-head">
           <h4>${escapeHtml(card.title || "Overview")}</h4>
           <span class="overview-confidence confidence-${escapeAttr(confidence)}">${escapeHtml(card.confidence || "low")}</span>
         </div>
-        <p>${escapeHtml(card.review)}</p>
-        ${card.citations?.length ? `
-          <div>
-            <dt>Sources</dt>
-            <dd>${renderOverviewCitations(card.citations)}</dd>
-          </div>
-        ` : ""}
+        <p class="overview-card-headline">${escapeHtml(headline)}</p>
+        <details class="overview-card-details" data-overview-card-details="${escapeAttr(detailsId)}" ${detailsOpen ? "open" : ""}>
+          <summary>Learn more</summary>
+          ${detailBullets.length ? `<ul>${detailBullets.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : `<p>${escapeHtml(card.review)}</p>`}
+          ${card.citations?.length ? renderOverviewCitations(card.citations) : ""}
+        </details>
       </article>
     `;
   }
@@ -4455,6 +4502,27 @@ function renderCautiousDashboardOverviewCard(card) {
       </dl>
     </article>
   `;
+}
+
+function overviewDetailBullets(card) {
+  const bullets = Array.isArray(card.detailBullets) ? card.detailBullets.filter(Boolean).slice(0, 4) : [];
+  if (bullets.length) return bullets;
+  const review = String(card.review || "");
+  return review
+    .match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g)
+    ?.map((item) => item.trim().replace(/[.!?]+$/, ""))
+    .filter(Boolean)
+    .slice(0, 4) || [];
+}
+
+function renderOverviewBulletsFromText(text) {
+  const bullets = String(text || "")
+    .match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g)
+    ?.map((item) => item.trim().replace(/[.!?]+$/, ""))
+    .filter(Boolean)
+    .slice(0, 7) || [];
+  if (!bullets.length) return `<p>${escapeHtml(text || "")}</p>`;
+  return `<ul>${bullets.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
 }
 
 function renderOverviewCitations(citations) {

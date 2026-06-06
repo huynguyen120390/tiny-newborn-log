@@ -1245,6 +1245,14 @@ function overviewConfidence(flags, dataQuality) {
   return "medium";
 }
 
+function splitOverviewBullets(text) {
+  const sentences = cleanText(text)
+    .match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g)
+    ?.map((item) => cleanText(item).replace(/[.!?]+$/, ""))
+    .filter(Boolean) || [];
+  return sentences.slice(0, 4).map((item) => item.slice(0, 180));
+}
+
 function buildSafeOverviewFallback(llamaInput, reason = "") {
   const flags = arrayValue(llamaInput.ruleFlags);
   const priority = strongestOverviewPriority(flags, !llamaInput?.metrics || !llamaInput.metrics?.feeding?.dataComplete);
@@ -1260,7 +1268,11 @@ function buildSafeOverviewFallback(llamaInput, reason = "") {
     title,
     priority: cardPriority,
     confidence: cardConfidence,
+    headline: title === "Hygiene / Diaper" && diaperFlag
+      ? "Diaper data may be stale; keep tracking diapers today"
+      : `${title} logs were reviewed; keep tracking baby cues`,
     review,
+    detailBullets: splitOverviewBullets(review),
     citations: []
   });
 
@@ -1666,7 +1678,9 @@ Required JSON output schema:
       "title": string,
       "priority": "ok" | "watch" | "call_doctor" | "urgent" | "insufficient_data",
       "confidence": "high" | "medium" | "low",
+      "headline": string,
       "review": string,
+      "detailBullets": [string],
       "citations": [
         {
           "sourceId": string,
@@ -1687,7 +1701,9 @@ Required JSON output schema:
 
 Card requirements:
 - Include exactly 7 cards, in this order: eat, sleep, hygiene_diaper, health, safety, exercise, play.
+- Each category card headline must be 5 to 20 words and include both what happened and what to do.
 - Each category card review must be 1 to 2 sentences. Use a 3rd sentence only if the category truly needs it.
+- Break the card review into 2 to 4 detailBullets. Each bullet should be short, concrete, and safe to show behind a Learn more button.
 - overall.reviewText must be 5 to 7 sentences maximum.
 - parentNextSteps should contain practical parent actions, 10 sentences maximum total.
 - If there are no urgent flags, overall.headline should be "No urgent flags detected from available logs."
@@ -1801,6 +1817,16 @@ function validateOverviewReview(value, llamaInput) {
     const review = cleanText(card.review || card.meaning);
     assertValid(review, `Overview card review is missing: ${card.id}`);
     const normalizedReview = trimToSentences(review, 3, 420);
+    const rawHeadline = cleanText(card.headline || card.summaryHeadline || card.title);
+    const headlineWords = rawHeadline.split(/\s+/).filter(Boolean);
+    const normalizedHeadline = headlineWords.length >= 5
+      ? headlineWords.slice(0, 20).join(" ")
+      : cleanText(`${rawHeadline || card.title}: ${splitSentences(normalizedReview)[0] || normalizedReview}`).split(/\s+/).filter(Boolean).slice(0, 20).join(" ");
+    const detailBullets = cleanArray(card.detailBullets || card.bullets || card.reviewBullets, 4)
+      .map((item) => item.slice(0, 180));
+    const normalizedDetailBullets = detailBullets.length
+      ? detailBullets
+      : splitOverviewBullets(normalizedReview);
     const citations = arrayValue(card.citations).map((citation) => {
       const sourceId = cleanText(citation?.sourceId || citation?.id);
       const source = sourceReferencesById.get(sourceId);
@@ -1816,7 +1842,9 @@ function validateOverviewReview(value, llamaInput) {
       title: cleanText(card.title).slice(0, 80),
       priority: card.priority,
       confidence: card.confidence,
+      headline: normalizedHeadline.slice(0, 160),
       review: normalizedReview,
+      detailBullets: normalizedDetailBullets,
       citations
     };
   });
