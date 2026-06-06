@@ -19,24 +19,37 @@ const {
   loadDoctorGuideline,
   loadMilestoneLog,
   loadRecent: loadStoredRecent,
+  saveAppData,
   saveRecent
 } = require("./dataStore");
 
 const PORT = process.argv[2] || process.env.PORT || 3002;
+const ROOT_DIR = path.join(__dirname, "..");
+const DEFAULT_DATA_ROOT = path.join("C:", "codelab", "databases", "TinyNewbornLog");
+const DATA_ROOT = process.env.DATA_ROOT ? path.resolve(process.env.DATA_ROOT) : DEFAULT_DATA_ROOT;
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(DATA_ROOT, "prod");
+const SHARED_DATA_DIR = process.env.SHARED_DATA_DIR ? path.resolve(process.env.SHARED_DATA_DIR) : path.join(DATA_ROOT, "shared");
+const APP_DATA_MODE = process.env.APP_DATA_MODE || (process.env.DATA_DIR ? path.basename(DATA_DIR) : "prod");
 const PUBLIC_DIR = path.join(__dirname, "..", "frontend");
-const POOP_COLORS_PATH = path.join(__dirname, "..", "data", "poop-colors.json");
-const DOCTOR_GUIDELINE_MD_PATH = path.join(__dirname, "..", "data", "doctor_guideline.md");
-const OVERVIEW_TREND_30D_PATH = path.join(__dirname, "..", "data", "analytics", "trends", "recent-30d.json");
-const ACTIVITY_CONFIG = require("../data/activity_config.json");
+const POOP_COLORS_PATH = path.join(SHARED_DATA_DIR, "poop-colors.json");
+const DOCTOR_GUIDELINE_MD_PATH = path.join(SHARED_DATA_DIR, "doctor_guideline.md");
+const OVERVIEW_TREND_30D_PATH = path.join(DATA_DIR, "analytics", "trends", "recent-30d.json");
+const ACTIVITY_CONFIG_PATH = path.join(SHARED_DATA_DIR, "activity_config.json");
+const ACTIVITY_CONFIG = readJson(
+  fs.existsSync(ACTIVITY_CONFIG_PATH) ? ACTIVITY_CONFIG_PATH : path.join(ROOT_DIR, "data", "activity_config.json"),
+  { eventCategories: {} }
+);
 const LLAMA_ENDPOINT = process.env.LLAMA_ENDPOINT || "http://localhost:11434/api/generate";
 const LLAMA_MODEL = process.env.LLAMA_MODEL || "llama3.2";
 const OPENAI_ENDPOINT = process.env.OPENAI_ENDPOINT || "https://api.openai.com/v1/responses";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || loadExternalApiKey("open_ai");
 const LLAMA_TIMEOUT_MS = cleanNumber(process.env.LLAMA_TIMEOUT_MS, 30000);
 const LLAMA_OVERVIEW_TIMEOUT_MS = cleanNumber(process.env.LLAMA_OVERVIEW_TIMEOUT_MS, 60000);
 const OPENAI_OVERVIEW_TIMEOUT_MS = cleanNumber(process.env.OPENAI_OVERVIEW_TIMEOUT_MS, 45000);
 const BABY_CRIES_REVIEW_DAYS = 30;
 const OVERVIEW_REVIEW_DAYS = 3;
+const OVERVIEW_HISTORY_LIMIT = 12;
 const DEFAULT_OVERVIEW_SETTINGS = {
   reviewMode: "rules_only",
   llamaModel: LLAMA_MODEL,
@@ -65,6 +78,18 @@ const MIME_TYPES = {
 };
 
 const EVENT_CATEGORY_CONFIG = ACTIVITY_CONFIG.eventCategories || {};
+
+function loadExternalApiKey(keyName) {
+  const keyFile = process.env.API_KEYS_FILE || path.join("C:", "codelab", "key", "keys.json");
+  if (!fs.existsSync(keyFile)) return "";
+  try {
+    const keys = JSON.parse(fs.readFileSync(keyFile, "utf8").replace(/^\uFEFF/, ""));
+    const value = keys?.api_keys?.[keyName];
+    return typeof value === "string" ? value.trim() : "";
+  } catch {
+    return "";
+  }
+}
 
 function cleanOverviewSettings(value = {}) {
   const settings = { ...DEFAULT_OVERVIEW_SETTINGS, ...objectMap(value) };
@@ -1283,6 +1308,28 @@ function overviewConfidence(flags, dataQuality) {
   return "medium";
 }
 
+function overviewOverallHeadline(priority) {
+  const headlines = {
+    ok: "No urgent or doctor-call flags detected from available logs.",
+    insufficient_data: "More logs are needed for a confident overview.",
+    watch: "Watch flag detected from available logs.",
+    call_doctor: "One doctor-call flag found.",
+    urgent: "Urgent flag detected from available logs."
+  };
+  return headlines[priority] || headlines.insufficient_data;
+}
+
+function overviewOverallSummary(priority, fallback = "") {
+  const summaries = {
+    ok: "Available logs do not show [[important:urgent or doctor-call flags]]; missing data is still treated as unknown.",
+    insufficient_data: "Available logs are limited, so missing or stale data should be treated as unknown.",
+    watch: "Available logs include a watch item; keep tracking and follow the listed guidance.",
+    call_doctor: "Available logs include a [[warning:doctor-call item]]; follow the listed guidance and keep tracking other care areas.",
+    urgent: "Available logs include an [[urgent:urgent item]]; follow the listed urgent guidance."
+  };
+  return fallback || summaries[priority] || summaries.insufficient_data;
+}
+
 function splitOverviewBullets(text) {
   const sentences = cleanText(text)
     .match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g)
@@ -1295,19 +1342,29 @@ function buildSafeOverviewFallback(llamaInput, reason = "") {
   const flags = arrayValue(llamaInput.ruleFlags);
   const priority = strongestOverviewPriority(flags, !llamaInput?.metrics || !llamaInput.metrics?.feeding?.dataComplete);
   const confidence = overviewConfidence(flags, llamaInput.dataQuality);
-  const diaperFlag = flags.find((flag) => flag.id === "diaper_data_stale" || flag.id === "diaper_data_missing");
+  const diaperFlag = flags.find((flag) => flag.domain === "diapers");
+  const diaperFlagText = diaperFlag?.priority === "call_doctor"
+    ? "A diaper color doctor-call flag was detected; follow the listed guidance."
+    : diaperFlag
+      ? "Diaper data may need closer tracking today."
+      : "No diaper escalation flag was detected from available logs.";
+  const diaperHeadline = diaperFlag?.priority === "call_doctor"
+    ? "Diaper color needs review; contact pediatrician and keep tracking"
+    : diaperFlag
+      ? "Diaper data needs tracking; keep recording diapers today"
+      : "Diaper logs reviewed; keep tracking diaper changes";
   const nextSteps = [
-    "Track feeds, diapers, sleep, and any new symptoms for the next 24 hours.",
-    "Use milestone and play notes to record what baby is practicing, not just what is confirmed.",
-    "Refresh the overview after new growth or diaper data is logged."
+    "Track feeds, diapers, and symptoms today.",
+    "Follow any doctor-call guidance shown.",
+    "Refresh after the next diaper or feed."
   ];
-  const card = (id, title, review, cardPriority = priority, cardConfidence = confidence) => ({
+  const card = (id, title, review, cardPriority = "ok", cardConfidence = confidence) => ({
     id,
     title,
     priority: cardPriority,
     confidence: cardConfidence,
     headline: title === "Hygiene / Diaper" && diaperFlag
-      ? "Diaper data may be stale; keep tracking diapers today"
+      ? diaperHeadline
       : `${title} logs were reviewed; keep tracking baby cues`,
     review,
     detailBullets: splitOverviewBullets(review),
@@ -1318,27 +1375,27 @@ function buildSafeOverviewFallback(llamaInput, reason = "") {
     schemaVersion: 1,
     reviewStatus: "ready",
     overall: {
-      headline: "No urgent flags detected from available logs.",
+      headline: overviewOverallHeadline(priority),
       priority,
       confidence,
-      oneLineSummary: reason || "Available logs were reviewed with local safety rules; missing data is treated as unknown.",
-      reviewText: `${llamaInput.reviewWindow?.label || "Recent logs"} were reviewed with local safety rules. Missing data is treated as unknown, not bad. ${diaperFlag ? "Diaper data may be stale, so diaper review is limited. " : ""}This fallback review is intentionally conservative because GPT/Ollama output was not used.`,
+      oneLineSummary: overviewOverallSummary(priority, reason),
+      reviewText: `${llamaInput.reviewWindow?.label || "Recent logs"} were reviewed with local safety rules. Missing data is treated as unknown, not bad. ${diaperFlag ? `${diaperFlagText} ` : ""}This review stays conservative and only uses available logs.`,
       dataWindowLabel: llamaInput.reviewWindow?.label || "Last 3 days",
       lastReviewedAt: llamaInput.reviewMeta?.generatedAt || new Date().toISOString()
     },
     summaryBullets: [
       `${llamaInput.reviewWindow?.label || "Recent"} activity was reviewed from available logs.`,
-      diaperFlag ? "Diaper data may be stale." : "No urgent diaper color flags were provided.",
+      priority === "call_doctor" ? "A doctor-call flag was detected." : diaperFlag ? "Diaper data may be stale." : "No urgent or doctor-call diaper color flags were provided.",
       "Missing or unrecorded data is treated as unknown."
     ],
     cards: [
       card("eat", "Eat", llamaInput.metrics?.feeding?.dataComplete ? "Feeding logs are available for this window. This fallback cannot add deeper coaching without a completed model review." : "Feeding review is limited because some feeding metrics are missing."),
       card("sleep", "Sleep", llamaInput.metrics?.sleep?.dataComplete ? "Sleep logs are available, but complete duration depends on paired start and wake records." : "Sleep duration is limited when sleep start and wake times are not paired."),
-      card("hygiene_diaper", "Hygiene / Diaper", diaperFlag ? "Diaper data may be stale, so wet and stool output review is limited." : "No diaper escalation flag was detected from available logs.", diaperFlag?.priority || "ok", diaperFlag?.confidence || confidence),
-      card("health", "Health", "No urgent flags detected from available logs. This review cannot evaluate symptoms that were not recorded."),
-      card("safety", "Safety", "Safe-sleep and emergency guidance should follow the doctor guideline knowledgebase. This fallback does not add new safety conclusions."),
+      card("hygiene_diaper", "Hygiene / Diaper", diaperFlagText, diaperFlag?.priority || "ok", diaperFlag?.confidence || confidence),
       card("exercise", "Exercise", "Use logged milestones and tummy-time notes to guide exercise reminders. Missing exercise notes mean unknown, not a problem."),
-      card("play", "Play", "Play and soothing review is based on parent notes and milestone history. Add short notes when a routine helps baby settle or practice a skill.")
+      card("play", "Play", "Play and soothing review is based on parent notes and milestone history. Add short notes when a routine helps baby settle or practice a skill."),
+      card("safety", "Safety", "Safe-sleep and emergency guidance should follow the doctor guideline knowledgebase. This fallback does not add new safety conclusions."),
+      card("health", "Others", "No urgent flags detected from available logs. This review cannot evaluate symptoms that were not recorded.")
     ],
     parentNextSteps: nextSteps,
     dataQualityNotes: arrayValue(llamaInput.dataQuality).map((item) => item.message).slice(0, 5),
@@ -1661,13 +1718,16 @@ You may cite only sourceReferences provided in the JSON input.
 
 Important safety rules:
 - Never say "baby is fine", "everything is normal", "guaranteed", or "no risk".
-- Use "No urgent flags detected from available logs" instead of "Looks okay".
+- Use "No urgent or doctor-call flags detected from available logs" only when priority is "ok".
+- If priority is "call_doctor", the overall headline must mention a doctor-call flag.
+- If priority is "urgent", the overall headline must mention an urgent flag.
 - If data is missing, stale, invalid, or sparse, say that clearly.
 - Missing data means unknown, not bad.
 - Not recorded means unknown, not failed.
 - Do not say baby is having trouble with sleep, feeding, diapers, outdoor time, milestones, or soothing unless the input has a specific rule flag supporting that.
 - Do not recommend medication dosing.
 - Do not give emergency advice unless a provided rule flag says to escalate.
+- If no rule flag priority is "urgent", do not mention 911, emergency department, urgent care now, emergency signs, or seek medical care now.
 - Do not recommend side/stomach sleeping.
 - For sleep, only mention safe sleep as back sleep, firm flat surface, and no loose bedding if those approved recommendations are provided.
 - For stool/poop color, use only the provided poop color category and action.
@@ -1680,6 +1740,13 @@ Important safety rules:
 - Do not use growth.invalidMeasurements as proof of weight loss or poor growth; ask parents to verify the entry or discuss with pediatrician/lactation support.
 - It is okay to suggest parent coaching from the knowledgebase, such as feeding support, nipple comfort, safe storage, tummy time, milestone-supporting exercises, or what to track next, when relevant.
 - If baby appears to lose weight based on valid logged growth measurements, say this needs pediatrician/lactation discussion; do not diagnose the cause.
+
+Emphasis markers:
+- You may wrap a few important words as [[important:short phrase]].
+- Use [[warning:short phrase]] for doctor-call or warning items.
+- Use [[urgent:short phrase]] only for urgent/emergency rule flags.
+- Do not overuse markers. Use at most 3 markers across the whole response.
+- Never output HTML or Markdown emphasis.
 
 Tone:
 - ${careVoiceInstruction}
@@ -1738,13 +1805,15 @@ Required JSON output schema:
 }
 
 Card requirements:
-- Include exactly 7 cards, in this order: eat, sleep, hygiene_diaper, health, safety, exercise, play.
+- Include exactly 7 cards, in this order: eat, sleep, hygiene_diaper, exercise, play, safety, health.
+- These cards render as: Feed, Sleep, Hygiene, Exercise, Play, Safety, Others.
 - Each category card headline must be 5 to 20 words and include both what happened and what to do.
 - Each category card review must be 1 to 2 sentences. Use a 3rd sentence only if the category truly needs it.
 - Break the card review into 2 to 4 detailBullets. Each bullet should be short, concrete, and safe to show behind a Learn more button.
-- overall.reviewText must be 5 to 7 sentences maximum.
-- parentNextSteps should contain practical parent actions, 10 sentences maximum total.
-- If there are no urgent flags, overall.headline should be "No urgent flags detected from available logs."
+- overall.reviewText must be a concise 2 to 3 sentence parent summary.
+- summaryBullets should contain 2 to 3 short bullets only.
+- parentNextSteps should contain 2 to 4 practical parent actions, each 12 words or fewer.
+- Match overall.headline to overall.priority. For "ok", use "No urgent or doctor-call flags detected from available logs." For "call_doctor", mention a doctor-call flag. For "urgent", mention an urgent flag.
 - If data is too sparse, overall.priority should be "insufficient_data" or "watch", not "ok".
 - If stale diaper data exists, say "Diaper data may be stale" instead of inventing a diaper problem.
 - If recent notes say baby settles well, do not claim self-soothing trouble unless an explicit rule flag says otherwise.
@@ -1786,8 +1855,7 @@ function extractOpenAIText(response) {
 }
 
 async function runGptOverviewReview(llamaInput, input = {}) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY is not set.");
+  if (!OPENAI_API_KEY) throw new Error("OpenAI API key is not configured.");
   const model = input.model || llamaInput.reviewMeta?.model || OPENAI_MODEL;
   const response = await postJson(OPENAI_ENDPOINT, {
     model,
@@ -1796,7 +1864,7 @@ async function runGptOverviewReview(llamaInput, input = {}) {
       format: { type: "json_object" }
     }
   }, OPENAI_OVERVIEW_TIMEOUT_MS, {
-    Authorization: `Bearer ${apiKey}`
+    Authorization: `Bearer ${OPENAI_API_KEY}`
   });
   const parsed = extractJsonObject(extractOpenAIText(response));
   if (!parsed) throw new Error("GPT did not return JSON overview");
@@ -1806,7 +1874,7 @@ async function runGptOverviewReview(llamaInput, input = {}) {
 function validateOverviewReview(value, llamaInput) {
   const allowedPriorities = new Set(["ok", "watch", "call_doctor", "urgent", "insufficient_data"]);
   const allowedConfidence = new Set(["high", "medium", "low"]);
-  const requiredCards = ["eat", "sleep", "hygiene_diaper", "health", "safety", "exercise", "play"];
+  const requiredCards = ["eat", "sleep", "hygiene_diaper", "exercise", "play", "safety", "health"];
   const allowedCards = new Set(requiredCards);
   const assertValid = (condition, message) => {
     if (!condition) throw new Error(message);
@@ -1821,7 +1889,34 @@ function validateOverviewReview(value, llamaInput) {
     return cleanText(trimmed).slice(0, maxChars);
   };
   const ruleFlags = arrayValue(llamaInput?.ruleFlags);
+  const hasUrgentFlag = ruleFlags.some((flag) => flag.priority === "urgent");
   const ruleDomains = new Set(ruleFlags.map((flag) => flag.domain).filter(Boolean));
+  const hasGrowthWatch = arrayValue(llamaInput?.dataQuality).some((item) => item.severity === "watch" && /growth|weight|height/i.test(item.message || item.id || ""));
+  const cardDomains = {
+    eat: ["feeding"],
+    sleep: ["sleep"],
+    hygiene_diaper: ["diapers"],
+    exercise: ["milestones", "exercise"],
+    play: ["milestones", "comfort"],
+    safety: ["safety", "environment"],
+    health: ["health", "growth"]
+  };
+  const normalizeCardPriority = (cardId, priority) => {
+    if (!["call_doctor", "urgent"].includes(priority)) return priority;
+    const domains = cardDomains[cardId] || [];
+    const hasMatchingRule = domains.some((domain) => ruleDomains.has(domain));
+    if (hasMatchingRule) return priority;
+    if (cardId === "health" && hasGrowthWatch) return "watch";
+    return "ok";
+  };
+  const unsupportedEmergencyPattern = /\b(call 911|emergency department|seek medical care now|urgent care now|emergency signs?)\b/i;
+  const stripUnsupportedEmergencyAdvice = (text) => {
+    const cleaned = cleanText(text);
+    if (!cleaned || hasUrgentFlag) return cleaned;
+    return splitSentences(cleaned)
+      .filter((sentence) => !unsupportedEmergencyPattern.test(sentence))
+      .join(" ");
+  };
   const allowedMedicalText = [
     ...ruleFlags.map((flag) => `${flag.message || ""} ${arrayValue(flag.evidenceIds).join(" ")}`),
     ...arrayValue(llamaInput?.approvedRecommendations).map((item) => item.text || ""),
@@ -1838,8 +1933,8 @@ function validateOverviewReview(value, llamaInput) {
   ["headline", "oneLineSummary", "dataWindowLabel", "lastReviewedAt"].forEach((field) => {
     assertValid(cleanText(value.overall[field]), `Overview overall.${field} is missing.`);
   });
-  assertValid(cleanText(value.overall.reviewText), "Overview overall.reviewText is missing.");
-  assertValid(sentenceCount(value.overall.reviewText) <= 7, "Overview overall.reviewText is too long.");
+  const normalizedOverallReviewText = trimToSentences(value.overall.reviewText, 3, 520);
+  assertValid(normalizedOverallReviewText, "Overview overall.reviewText is missing.");
 
   const cards = arrayValue(value.cards);
   assertValid(cards.length === requiredCards.length, "Overview must include exactly 7 cards.");
@@ -1852,15 +1947,17 @@ function validateOverviewReview(value, llamaInput) {
     assertValid(cleanText(card.title), `Overview card title is missing: ${card.id}`);
     assertValid(allowedPriorities.has(card.priority), `Overview card priority is invalid: ${card.id}`);
     assertValid(allowedConfidence.has(card.confidence), `Overview card confidence is invalid: ${card.id}`);
-    const review = cleanText(card.review || card.meaning);
+    const review = stripUnsupportedEmergencyAdvice(card.review || card.meaning);
     assertValid(review, `Overview card review is missing: ${card.id}`);
     const normalizedReview = trimToSentences(review, 3, 420);
-    const rawHeadline = cleanText(card.headline || card.summaryHeadline || card.title);
+    const rawHeadline = stripUnsupportedEmergencyAdvice(card.headline || card.summaryHeadline || card.title) || cleanText(card.title);
     const headlineWords = rawHeadline.split(/\s+/).filter(Boolean);
     const normalizedHeadline = headlineWords.length >= 5
       ? headlineWords.slice(0, 20).join(" ")
       : cleanText(`${rawHeadline || card.title}: ${splitSentences(normalizedReview)[0] || normalizedReview}`).split(/\s+/).filter(Boolean).slice(0, 20).join(" ");
     const detailBullets = cleanArray(card.detailBullets || card.bullets || card.reviewBullets, 4)
+      .map((item) => stripUnsupportedEmergencyAdvice(item))
+      .filter(Boolean)
       .map((item) => item.slice(0, 180));
     const normalizedDetailBullets = detailBullets.length
       ? detailBullets
@@ -1878,7 +1975,7 @@ function validateOverviewReview(value, llamaInput) {
     return {
       id: card.id,
       title: cleanText(card.title).slice(0, 80),
-      priority: card.priority,
+      priority: normalizeCardPriority(card.id, card.priority),
       confidence: card.confidence,
       headline: normalizedHeadline.slice(0, 160),
       review: normalizedReview,
@@ -1887,9 +1984,11 @@ function validateOverviewReview(value, llamaInput) {
     };
   });
 
-  const parentNextSteps = cleanArray(value.parentNextSteps, 10);
+  const parentNextSteps = cleanArray(value.parentNextSteps, 4)
+    .map((item) => stripUnsupportedEmergencyAdvice(item))
+    .filter(Boolean);
   assertValid(parentNextSteps.length >= 1, "Overview parentNextSteps is missing.");
-  assertValid(sentenceCount(parentNextSteps.join(" ")) <= 10, "Overview parentNextSteps is too long.");
+  assertValid(sentenceCount(parentNextSteps.join(" ")) <= 4, "Overview parentNextSteps is too long.");
 
   const normalized = {
     schemaVersion: 1,
@@ -1898,14 +1997,14 @@ function validateOverviewReview(value, llamaInput) {
       headline: cleanText(value.overall.headline).slice(0, 120),
       priority: value.overall.priority,
       confidence: value.overall.confidence,
-      oneLineSummary: cleanText(value.overall.oneLineSummary).slice(0, 220),
-      reviewText: cleanText(value.overall.reviewText).slice(0, 900),
+      oneLineSummary: (stripUnsupportedEmergencyAdvice(value.overall.oneLineSummary) || overviewOverallSummary(value.overall.priority)).slice(0, 220),
+      reviewText: stripUnsupportedEmergencyAdvice(normalizedOverallReviewText) || overviewOverallSummary(value.overall.priority),
       dataWindowLabel: cleanText(value.overall.dataWindowLabel, llamaInput?.reviewWindow?.label || "Last 3 days").slice(0, 80),
       lastReviewedAt: cleanText(value.overall.lastReviewedAt, llamaInput?.reviewMeta?.generatedAt || new Date().toISOString())
     },
-    summaryBullets: cleanArray(value.summaryBullets, 5).map((item) => item.slice(0, 180)),
+    summaryBullets: cleanArray(value.summaryBullets, 3).map((item) => stripUnsupportedEmergencyAdvice(item)).filter(Boolean).map((item) => item.slice(0, 160)),
     cards: normalizedCards,
-    parentNextSteps: parentNextSteps.map((item) => item.slice(0, 200)),
+    parentNextSteps: parentNextSteps.map((item) => item.split(/\s+/).filter(Boolean).slice(0, 12).join(" ").slice(0, 120)),
     dataQualityNotes: cleanArray(value.dataQualityNotes, 6).map((item) => item.slice(0, 180)),
     reviewMeta: {
       model: llamaInput?.reviewMeta?.model || LLAMA_MODEL,
@@ -1965,8 +2064,9 @@ function validateOverviewReview(value, llamaInput) {
   });
   assertValid(!/milestone[^.]{0,80}(failed|not achieved|delayed)/.test(allText), "Overview treats missing milestone data as failed milestone data.");
 
-  if (!ruleFlags.some((flag) => flag.priority === "urgent")) {
-    normalized.overall.headline = "No urgent flags detected from available logs.";
+  normalized.overall.headline = overviewOverallHeadline(normalized.overall.priority);
+  if (!normalized.overall.oneLineSummary || /no urgent flags/i.test(normalized.overall.oneLineSummary)) {
+    normalized.overall.oneLineSummary = overviewOverallSummary(normalized.overall.priority);
   }
   if (ruleFlags.some((flag) => flag.priority === "insufficient_data") && normalized.overall.priority === "ok") {
     throw new Error("Overview uses ok priority despite insufficient data.");
@@ -2029,6 +2129,86 @@ function publishOverviewReviewAtomically(pendingReview, meta = {}) {
     reviewTrace: meta.reviewTrace || null,
     updatedAt: reviewUpdatedAt
   };
+}
+
+function overviewHistoryEntryId(payload) {
+  return [
+    payload.updatedAt || new Date().toISOString(),
+    payload.source || "overview",
+    payload.inputHash || ""
+  ].join("-").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 96);
+}
+
+function cleanOverviewHistoryEntry(entry) {
+  const source = cleanText(entry.source, "rules");
+  const review = objectMap(entry.review || entry.publishedReview);
+  if (!review.schemaVersion || review.reviewStatus !== "ready") return null;
+  const updatedAt = cleanText(entry.updatedAt || review.updatedAt || review.overall?.lastReviewedAt, new Date().toISOString());
+  const inputHash = cleanText(entry.inputHash || review.reviewMeta?.inputHash, "");
+  return {
+    id: cleanText(entry.id, overviewHistoryEntryId({ updatedAt, source, inputHash })),
+    updatedAt,
+    source,
+    inputHash,
+    model: cleanText(entry.model || review.reviewMeta?.model, ""),
+    review,
+    reviewTrace: objectMap(entry.reviewTrace)
+  };
+}
+
+function overviewHistoryFromAppData(appData) {
+  return arrayValue(appData.overview_history)
+    .map(cleanOverviewHistoryEntry)
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, OVERVIEW_HISTORY_LIMIT);
+}
+
+function overviewHistorySummaries(entries) {
+  return arrayValue(entries).map((entry) => ({
+    id: entry.id,
+    updatedAt: entry.updatedAt,
+    source: entry.source,
+    inputHash: entry.inputHash,
+    model: entry.model,
+    headline: entry.review?.overall?.headline || "",
+    priority: entry.review?.overall?.priority || "insufficient_data",
+    dataWindowLabel: entry.review?.overall?.dataWindowLabel || ""
+  }));
+}
+
+function saveOverviewHistory(payload) {
+  const entry = cleanOverviewHistoryEntry({
+    id: overviewHistoryEntryId(payload),
+    updatedAt: payload.updatedAt,
+    source: payload.source,
+    inputHash: payload.inputHash,
+    model: payload.llama?.model,
+    review: payload.publishedReview || payload.review,
+    reviewTrace: payload.reviewTrace
+  });
+  if (!entry) return overviewHistoryFromAppData(loadAppData());
+
+  const appData = loadAppData();
+  const history = overviewHistoryFromAppData(appData)
+    .filter((item) => item.id !== entry.id && !(item.inputHash === entry.inputHash && item.source === entry.source));
+  appData.overview_history = [entry, ...history].slice(0, OVERVIEW_HISTORY_LIMIT);
+  saveAppData(appData);
+  return appData.overview_history;
+}
+
+function attachOverviewHistory(payload) {
+  const history = saveOverviewHistory(payload);
+  payload.overviewHistory = history;
+  payload.overviewHistorySummaries = overviewHistorySummaries(history);
+  return payload;
+}
+
+async function handleDashboardOverviewHistory(req, res) {
+  sendJson(res, 200, {
+    overviewHistory: overviewHistoryFromAppData(loadAppData()),
+    limit: OVERVIEW_HISTORY_LIMIT
+  });
 }
 
 async function handleDashboardOverview(req, res) {
@@ -2118,7 +2298,7 @@ async function handleDashboardOverview(req, res) {
   };
   if (sources.overviewSettings.reviewMode === "rules_only") {
     stepStarted = Date.now();
-    const pendingReview = buildSafeOverviewFallback(llamaInput, "Local rules reviewed the available logs without waiting for Llama.");
+    const pendingReview = buildSafeOverviewFallback(llamaInput);
     markStep("generate_local_rules_review", stepStarted, { modelSkipped: true });
     stepStarted = Date.now();
     const payload = publishOverviewReviewAtomically(pendingReview, {
@@ -2142,6 +2322,7 @@ async function handleDashboardOverview(req, res) {
     });
     markStep("publish_review", stepStarted, { source: "rules" });
     payload.reviewTrace = finishTrace("ready", { source: "rules", model: llamaInput.reviewMeta.model });
+    attachOverviewHistory(payload);
     sendJson(res, 200, payload);
     return;
   }
@@ -2150,7 +2331,7 @@ async function handleDashboardOverview(req, res) {
     if (sources.overviewSettings.reviewMode === "gpt_strict") {
       stepStarted = Date.now();
       markStep("check_openai_config", stepStarted, {
-        openaiApiKeyConfigured: Boolean(process.env.OPENAI_API_KEY),
+        openaiApiKeyConfigured: Boolean(OPENAI_API_KEY),
         endpoint: OPENAI_ENDPOINT,
         model: reviewModel
       });
@@ -2191,6 +2372,7 @@ async function handleDashboardOverview(req, res) {
     });
     markStep("publish_review", stepStarted, { source: payload.source });
     payload.reviewTrace = finishTrace("ready", { source: sources.overviewSettings.reviewMode === "gpt_strict" ? "gpt" : "llama", model: reviewModel });
+    attachOverviewHistory(payload);
     sendJson(res, 200, payload);
   } catch (error) {
     markStep("review_failed", stepStarted, {
@@ -2641,6 +2823,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/dashboard-overview-history") {
+      await handleDashboardOverviewHistory(req, res);
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/api/dashboard-overview") {
       await handleDashboardOverview(req, res);
       return;
@@ -2659,4 +2846,8 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Phuong Nam Logbook running on port ${PORT}`);
+  console.log(`Data mode: ${APP_DATA_MODE}`);
+  console.log(`Data root: ${DATA_ROOT}`);
+  console.log(`Data directory: ${DATA_DIR}`);
+  console.log(`Shared data directory: ${SHARED_DATA_DIR}`);
 });

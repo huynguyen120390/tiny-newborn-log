@@ -32,6 +32,144 @@ Then open:
 http://localhost:3002
 ```
 
+## Real Data vs Development Data
+
+The app can run against separate JSON data folders so development work does not touch real baby logs.
+
+Runtime data lives outside the code repo:
+
+```text
+C:\codelab\databases\TinyNewbornLog
+├── dev
+├── staging
+├── prod
+├── backups
+└── shared
+```
+
+Environment purpose:
+
+```text
+dev      = fake/development data for building features
+staging  = sanitized real-shaped data for final release testing
+prod     = actual daily baby logs
+shared   = care guidance and app rules used by all environments
+backups  = automatic safety copies
+```
+
+Development workflow:
+
+```bash
+npm run start:dev
+```
+
+This starts the app on:
+
+```text
+http://localhost:3003
+```
+
+and reads/writes dev data from:
+
+```text
+C:\codelab\databases\TinyNewbornLog\dev
+```
+
+Release testing workflow:
+
+```bash
+npm run data:refresh-stage
+npm run start:stage
+```
+
+This starts the app on:
+
+```text
+http://localhost:3004
+```
+
+and reads/writes staging data from:
+
+```text
+C:\codelab\databases\TinyNewbornLog\staging
+```
+
+`data:refresh-stage` rebuilds staging from prod data while sanitizing profile names, notes, comments, descriptions, details, and contact-like fields. It keeps the production-like shape, dates, log counts, and numeric values so release testing is realistic without exposing private notes directly.
+
+For production daily use:
+
+```bash
+npm run start:prod
+```
+
+This starts the app on:
+
+```text
+http://localhost:3002
+```
+
+and reads/writes prod data from:
+
+```text
+C:\codelab\databases\TinyNewbornLog\prod
+```
+
+Shared reference files such as `doctor_guideline.json`, `doctor_guideline.md`, `activity_config.json`, and `poop-colors.json` live in:
+
+```text
+C:\codelab\databases\TinyNewbornLog\shared
+```
+
+Treat those as deliberate app knowledge/config, not per-environment activity logs.
+
+You can still use the snapshot/switch helper when needed:
+
+```bash
+npm run data:list
+npm run data:snapshot -- prod
+npm run data:dev
+npm run data:stage
+npm run data:prod
+```
+
+Prefer `start:dev` for coding and UI testing, `start:stage` for pre-release checks, and `start:prod` only for actual family use.
+
+## Code Environments
+
+For industry-style code separation, this machine has three app folders:
+
+```text
+C:\codelab\apps\TinyNewbornLog-dev
+C:\codelab\apps\TinyNewbornLog-staging
+C:\codelab\apps\TinyNewbornLog-prod
+```
+
+Use them like this:
+
+```text
+TinyNewbornLog-dev
+  Experimental code
+  Runs dev data on http://localhost:3003
+
+TinyNewbornLog-staging
+  Release-candidate code
+  Runs sanitized staging data on http://localhost:3004
+
+TinyNewbornLog-prod
+  Accepted stable code
+  Runs prod data on http://localhost:3002
+```
+
+Each folder includes `start-this-environment.bat` for the matching environment. Production should stay online from the prod folder. Dev and staging can be started only when needed.
+
+When Git is available, prefer promoting code by merging branches/worktrees:
+
+```text
+dev -> staging -> main/prod
+```
+
+Until then, treat folder copying as a manual promotion step and avoid editing the prod folder directly.
+
 ## Run Apple Watch App
 
 Open this project in Xcode:
@@ -235,10 +373,29 @@ Llama must return the cautious overview schema with `reviewStatus: "ready"`, `ov
 
 Overview settings are stored in `data/app_data.json` under `overview_settings` and can be changed from the Settings tab. The default review mode is `rules_only`, which publishes a safe local review immediately and avoids waiting on CPU-only Llama. Switch to `ollama_strict` when you want to test local Ollama generation; `maxOutputTokens` maps to Ollama `num_predict`.
 
-To use GPT for Overview, set `OPENAI_API_KEY` in the server environment and choose `Strict GPT` in Settings. GPT reviews are manual-only: they run when you press Refresh, not on the auto-refresh timer. The app calls the OpenAI Responses API directly and does not save the API key in JSON. Optional environment variables:
+To use GPT for Overview, choose `Strict GPT` in Settings. GPT reviews are manual-only: they run when you press Refresh, not on the auto-refresh timer. The app calls the OpenAI Responses API directly.
+
+The server reads the OpenAI key from this external local file by default:
+
+```text
+C:\codelab\key\keys.json
+```
+
+Expected shape:
+
+```json
+{
+  "api_keys": {
+    "open_ai": "your_key_here"
+  }
+}
+```
+
+You can override the key with `OPENAI_API_KEY`, or point to a different key file with `API_KEYS_FILE`. Optional environment variables:
 
 ```bat
 set OPENAI_API_KEY=your_key_here
+set API_KEYS_FILE=C:\codelab\key\keys.json
 set OPENAI_MODEL=gpt-4.1-mini
 set OPENAI_OVERVIEW_TIMEOUT_MS=45000
 ```
