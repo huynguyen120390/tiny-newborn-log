@@ -4,14 +4,37 @@ import WatchKit
 
 private func formatElapsed(_ elapsed: TimeInterval) -> String {
     let totalSeconds = max(Int(elapsed.rounded()), 0)
+    let hours = totalSeconds / 3600
+    let minutes = (totalSeconds % 3600) / 60
+    let seconds = totalSeconds % 60
 
-    if totalSeconds < 60 {
-        return totalSeconds == 1 ? "1 second" : "\(totalSeconds) seconds"
+    if hours > 0 {
+        return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
     }
 
-    let minutes = totalSeconds / 60
+    return String(format: "%02d:%02d", minutes, seconds)
+}
+
+private func spokenElapsed(_ elapsed: TimeInterval) -> String {
+    let totalSeconds = max(Int(elapsed.rounded()), 0)
+    let hours = totalSeconds / 3600
+    let minutes = (totalSeconds % 3600) / 60
     let seconds = totalSeconds % 60
-    return "\(minutes):\(String(format: "%02d", seconds))"
+    var parts: [String] = []
+
+    if hours > 0 {
+        parts.append(hours == 1 ? "1 hour" : "\(hours) hours")
+    }
+
+    if minutes > 0 {
+        parts.append(minutes == 1 ? "1 minute" : "\(minutes) minutes")
+    }
+
+    if seconds > 0 || parts.isEmpty {
+        parts.append(seconds == 1 ? "1 second" : "\(seconds) seconds")
+    }
+
+    return parts.joined(separator: " ")
 }
 
 private func formatAmount(_ value: Double, unit: String) -> String {
@@ -43,17 +66,7 @@ private func roundedDisplayAmount(_ value: Double, unit: String) -> Double {
 }
 
 private func formatDurationSummary(_ elapsed: TimeInterval) -> String {
-    let totalSeconds = max(Int(elapsed.rounded()), 0)
-    if totalSeconds < 60 {
-        return totalSeconds == 1 ? "1 sec" : "\(totalSeconds) sec"
-    }
-
-    let minutes = totalSeconds / 60
-    if minutes < 60 {
-        return "\(minutes)m"
-    }
-
-    return "\(minutes / 60)h \(minutes % 60)m"
+    formatElapsed(elapsed)
 }
 
 private extension Color {
@@ -216,8 +229,8 @@ struct ContentView: View {
 
         return LoggerCard(
             title: store.activeSleepStartedAt == nil ? "Sleep" : "Awake",
-            value: activeStartedAt == nil ? store.lastCompletedDurationText(for: .sleep) : "",
-            subtitle: "today \(store.todaysDurationText(for: .sleep))",
+            value: activeStartedAt == nil ? store.todaysDurationText(for: .sleep) : "",
+            subtitle: "today",
             symbolName: LogKind.sleep.symbolName,
             color: store.activeSleepStartedAt == nil ? .indigo : .orange,
             timerStartedAt: activeStartedAt
@@ -229,8 +242,8 @@ struct ContentView: View {
     private var boobieCard: some View {
         LoggerCard(
             title: "Boobie",
-            value: "",
-            subtitle: store.lastSummary(for: .nursing),
+            value: "\(store.todaysCount(for: .nursing))",
+            subtitle: "feeds today",
             symbolName: LogKind.nursing.symbolName,
             color: .pink
         ) {
@@ -241,8 +254,8 @@ struct ContentView: View {
     private var bottleCard: some View {
         LoggerCard(
             title: "Bottle",
-            value: formatAmount(store.latestBottleAmount(for: bottleMilkType), unit: store.bottleDisplayUnit()),
-            subtitle: "\(bottleMilkType.rawValue) last",
+            value: store.formatBottleAmount(fromML: store.todaysBottleML),
+            subtitle: "today",
             symbolName: LogKind.bottle.symbolName,
             color: .teal
         ) {
@@ -253,8 +266,8 @@ struct ContentView: View {
     private var diaperCard: some View {
         LoggerCard(
             title: "Wee & Poo",
-            value: "\(store.todaysCount(for: .diaper))",
-            subtitle: store.lastSummary(for: .diaper),
+            value: store.todaysDiaperSummary(),
+            subtitle: "today",
             symbolName: LogKind.diaper.symbolName,
             color: .brown
         ) {
@@ -265,8 +278,8 @@ struct ContentView: View {
     private var statsCard: some View {
         LoggerCard(
             title: "Baby Stats",
-            value: measurementKind.rawValue,
-            subtitle: store.lastSummary(for: .babyStats),
+            value: store.latestStatsSummary(),
+            subtitle: "latest",
             symbolName: LogKind.babyStats.symbolName,
             color: .blue
         ) {
@@ -279,8 +292,8 @@ struct ContentView: View {
 
         return LoggerCard(
             title: kind.title,
-            value: activeStartedAt == nil ? store.lastCompletedDurationText(for: kind) : "",
-            subtitle: "today \(store.todaysDurationText(for: kind))",
+            value: activeStartedAt == nil ? store.todaysDurationText(for: kind) : "",
+            subtitle: "today",
             symbolName: kind.symbolName,
             color: color,
             timerStartedAt: activeStartedAt
@@ -292,8 +305,8 @@ struct ContentView: View {
     private var routinesCard: some View {
         LoggerCard(
             title: "Routines",
-            value: "",
-            subtitle: store.lastSummary(for: .routines),
+            value: "\(store.todaysCount(for: .routines))",
+            subtitle: "today",
             symbolName: LogKind.routines.symbolName,
             color: .purple
         ) {
@@ -304,8 +317,8 @@ struct ContentView: View {
     private func quickCard(_ kind: LogKind, color: Color) -> some View {
         LoggerCard(
             title: kind.title,
-            value: "Log",
-            subtitle: store.lastSummary(for: kind),
+            value: "\(store.todaysCount(for: kind))",
+            subtitle: "today",
             symbolName: kind.symbolName,
             color: color
         ) {
@@ -354,7 +367,7 @@ struct ContentView: View {
             .buttonStyle(.plain)
 
             Spacer()
-            Text("\(Int(store.todaysBottleML)) ml")
+            Text(store.formatBottleAmount(fromML: store.todaysBottleML))
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
         }
@@ -506,12 +519,12 @@ struct ContentView: View {
                 activeSheet = nil
             }
         case .boobie:
-            BoobieSheet(totalToday: store.todaysTotalText(for: .nursing)) { side in
+            BoobieSheet(totalToday: store.todaysTotalText(for: .nursing), lastDetail: store.lastDetail(for: .nursing)) { side in
                 store.logNursing(side: side)
                 activeSheet = nil
             }
         case .bottle:
-            BottleSheet(bottleML: $bottleML, milkType: $bottleMilkType, totalToday: store.todaysTotalText(for: .bottle), milkUnit: store.bottleDisplayUnit(), presetAmount: { milkType in
+            BottleSheet(bottleML: $bottleML, milkType: $bottleMilkType, totalToday: store.todaysTotalText(for: .bottle), lastDetail: store.lastDetail(for: .bottle), milkUnit: store.bottleDisplayUnit(), presetAmount: { milkType in
                 store.latestBottleAmount(for: milkType)
             }) {
                 store.logBottle(amountML: bottleML, milkType: bottleMilkType)
@@ -521,12 +534,12 @@ struct ContentView: View {
                 bottleML = store.latestBottleAmount(for: bottleMilkType)
             }
         case .diaper:
-            DiaperSheet(totalToday: store.todaysTotalText(for: .diaper)) { event, poopColor in
+            DiaperSheet(totalToday: store.todaysTotalText(for: .diaper), lastDetail: store.lastDetail(for: .diaper)) { event, poopColor in
                 store.logDiaper(event, poopColor: poopColor)
                 activeSheet = nil
             }
         case .babyStats:
-            BabyStatsSheet(kind: $measurementKind, value: $measurementValue, totalToday: store.todaysTotalText(for: .babyStats), unitFor: { kind in
+            BabyStatsSheet(kind: $measurementKind, value: $measurementValue, totalToday: store.todaysTotalText(for: .babyStats), lastDetail: store.lastDetail(for: .babyStats), unitFor: { kind in
                 store.measurementUnit(for: kind)
             }, presetValue: { kind in
                 store.latestMeasurementValue(for: kind)
@@ -558,12 +571,12 @@ struct ContentView: View {
                 }
             }
         case .quick(let kind):
-            QuickActivitySheet(kind: kind, totalToday: store.todaysTotalText(for: kind)) {
+            QuickActivitySheet(kind: kind, totalToday: store.todaysTotalText(for: kind), lastDetail: store.lastDetail(for: kind)) {
                 store.logQuickActivity(kind)
                 activeSheet = nil
             }
         case .routines:
-            RoutinesSheet(totalToday: store.todaysTotalText(for: .routines)) { routine in
+            RoutinesSheet(totalToday: store.todaysTotalText(for: .routines), lastDetail: store.lastDetail(for: .routines)) { routine in
                 store.logRoutine(routine)
                 activeSheet = nil
             }
@@ -804,9 +817,9 @@ private struct LoggerCard: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 7) {
                 Image(systemName: symbolName)
-                    .font(.headline.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.black)
-                    .frame(width: 29, height: 29)
+                    .frame(width: 27, height: 27)
                     .background(color, in: Circle())
 
                 Spacer(minLength: 0)
@@ -820,17 +833,17 @@ private struct LoggerCard: View {
 
                     if !value.isEmpty {
                         Text(value)
-                            .font(.headline.weight(.bold))
+                            .font(.subheadline.weight(.bold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.75)
+                            .minimumScaleFactor(0.55)
                     } else if let timerStartedAt {
                         TimelineView(.periodic(from: .now, by: 1)) { timeline in
                             Text(formatDurationSummary(timeline.date.timeIntervalSince(timerStartedAt)))
-                                .font(.headline.weight(.bold))
+                                .font(.subheadline.weight(.bold))
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
-                                .minimumScaleFactor(0.75)
+                                .minimumScaleFactor(0.55)
                                 .monospacedDigit()
                         }
                     }
@@ -843,7 +856,7 @@ private struct LoggerCard: View {
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 98, maxHeight: 98, alignment: .leading)
-            .padding(8)
+            .padding(7)
             .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
@@ -892,12 +905,16 @@ private struct SleepSheet: View {
 
 private struct BoobieSheet: View {
     var totalToday: String
+    var lastDetail: String
     var onLog: (NursingSide) -> Void
 
     var body: some View {
         NavigationStack {
             List {
                 Label(totalToday, systemImage: "sum")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Label(lastDetail, systemImage: "clock.arrow.circlepath")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -924,6 +941,7 @@ private struct BottleSheet: View {
     @Binding var bottleML: Double
     @Binding var milkType: BottleMilkType
     var totalToday: String
+    var lastDetail: String
     var milkUnit: String
     var presetAmount: (BottleMilkType) -> Double
     var onLog: () -> Void
@@ -932,6 +950,9 @@ private struct BottleSheet: View {
         NavigationStack {
             List {
                 Label(totalToday, systemImage: "sum")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Label(lastDetail, systemImage: "clock.arrow.circlepath")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -972,12 +993,16 @@ private struct BottleSheet: View {
 
 private struct DiaperSheet: View {
     var totalToday: String
+    var lastDetail: String
     var onLog: (DiaperEvent, PoopColorOption?) -> Void
 
     var body: some View {
         NavigationStack {
             List {
                 Label(totalToday, systemImage: "sum")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Label(lastDetail, systemImage: "clock.arrow.circlepath")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -1197,6 +1222,7 @@ private struct BabyStatsSheet: View {
     @Binding var kind: MeasurementKind
     @Binding var value: Double
     var totalToday: String
+    var lastDetail: String
     var unitFor: (MeasurementKind) -> String
     var presetValue: (MeasurementKind) -> Double
     var onLog: () -> Void
@@ -1227,6 +1253,9 @@ private struct BabyStatsSheet: View {
         NavigationStack {
             List {
                 Label(totalToday, systemImage: "sum")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Label(lastDetail, systemImage: "clock.arrow.circlepath")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -1373,12 +1402,16 @@ private struct ElapsedTimerRow: View {
 
 private struct RoutinesSheet: View {
     var totalToday: String
+    var lastDetail: String
     var onLog: (RoutineKind) -> Void
 
     var body: some View {
         NavigationStack {
             List {
                 Label(totalToday, systemImage: "sum")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Label(lastDetail, systemImage: "clock.arrow.circlepath")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -1476,12 +1509,16 @@ private struct SecondsEditor: View {
 private struct QuickActivitySheet: View {
     var kind: LogKind
     var totalToday: String
+    var lastDetail: String
     var onLog: () -> Void
 
     var body: some View {
         NavigationStack {
             List {
                 Label(totalToday, systemImage: "sum")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Label(lastDetail, systemImage: "clock.arrow.circlepath")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -1606,15 +1643,17 @@ private final class ReminderPlayer: NSObject, ObservableObject, AVSpeechSynthesi
     }
 
     private func message(for kind: LogKind, elapsed: TimeInterval) -> String {
-        let elapsedText = formatElapsed(elapsed)
+        let elapsedText = spokenElapsed(elapsed)
 
         switch kind {
         case .bath:
-            return "Bath time reminder. \(elapsedText)."
+            return "Bath time reminder. Elapsed \(elapsedText)."
         case .tummyTime:
-            return "Tummy time reminder. \(elapsedText)."
+            return "Tummy time reminder. Elapsed \(elapsedText)."
+        case .outdoorTime:
+            return "Outdoor time reminder. Elapsed \(elapsedText)."
         default:
-            return "\(kind.title) reminder. \(elapsedText)."
+            return "\(kind.title) reminder. Elapsed \(elapsedText)."
         }
     }
 
