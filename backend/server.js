@@ -240,6 +240,33 @@ function logTime(log) {
   return 0;
 }
 
+function recentNativeLogs(logs, days = 2) {
+  const safeDays = Math.max(1, Math.min(14, Math.round(cleanNumber(days, 2))));
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const windowStart = todayStart - ((safeDays - 1) * 24 * 60 * 60 * 1000);
+  const windowEnd = todayStart + (24 * 60 * 60 * 1000);
+  const sorted = arrayValue(logs).sort((a, b) => logTime(a) - logTime(b));
+  const included = new Map();
+
+  sorted.forEach((log) => {
+    const time = logTime(log);
+    if (time >= windowStart && time < windowEnd) {
+      included.set(log.id, log);
+    }
+  });
+
+  Object.entries(EVENT_CATEGORY_CONFIG).forEach(([type, config]) => {
+    if (config?.kind !== "period") return;
+    const last = [...sorted].reverse().find((log) => log.type === type && log.status);
+    if (last && last.status === config.start && last.id) {
+      included.set(last.id, last);
+    }
+  });
+
+  return [...included.values()].sort((a, b) => logTime(a) - logTime(b));
+}
+
 function isActiveAt(logs, type, atTime, excludeId) {
   const config = pairedConfig(type);
   let active = false;
@@ -2430,7 +2457,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/logs") {
-      sendJson(res, 200, loadData().baby_log || []);
+      const logs = loadData().baby_log || [];
+      const days = url.searchParams.get("days");
+      sendJson(res, 200, days ? recentNativeLogs(logs, days) : logs);
       return;
     }
 

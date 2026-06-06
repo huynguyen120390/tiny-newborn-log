@@ -78,6 +78,29 @@ enum DiaperEvent: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+struct PoopColorOption: Identifiable, Hashable {
+    let id: String
+    let label: String
+    let hex: UInt32
+    let status: String
+
+    static let all: [PoopColorOption] = [
+        .init(id: "mustard-yellow", label: "Mustard yellow", hex: 0xD8A21F, status: "Normal"),
+        .init(id: "yellow", label: "Yellow", hex: 0xF2D35E, status: "Normal"),
+        .init(id: "brown", label: "Brown", hex: 0x8A5A2B, status: "Normal"),
+        .init(id: "green", label: "Green", hex: 0x557A35, status: "Normal"),
+        .init(id: "tan", label: "Tan", hex: 0xC59055, status: "Normal"),
+        .init(id: "dark-brown-black", label: "Dark brown/black", hex: 0x2D2118, status: "Check"),
+        .init(id: "red-blood", label: "Red/blood", hex: 0xB3261E, status: "Call"),
+        .init(id: "white-pale-gray", label: "White/pale gray", hex: 0xD8D2C2, status: "Urgent")
+    ]
+
+    static func label(for id: String?) -> String? {
+        guard let id else { return nil }
+        return all.first { $0.id == id }?.label
+    }
+}
+
 enum RoutineKind: String, Codable, CaseIterable, Identifiable {
     case morning = "Morning routine"
     case naptime = "Naptime routine"
@@ -115,6 +138,7 @@ enum MeasurementKind: String, Codable, CaseIterable, Identifiable {
 
 struct NewbornLogEntry: Identifiable, Codable, Hashable {
     let id: UUID
+    var remoteID: String?
     var kind: LogKind
     var startedAt: Date
     var endedAt: Date?
@@ -122,18 +146,38 @@ struct NewbornLogEntry: Identifiable, Codable, Hashable {
     var amountML: Double?
     var detail: String?
     var amountUnit: String?
+    var poopColorID: String?
+    var syncState: LogSyncState
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case remoteID
+        case kind
+        case startedAt
+        case endedAt
+        case side
+        case amountML
+        case detail
+        case amountUnit
+        case poopColorID
+        case syncState
+    }
 
     init(
         id: UUID = UUID(),
+        remoteID: String? = nil,
         kind: LogKind,
         startedAt: Date = Date(),
         endedAt: Date? = nil,
         side: NursingSide? = nil,
         amountML: Double? = nil,
         detail: String? = nil,
-        amountUnit: String? = nil
+        amountUnit: String? = nil,
+        poopColorID: String? = nil,
+        syncState: LogSyncState = .pending
     ) {
         self.id = id
+        self.remoteID = remoteID
         self.kind = kind
         self.startedAt = startedAt
         self.endedAt = endedAt
@@ -141,9 +185,31 @@ struct NewbornLogEntry: Identifiable, Codable, Hashable {
         self.amountML = amountML
         self.detail = detail
         self.amountUnit = amountUnit
+        self.poopColorID = poopColorID
+        self.syncState = syncState
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        remoteID = try container.decodeIfPresent(String.self, forKey: .remoteID)
+        kind = try container.decode(LogKind.self, forKey: .kind)
+        startedAt = try container.decode(Date.self, forKey: .startedAt)
+        endedAt = try container.decodeIfPresent(Date.self, forKey: .endedAt)
+        side = try container.decodeIfPresent(NursingSide.self, forKey: .side)
+        amountML = try container.decodeIfPresent(Double.self, forKey: .amountML)
+        detail = try container.decodeIfPresent(String.self, forKey: .detail)
+        amountUnit = try container.decodeIfPresent(String.self, forKey: .amountUnit)
+        poopColorID = try container.decodeIfPresent(String.self, forKey: .poopColorID)
+        syncState = try container.decodeIfPresent(LogSyncState.self, forKey: .syncState) ?? .synced
     }
 
     var durationSeconds: TimeInterval {
         max((endedAt ?? Date()).timeIntervalSince(startedAt), 0)
     }
+}
+
+enum LogSyncState: String, Codable, Hashable {
+    case pending
+    case synced
 }

@@ -14,7 +14,18 @@ private func formatElapsed(_ elapsed: TimeInterval) -> String {
     return "\(minutes):\(String(format: "%02d", seconds))"
 }
 
+private extension Color {
+    init(hex: UInt32) {
+        self.init(
+            red: Double((hex >> 16) & 0xff) / 255,
+            green: Double((hex >> 8) & 0xff) / 255,
+            blue: Double(hex & 0xff) / 255
+        )
+    }
+}
+
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var store = LogStore()
     @StateObject private var reminderPlayer = ReminderPlayer()
     @State private var bottleML = 60.0
@@ -24,7 +35,10 @@ struct ContentView: View {
     @AppStorage("bathReminderSeconds") private var bathReminderSeconds = 300
     @AppStorage("tummySoundEnabled") private var tummySoundEnabled = false
     @AppStorage("tummyReminderSeconds") private var tummyReminderSeconds = 300
+    @AppStorage(SyncServerMode.storageKey) private var syncServerMode: SyncServerMode = .automatic
     @State private var activeSheet: LoggerSheet?
+    @State private var selectedLogFilter: LogKind?
+    private let syncRetryTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     private let columns = [
         GridItem(.flexible(), spacing: 8),
@@ -49,8 +63,7 @@ struct ContentView: View {
                         routinesCard
                     }
 
-                    statusStrip
-                    recentStrip
+                    todayLogStrip
                 }
                 .padding(.horizontal, 6)
                 .padding(.top, 4)
@@ -58,6 +71,16 @@ struct ContentView: View {
             }
             .task {
                 await store.retryPendingSyncs()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active else {
+                    return
+                }
+
+                requestSyncRetry()
+            }
+            .onReceive(syncRetryTimer) { _ in
+                requestSyncRetry()
             }
             .sheet(item: $activeSheet) { sheet in
                 sheetContent(sheet)
@@ -78,13 +101,51 @@ struct ContentView: View {
                     .font(.headline)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
+
+                Spacer(minLength: 2)
+
+                Button {
+                    activeSheet = .settings
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    requestSyncRetry()
+                } label: {
+                    Image(systemName: headerSyncSymbol)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(headerSyncColor)
+                }
+                .buttonStyle(.plain)
             }
 
-            Text("Tap a card, log the moment.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                Text(store.lastLogMessage)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                if store.pendingSyncCount > 0 {
+                    Text("• \(store.syncStatus)")
+                        .font(.caption2)
+                        .foregroundStyle(.blue)
+                        .lineLimit(1)
+                }
+            }
         }
         .padding(.horizontal, 4)
+    }
+
+    private var headerSyncSymbol: String {
+        store.pendingSyncCount > 0 ? "cloud.slash.fill" : "checkmark.circle.fill"
+    }
+
+    private var headerSyncColor: Color {
+        store.pendingSyncCount > 0 ? .blue : .green
     }
 
     private var sleepCard: some View {
@@ -215,10 +276,16 @@ struct ContentView: View {
 
     private var statusStrip: some View {
         HStack(spacing: 8) {
-            Label(store.syncStatus, systemImage: syncSymbol)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            Button {
+                requestSyncRetry()
+            } label: {
+                Label(store.syncStatus, systemImage: syncSymbol)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .buttonStyle(.plain)
+
             Spacer()
             Text("\(Int(store.todaysBottleML)) ml")
                 .font(.caption2.weight(.semibold))
@@ -242,45 +309,118 @@ struct ContentView: View {
         }
     }
 
-    private var recentStrip: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Recent")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+    private func requestSyncRetry() {
+        Task {
+            await store.retryPendingSyncs()
+        }
+    }
 
-            if store.recentEntries.isEmpty {
+    private func cycleLogFilter() {
+        guard let selectedLogFilter else {
+            self.selectedLogFilter = LogKind.allCases.first
+            return
+        }
+
+        guard let index = LogKind.allCases.firstIndex(of: selectedLogFilter) else {
+            self.selectedLogFilter = nil
+            return
+        }
+
+        let nextIndex = LogKind.allCases.index(after: index)
+        self.selectedLogFilter = nextIndex == LogKind.allCases.endIndex ? nil : LogKind.allCases[nextIndex]
+    }
+
+    private var filteredTodayEntries: [NewbornLogEntry] {
+        store.entriesForDay(offset: 0, matching: selectedLogFilter)
+    }
+
+    private var filteredYesterdayEntries: [NewbornLogEntry] {
+        store.entriesForDay(offset: -1, matching: selectedLogFilter)
+            .filter { yesterdayEntry in
+                !filteredTodayEntries.contains { $0.id == yesterdayEntry.id }
+            }
+    }
+
+    private var todayLogStrip: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Today Log")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    cycleLogFilter()
+                } label: {
+                    Label(selectedLogFilter?.title ?? "All", systemImage: "line.3.horizontal.decrease.circle")
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+            }
+
+            if filteredTodayEntries.isEmpty && filteredYesterdayEntries.isEmpty {
                 Text("No logs yet")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(store.recentEntries.prefix(5)) { entry in
-                    HStack(spacing: 6) {
-                        Image(systemName: entry.kind.symbolName)
-                            .font(.caption)
-                            .foregroundStyle(color(for: entry.kind))
-                            .frame(width: 16)
+                logSection(title: "Today", entries: filteredTodayEntries)
 
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text(entry.kind.title)
-                                .font(.caption2.weight(.semibold))
-                                .lineLimit(1)
-                            Text(store.detailText(for: entry))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-
-                        Spacer(minLength: 4)
-
-                        Text("\(entry.startedAt, style: .time)")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                if !filteredYesterdayEntries.isEmpty {
+                    Divider()
+                    logSection(title: "Yesterday", entries: filteredYesterdayEntries)
                 }
             }
         }
         .padding(8)
         .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func logSection(title: String, entries: [NewbornLogEntry]) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            ForEach(entries) { entry in
+                logRow(entry)
+            }
+        }
+    }
+
+    private func logRow(_ entry: NewbornLogEntry) -> some View {
+        Button {
+            activeSheet = .edit(entry)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: entry.kind.symbolName)
+                    .font(.caption)
+                    .foregroundStyle(color(for: entry.kind))
+                    .frame(width: 16)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(entry.kind.title)
+                        .font(.caption2.weight(.semibold))
+                        .lineLimit(1)
+                    Text(store.detailText(for: entry))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 4)
+
+                if store.isPending(entry) {
+                    PendingHourglassIcon()
+                }
+
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text(entry.startedAt, style: .time)
+                    Text(entry.startedAt, format: .dateTime.month(.abbreviated).day())
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -305,8 +445,8 @@ struct ContentView: View {
                 activeSheet = nil
             }
         case .diaper:
-            DiaperSheet { event in
-                store.logDiaper(event)
+            DiaperSheet { event, poopColor in
+                store.logDiaper(event, poopColor: poopColor)
                 activeSheet = nil
             }
         case .babyStats:
@@ -340,6 +480,23 @@ struct ContentView: View {
         case .routines:
             RoutinesSheet { routine in
                 store.logRoutine(routine)
+                activeSheet = nil
+            }
+        case .settings:
+            SyncSettingsSheet(mode: $syncServerMode) {
+                Task {
+                    await WebLogSyncClient.shared.resetSelectedBaseURL()
+                    if syncServerMode != .none {
+                        await store.retryPendingSyncs()
+                    }
+                }
+            }
+        case .edit(let entry):
+            EditLogSheet(entry: entry, detailText: store.detailText(for: entry)) { updated in
+                Task { await store.relog(updated) }
+                activeSheet = nil
+            } onDelete: { entry in
+                Task { await store.remove(entry) }
                 activeSheet = nil
             }
         }
@@ -417,6 +574,8 @@ private enum LoggerSheet: Identifiable {
     case timed(LogKind)
     case quick(LogKind)
     case routines
+    case settings
+    case edit(NewbornLogEntry)
 
     var id: String {
         switch self {
@@ -436,7 +595,72 @@ private enum LoggerSheet: Identifiable {
             return "quick-\(kind.rawValue)"
         case .routines:
             return "routines"
+        case .settings:
+            return "settings"
+        case .edit(let entry):
+            return "edit-\(entry.id.uuidString)"
         }
+    }
+}
+
+private struct SyncSettingsSheet: View {
+    @Binding var mode: SyncServerMode
+    var onModeChanged: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(SyncServerMode.allCases) { option in
+                        Button {
+                            mode = option
+                            onModeChanged()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: option == mode ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(option == mode ? .green : .secondary)
+
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(option.title)
+                                        .font(.body.weight(.semibold))
+                                    Text(option.detail)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Sync server")
+                }
+
+                Text("Use None to mimic lost connection. Logs stay local and become pending until you switch back.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .navigationTitle("Settings")
+        }
+    }
+}
+
+private struct PendingHourglassIcon: View {
+    @State private var isFlipped = false
+
+    var body: some View {
+        ZStack {
+            Image(systemName: "arrow.clockwise.circle")
+                .font(.caption.weight(.bold))
+
+            Image(systemName: "hourglass")
+                .font(.system(size: 8, weight: .bold))
+                .rotationEffect(.degrees(isFlipped ? 180 : 0))
+                .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: false), value: isFlipped)
+        }
+        .foregroundStyle(.orange)
+        .onAppear {
+            isFlipped = true
+        }
+        .accessibilityLabel("Pending sync")
     }
 }
 
@@ -566,26 +790,153 @@ private struct BottleSheet: View {
 }
 
 private struct DiaperSheet: View {
-    var onLog: (DiaperEvent) -> Void
+    var onLog: (DiaperEvent, PoopColorOption?) -> Void
 
     var body: some View {
         NavigationStack {
             List {
                 Button {
-                    onLog(.wee)
+                    onLog(.wee, nil)
                 } label: {
                     Label("Wee", systemImage: "drop.fill")
                 }
                 .tint(.yellow)
 
-                Button {
-                    onLog(.poo)
-                } label: {
-                    Label("Poo", systemImage: "circle.fill")
+                Section("Poo color") {
+                    ForEach(PoopColorOption.all) { option in
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(Color(hex: option.hex))
+                                .frame(width: 20, height: 20)
+                                .overlay(Circle().strokeBorder(.secondary.opacity(0.35), lineWidth: 1))
+
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(option.label)
+                                    .font(.caption.weight(.semibold))
+                                Text(option.status)
+                                    .font(.caption2)
+                                    .foregroundStyle(statusColor(option.status))
+                            }
+
+                            Spacer(minLength: 4)
+
+                            Button("Log") {
+                                onLog(.poo, option)
+                            }
+                            .font(.caption2.weight(.semibold))
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.mini)
+                        }
+                        .padding(.vertical, 2)
+                    }
                 }
-                .tint(.brown)
             }
             .navigationTitle("Wee & Poo")
+        }
+    }
+
+    private func statusColor(_ status: String) -> Color {
+        switch status {
+        case "Call", "Urgent": return .red
+        case "Check": return .orange
+        default: return .secondary
+        }
+    }
+}
+
+private struct EditLogSheet: View {
+    @State private var entry: NewbornLogEntry
+    @State private var eventDate: Date
+    @State private var amount: Double
+    @State private var side: NursingSide
+    @State private var poopColorID: String
+    @State private var measurementKind: MeasurementKind
+    let detailText: String
+    let onRelog: (NewbornLogEntry) -> Void
+    let onDelete: (NewbornLogEntry) -> Void
+
+    init(entry: NewbornLogEntry, detailText: String, onRelog: @escaping (NewbornLogEntry) -> Void, onDelete: @escaping (NewbornLogEntry) -> Void) {
+        self._entry = State(initialValue: entry)
+        self._eventDate = State(initialValue: entry.endedAt ?? entry.startedAt)
+        self._amount = State(initialValue: entry.amountML ?? 0)
+        self._side = State(initialValue: entry.side ?? .left)
+        self._poopColorID = State(initialValue: entry.poopColorID ?? PoopColorOption.all.first?.id ?? "")
+        self._measurementKind = State(initialValue: entry.detail == "Height" ? .height : .weight)
+        self.detailText = detailText
+        self.onRelog = onRelog
+        self.onDelete = onDelete
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Text(detailText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                DatePicker("Time", selection: $eventDate, displayedComponents: [.date, .hourAndMinute])
+
+                switch entry.kind {
+                case .nursing:
+                    Picker("Side", selection: $side) {
+                        ForEach(NursingSide.allCases) { side in
+                            Text(side.rawValue).tag(side)
+                        }
+                    }
+                case .bottle:
+                    CompactStepper(title: "Milk", value: "\(Int(amount))", unit: "ml", onMinus: { amount = max(5, amount - 5) }, onPlus: { amount = min(300, amount + 5) })
+                case .diaper:
+                    Picker("Kind", selection: $entry.detail) {
+                        Text("Wee").tag(Optional("Wee"))
+                        Text("Poo").tag(Optional("Poo"))
+                    }
+                    if entry.detail != "Wee" {
+                        Picker("Color", selection: $poopColorID) {
+                            ForEach(PoopColorOption.all) { option in
+                                Text(option.label).tag(option.id)
+                            }
+                        }
+                    }
+                case .babyStats:
+                    Picker("Type", selection: $measurementKind) {
+                        ForEach(MeasurementKind.allCases) { kind in
+                            Text(kind.rawValue).tag(kind)
+                        }
+                    }
+                    CompactStepper(title: measurementKind.rawValue, value: String(format: "%.1f", amount), unit: measurementKind.unit, onMinus: { amount = max(0.1, amount - 0.1) }, onPlus: { amount += 0.1 })
+                default:
+                    EmptyView()
+                }
+
+                Button("Relog") {
+                    var updated = entry
+                    if updated.endedAt != nil, [.sleep, .bath, .tummyTime, .outdoorTime].contains(updated.kind) {
+                        updated.endedAt = eventDate
+                    } else {
+                        updated.startedAt = eventDate
+                    }
+                    updated.amountML = amount > 0 ? amount : updated.amountML
+                    updated.side = updated.kind == .nursing ? side : updated.side
+                    if updated.kind == .diaper {
+                        let isWee = updated.detail == "Wee"
+                        updated.poopColorID = isWee ? nil : poopColorID
+                        updated.detail = isWee ? "Wee" : PoopColorOption.label(for: poopColorID).map { "Poo: \($0)" } ?? "Poo"
+                    }
+                    if updated.kind == .babyStats {
+                        updated.detail = measurementKind.rawValue
+                        updated.amountUnit = measurementKind.unit
+                    }
+                    onRelog(updated)
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button(role: .destructive) {
+                    onDelete(entry)
+                } label: {
+                    Label("Remove Log", systemImage: "trash")
+                }
+            }
+            .navigationTitle("Edit")
         }
     }
 }
@@ -930,8 +1281,4 @@ private final class ReminderPlayer: NSObject, ObservableObject, AVSpeechSynthesi
         }
     }
 
-}
-
-#Preview {
-    ContentView()
 }

@@ -1,4 +1,5 @@
 import Foundation
+import UserNotifications
 
 @MainActor
 final class LogStore: ObservableObject {
@@ -6,6 +7,7 @@ final class LogStore: ObservableObject {
     @Published private(set) var activeSleepStartedAt: Date?
     @Published private(set) var activeActivities: [LogKind: Date] = [:]
     @Published private(set) var syncStatus = "Ready"
+    @Published private(set) var lastLogMessage = "Ready"
     @Published private(set) var pendingSyncCount = 0
 
     private let activeSleepKey = "activeSleepStartedAt"
@@ -22,15 +24,18 @@ final class LogStore: ObservableObject {
         loadActiveSleep()
         loadActiveActivities()
         loadPendingSyncItems()
+        pruneCachedEntries()
         updatePendingSyncStatus()
 
         Task {
+            await requestNotificationPermission()
             await retryPendingSyncs()
+            await pullServerLogs()
         }
     }
 
     var todaysEntries: [NewbornLogEntry] {
-        entries.filter { Calendar.current.isDateInToday($0.startedAt) }
+        todayEntries(matching: nil)
     }
 
     var recentEntries: [NewbornLogEntry] {
@@ -54,44 +59,63 @@ final class LogStore: ObservableObject {
     }
 
     func todaysCount(for kind: LogKind) -> Int {
-        todaysEntries.filter { $0.kind == kind }.count
+        todayEntries(matching: kind).count
+    }
+
+    func todayEntries(matching filter: LogKind?) -> [NewbornLogEntry] {
+        entriesForDay(offset: 0, matching: filter)
+    }
+
+    func entriesForDay(offset: Int, matching filter: LogKind?) -> [NewbornLogEntry] {
+        entries
+            .filter { entry in
+                (filter == nil || entry.kind == filter) && isVisible(entry, inDayOffset: offset)
+            }
+            .sorted { $0.startedAt > $1.startedAt }
     }
 
     func toggleSleep() {
         if let startedAt = activeSleepStartedAt {
-            addEntry(NewbornLogEntry(kind: .sleep, startedAt: startedAt, endedAt: Date()))
+            let entry = addEntry(NewbornLogEntry(kind: .sleep, startedAt: startedAt, endedAt: Date()))
             activeSleepStartedAt = nil
             UserDefaults.standard.removeObject(forKey: activeSleepKey)
-            syncSleep(status: "awake")
+            syncSleep(status: "awake", entryID: entry.id)
         } else {
             activeSleepStartedAt = Date()
             UserDefaults.standard.set(activeSleepStartedAt?.timeIntervalSince1970 ?? 0, forKey: activeSleepKey)
-            syncSleep(status: "asleep")
+            let entry = addEntry(NewbornLogEntry(kind: .sleep, startedAt: activeSleepStartedAt ?? Date(), detail: "Started"))
+            syncSleep(status: "asleep", entryID: entry.id)
         }
     }
 
     func logNursing(side: NursingSide) {
-        addEntry(NewbornLogEntry(kind: .nursing, side: side))
-        syncNursing(side: side)
+        let entry = addEntry(NewbornLogEntry(kind: .nursing, side: side))
+        syncNursing(side: side, entryID: entry.id)
     }
 
     func logBottle(amountML: Double) {
-        addEntry(NewbornLogEntry(kind: .bottle, amountML: amountML))
-        syncBottle(amountML: amountML)
+        let entry = addEntry(NewbornLogEntry(kind: .bottle, amountML: amountML))
+        syncBottle(amountML: amountML, entryID: entry.id)
     }
 
-    func logDiaper(_ event: DiaperEvent) {
-        addEntry(NewbornLogEntry(kind: .diaper, detail: event.rawValue))
-        enqueueSync([
+    func logDiaper(_ event: DiaperEvent, poopColor: PoopColorOption? = nil) {
+        let detail = poopColor.map { "Poo: \($0.label)" } ?? event.rawValue
+        let entry = addEntry(NewbornLogEntry(kind: .diaper, detail: detail, poopColorID: poopColor?.id))
+        var payload: [String: Any] = [
             "type": "diaper",
             "kind": event == .wee ? "pee" : "poop",
             "poop": event == .poo,
-            "notes": event == .wee ? "Wee diaper" : "Poo diaper"
-        ])
+            "notes": poopColor.map { "Poo: \($0.label)" } ?? (event == .wee ? "Wee diaper" : "Poo diaper")
+        ]
+        if event == .poo, let poopColor {
+            payload["poopColorId"] = poopColor.id
+            payload["poopColor"] = poopColor.id
+        }
+        enqueueSync(payload, entryID: entry.id, title: detail)
     }
 
     func logMeasurement(kind: MeasurementKind, value: Double) {
-        addEntry(NewbornLogEntry(kind: .babyStats, amountML: value, detail: kind.rawValue, amountUnit: kind.unit))
+        let entry = addEntry(NewbornLogEntry(kind: .babyStats, amountML: value, detail: kind.rawValue, amountUnit: kind.unit))
         if kind == .weight {
             enqueueSync([
                 "type": "growth_stats",
@@ -99,7 +123,7 @@ final class LogStore: ObservableObject {
                 "weight": value,
                 "weightUnit": kind.unit,
                 "notes": "\(kind.rawValue): \(value) \(kind.unit)"
-            ])
+            ], entryID: entry.id, title: entryTitle(entry))
         } else {
             enqueueSync([
                 "type": "growth_stats",
@@ -107,34 +131,35 @@ final class LogStore: ObservableObject {
                 "height": value,
                 "heightUnit": kind.unit,
                 "notes": "\(kind.rawValue): \(value) \(kind.unit)"
-            ])
+            ], entryID: entry.id, title: entryTitle(entry))
         }
     }
 
     func logQuickActivity(_ kind: LogKind) {
-        addEntry(NewbornLogEntry(kind: kind))
-        syncActivity(kind)
+        let entry = addEntry(NewbornLogEntry(kind: kind))
+        syncActivity(kind, entryID: entry.id)
     }
 
     func logRoutine(_ routine: RoutineKind) {
-        addEntry(NewbornLogEntry(kind: .routines, detail: routine.rawValue))
+        let entry = addEntry(NewbornLogEntry(kind: .routines, detail: routine.rawValue))
         enqueueSync([
             "type": "routine",
             "routine": routine.payloadValue,
             "notes": "\(routine.rawValue) done"
-        ])
+        ], entryID: entry.id, title: entryTitle(entry))
     }
 
     func toggleTimedActivity(_ kind: LogKind) {
         if let startedAt = activeActivities[kind] {
-            addEntry(NewbornLogEntry(kind: kind, startedAt: startedAt, endedAt: Date(), detail: "Ended"))
+            let entry = addEntry(NewbornLogEntry(kind: kind, startedAt: startedAt, endedAt: Date(), detail: "Ended"))
             activeActivities.removeValue(forKey: kind)
             saveActiveActivities()
-            syncActivity(kind, status: "end")
+            syncActivity(kind, status: "end", entryID: entry.id)
         } else {
             activeActivities[kind] = Date()
             saveActiveActivities()
-            syncActivity(kind, status: "start")
+            let entry = addEntry(NewbornLogEntry(kind: kind, startedAt: activeActivities[kind] ?? Date(), detail: "Started"))
+            syncActivity(kind, status: "start", entryID: entry.id)
         }
     }
 
@@ -154,6 +179,9 @@ final class LogStore: ObservableObject {
         case .bottle:
             return "\(Int(entry.amountML ?? 0)) ml"
         case .diaper:
+            if let label = PoopColorOption.label(for: entry.poopColorID) {
+                return "Poo: \(label)"
+            }
             return entry.detail ?? "Logged"
         case .babyStats:
             let value = entry.amountML.map { String(format: "%.1f", $0) } ?? ""
@@ -171,6 +199,85 @@ final class LogStore: ObservableObject {
         }
     }
 
+    func isPending(_ entry: NewbornLogEntry) -> Bool {
+        entry.syncState == .pending || pendingSyncItems.contains { $0.entryID == entry.id }
+    }
+
+    func relog(_ updated: NewbornLogEntry) async {
+        guard let index = entries.firstIndex(where: { $0.id == updated.id }) else {
+            return
+        }
+
+        var next = updated
+        next.syncState = .pending
+        entries[index] = next
+        entries.sort { $0.startedAt > $1.startedAt }
+        saveEntries()
+        lastLogMessage = "Relogged locally"
+
+        guard let body = try? JSONSerialization.data(withJSONObject: updatePayload(for: next)) else {
+            syncStatus = "Sync failed"
+            updatePendingSyncStatus()
+            return
+        }
+
+        if let pendingIndex = pendingSyncItems.firstIndex(where: { $0.entryID == next.id }) {
+            if pendingSyncItems[pendingIndex].method == "PUT" {
+                pendingSyncItems[pendingIndex].body = body
+            } else {
+                pendingSyncItems[pendingIndex].body = createBody(for: next)
+            }
+            pendingSyncItems[pendingIndex].title = "Relog \(next.kind.title)"
+            savePendingSyncItems()
+            updatePendingSyncStatus()
+            await retryPendingSyncs()
+            return
+        }
+
+        guard let remoteID = next.remoteID else {
+            pendingSyncItems.append(PendingSyncItem(entryID: next.id, title: "Relog \(next.kind.title)", body: createBody(for: next)))
+            savePendingSyncItems()
+            updatePendingSyncStatus()
+            await retryPendingSyncs()
+            return
+        }
+
+        do {
+            try await WebLogSyncClient.shared.updateLog(remoteID: remoteID, body: body)
+            markEntrySynced(next.id)
+            lastLogMessage = "Relogged on server"
+            await pullServerLogs()
+        } catch {
+            pendingSyncItems.append(PendingSyncItem(entryID: next.id, remoteID: remoteID, method: "PUT", title: "Relog \(next.kind.title)", body: body))
+            savePendingSyncItems()
+            updatePendingSyncStatus()
+        }
+    }
+
+    func remove(_ entry: NewbornLogEntry) async {
+        entries.removeAll { $0.id == entry.id }
+        pendingSyncItems.removeAll { $0.entryID == entry.id && $0.method != "DELETE" }
+        saveEntries()
+        savePendingSyncItems()
+        lastLogMessage = "Removed locally"
+
+        guard let remoteID = entry.remoteID else {
+            updatePendingSyncStatus()
+            return
+        }
+
+        do {
+            try await WebLogSyncClient.shared.deleteLog(remoteID: remoteID)
+            lastLogMessage = "Removed on server"
+            updatePendingSyncStatus()
+            await pullServerLogs()
+        } catch {
+            pendingSyncItems.append(PendingSyncItem(entryID: entry.id, remoteID: remoteID, method: "DELETE", title: "Remove \(entry.kind.title)", body: Data()))
+            savePendingSyncItems()
+            updatePendingSyncStatus()
+        }
+    }
+
     func formatDuration(_ seconds: TimeInterval) -> String {
         let totalMinutes = max(Int(seconds / 60), 0)
         let hours = totalMinutes / 60
@@ -185,17 +292,27 @@ final class LogStore: ObservableObject {
 
     func retryPendingSyncs() async {
         guard !isRetryingPendingSync, !pendingSyncItems.isEmpty else {
+            await pullServerLogs()
             updatePendingSyncStatus()
             return
         }
 
         isRetryingPendingSync = true
         syncStatus = "Syncing..."
+        var syncedItems: [PendingSyncItem] = []
 
         while let item = pendingSyncItems.first {
             do {
-                try await WebLogSyncClient.shared.postLogData(item.body)
+                if item.method == "DELETE", let remoteID = item.remoteID {
+                    try await WebLogSyncClient.shared.deleteLog(remoteID: remoteID)
+                } else if item.method == "PUT", let remoteID = item.remoteID {
+                    try await WebLogSyncClient.shared.updateLog(remoteID: remoteID, body: item.body)
+                } else {
+                    try await WebLogSyncClient.shared.postLogData(item.body)
+                }
                 pendingSyncItems.removeFirst()
+                markEntrySynced(item.entryID)
+                syncedItems.append(item)
                 savePendingSyncItems()
             } catch {
                 break
@@ -204,41 +321,52 @@ final class LogStore: ObservableObject {
 
         isRetryingPendingSync = false
         updatePendingSyncStatus()
+
+        if !syncedItems.isEmpty {
+            lastLogMessage = "Logged on server"
+            await pullServerLogs()
+            await notifyTransferredLogs(syncedItems)
+        }
     }
 
-    private func addEntry(_ entry: NewbornLogEntry) {
-        entries.insert(entry, at: 0)
+    @discardableResult
+    private func addEntry(_ entry: NewbornLogEntry) -> NewbornLogEntry {
+        var localEntry = entry
+        localEntry.syncState = .pending
+        entries.insert(localEntry, at: 0)
         saveEntries()
+        lastLogMessage = "Logged locally"
+        return localEntry
     }
 
-    private func syncSleep(status: String) {
+    private func syncSleep(status: String, entryID: UUID) {
         enqueueSync([
             "type": "sleep",
             "status": status,
             "notes": status == "asleep" ? "Baby fell asleep" : "Baby woke up"
-        ])
+        ], entryID: entryID, title: status == "asleep" ? "Sleep" : "Awake")
     }
 
-    private func syncNursing(side: NursingSide) {
+    private func syncNursing(side: NursingSide, entryID: UUID) {
         let webSide = side == .right ? "right" : "left"
         enqueueSync([
             "type": "feeding",
             "method": "breast",
             "side": webSide,
             "notes": "Started on \(webSide) side"
-        ])
+        ], entryID: entryID, title: "\(side.rawValue) boobie")
     }
 
-    private func syncBottle(amountML: Double) {
+    private func syncBottle(amountML: Double, entryID: UUID) {
         let ounces = (amountML / 29.5735 * 100).rounded() / 100
         enqueueSync([
             "type": "bottle",
             "ounces": ounces,
             "notes": "Bottle feed"
-        ])
+        ], entryID: entryID, title: "\(Int(amountML)) ml bottle")
     }
 
-    private func syncActivity(_ kind: LogKind, status: String? = nil) {
+    private func syncActivity(_ kind: LogKind, status: String? = nil, entryID: UUID) {
         var payload: [String: Any] = [
             "type": webType(for: kind),
             "notes": note(for: kind, status: status)
@@ -248,16 +376,19 @@ final class LogStore: ObservableObject {
             payload["status"] = status
         }
 
-        enqueueSync(payload)
+        enqueueSync(payload, entryID: entryID, title: status == nil ? kind.title : "\(kind.title) \(status ?? "")")
     }
 
-    private func enqueueSync(_ payload: [String: Any]) {
-        guard let body = try? JSONSerialization.data(withJSONObject: payload) else {
+    private func enqueueSync(_ payload: [String: Any], entryID: UUID, title: String) {
+        var payloadWithID = payload
+        payloadWithID["id"] = entryID.uuidString
+
+        guard let body = try? JSONSerialization.data(withJSONObject: payloadWithID) else {
             syncStatus = "Sync failed"
             return
         }
 
-        pendingSyncItems.append(PendingSyncItem(body: body))
+        pendingSyncItems.append(PendingSyncItem(entryID: entryID, title: title, body: body))
         savePendingSyncItems()
         updatePendingSyncStatus()
 
@@ -291,12 +422,256 @@ final class LogStore: ObservableObject {
         }
     }
 
+    private func createBody(for entry: NewbornLogEntry) -> Data {
+        var payload = updatePayload(for: entry)
+        payload["id"] = entry.id.uuidString
+        payload["type"] = webType(for: entry.kind)
+        if entry.kind == .nursing {
+            payload["method"] = "breast"
+        }
+        return (try? JSONSerialization.data(withJSONObject: payload)) ?? Data()
+    }
+
+    private func updatePayload(for entry: NewbornLogEntry) -> [String: Any] {
+        var payload: [String: Any] = [
+            "date": Self.payloadDateFormatter.string(from: serverEventDate(for: entry)),
+            "time": Self.payloadTimeFormatter.string(from: serverEventDate(for: entry)),
+            "notes": entry.detail ?? entry.kind.title
+        ]
+
+        switch entry.kind {
+        case .sleep:
+            payload["status"] = entry.endedAt == nil ? "asleep" : "awake"
+        case .nursing:
+            payload["side"] = entry.side == .right ? "right" : "left"
+        case .bottle:
+            payload["ounces"] = ((entry.amountML ?? 0) / 29.5735 * 100).rounded() / 100
+        case .diaper:
+            let isPoo = entry.detail?.lowercased().contains("poo") == true || entry.poopColorID != nil
+            payload["kind"] = isPoo ? "poop" : "pee"
+            if isPoo, let poopColorID = entry.poopColorID {
+                payload["poopColorId"] = poopColorID
+                payload["poopColor"] = poopColorID
+            }
+        case .babyStats:
+            if entry.detail == "Height" {
+                payload["stat"] = "height"
+                payload["height"] = entry.amountML ?? 0
+                payload["heightUnit"] = entry.amountUnit ?? "in"
+            } else {
+                payload["stat"] = "weight"
+                payload["weight"] = entry.amountML ?? 0
+                payload["weightUnit"] = entry.amountUnit ?? "lb"
+            }
+        case .bath, .tummyTime, .outdoorTime:
+            payload["status"] = entry.endedAt == nil ? "start" : "end"
+        case .babyGym, .routines:
+            break
+        }
+
+        return payload
+    }
+
+    private func isVisibleInToday(_ entry: NewbornLogEntry) -> Bool {
+        isVisible(entry, inDayOffset: 0)
+    }
+
+    private func isVisible(_ entry: NewbornLogEntry, inDayOffset offset: Int) -> Bool {
+        let calendar = Calendar.current
+        let todayStart = calendar.startOfDay(for: Date())
+        let start = calendar.date(byAdding: .day, value: offset, to: todayStart) ?? todayStart
+        let end = calendar.date(byAdding: .day, value: 1, to: start) ?? Date()
+        let entryEnd = effectiveEndDate(for: entry)
+        return entry.startedAt < end && entryEnd >= start
+    }
+
+    private func effectiveEndDate(for entry: NewbornLogEntry) -> Date {
+        if let endedAt = entry.endedAt {
+            return endedAt
+        }
+
+        return isActiveOpenEntry(entry) ? Date.distantFuture : entry.startedAt
+    }
+
+    private func isActiveOpenEntry(_ entry: NewbornLogEntry) -> Bool {
+        switch entry.kind {
+        case .sleep:
+            guard let activeSleepStartedAt else { return false }
+            return isSameEventTime(entry.startedAt, activeSleepStartedAt)
+        case .bath, .tummyTime, .outdoorTime:
+            guard let activeStartedAt = activeActivities[entry.kind] else { return false }
+            return isSameEventTime(entry.startedAt, activeStartedAt)
+        default:
+            return false
+        }
+    }
+
+    private func isSameEventTime(_ lhs: Date, _ rhs: Date) -> Bool {
+        abs(lhs.timeIntervalSince(rhs)) < 60
+    }
+
+    private func pruneCachedEntries() {
+        let pendingEntryIDs = Set(pendingSyncItems.compactMap(\.entryID))
+        entries = entries.filter { entry in
+            pendingEntryIDs.contains(entry.id)
+                || isVisible(entry, inDayOffset: 0)
+                || isVisible(entry, inDayOffset: -1)
+                || isActiveOpenEntry(entry)
+        }
+    }
+
+    private func isDurationKind(_ kind: LogKind) -> Bool {
+        [.sleep, .bath, .tummyTime, .outdoorTime].contains(kind)
+    }
+
+    private func serverEventDate(for entry: NewbornLogEntry) -> Date {
+        if entry.endedAt != nil, isDurationKind(entry.kind) {
+            return entry.endedAt ?? entry.startedAt
+        }
+        return entry.startedAt
+    }
+
+    private static let payloadDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter
+    }()
+
+    private static let payloadTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter
+    }()
+
     private func note(for kind: LogKind, status: String?) -> String {
         if let status {
             return "\(kind.title) \(status)"
         }
 
         return "\(kind.title) logged"
+    }
+
+    private func markEntrySynced(_ entryID: UUID?) {
+        guard let entryID, let index = entries.firstIndex(where: { $0.id == entryID }) else {
+            return
+        }
+
+        entries[index].syncState = .synced
+        entries[index].remoteID = entryID.uuidString
+        saveEntries()
+    }
+
+    private func pullServerLogs() async {
+        do {
+            let remoteLogs = try await WebLogSyncClient.shared.fetchLogs()
+            mergeRemoteLogs(remoteLogs)
+        } catch {
+            // Offline is acceptable; pending local logs remain queued.
+        }
+    }
+
+    private func mergeRemoteLogs(_ remoteLogs: [RemoteBabyLog]) {
+        var next = entries
+        let pendingEntryIDs = Set(pendingSyncItems.compactMap(\.entryID))
+        var knownRemoteIDs = Set(next.compactMap(\.remoteID))
+        knownRemoteIDs.formUnion(next.map { $0.id.uuidString })
+
+        for remote in remoteLogs {
+            guard let entry = remote.localEntry else {
+                continue
+            }
+
+            if let uuid = UUID(uuidString: remote.id),
+               let index = next.firstIndex(where: { $0.id == uuid }) {
+                next[index].syncState = pendingEntryIDs.contains(uuid) ? .pending : .synced
+                next[index].remoteID = remote.id
+                continue
+            }
+
+            guard !knownRemoteIDs.contains(remote.id) else {
+                continue
+            }
+
+            next.append(entry)
+            knownRemoteIDs.insert(remote.id)
+        }
+
+        entries = next.sorted { $0.startedAt > $1.startedAt }
+        applyRemoteActiveState(remoteLogs)
+        pruneCachedEntries()
+        saveEntries()
+    }
+
+    private func applyRemoteActiveState(_ remoteLogs: [RemoteBabyLog]) {
+        let sorted = remoteLogs.sorted { $0.eventDate < $1.eventDate }
+
+        if let lastSleep = sorted.last(where: { $0.type == "sleep" }) {
+            if lastSleep.status == "asleep" {
+                activeSleepStartedAt = lastSleep.eventDate
+                UserDefaults.standard.set(lastSleep.eventDate.timeIntervalSince1970, forKey: activeSleepKey)
+            } else {
+                activeSleepStartedAt = nil
+                UserDefaults.standard.removeObject(forKey: activeSleepKey)
+            }
+        }
+
+        var nextActivities = activeActivities
+        for kind in [LogKind.bath, .tummyTime, .outdoorTime] {
+            guard let last = sorted.last(where: { $0.type == webType(for: kind) }) else {
+                continue
+            }
+            if last.status == "start" {
+                nextActivities[kind] = last.eventDate
+            } else if last.status == "end" {
+                nextActivities.removeValue(forKey: kind)
+            }
+        }
+        activeActivities = nextActivities
+        saveActiveActivities()
+    }
+
+    private func entryTitle(_ entry: NewbornLogEntry) -> String {
+        switch entry.kind {
+        case .nursing:
+            return "\(entry.side?.rawValue ?? "") boobie".trimmingCharacters(in: .whitespaces)
+        case .bottle:
+            return "\(Int(entry.amountML ?? 0)) ml bottle"
+        case .diaper:
+            return entry.detail ?? entry.kind.title
+        case .babyStats:
+            let value = entry.amountML.map { String(format: "%.1f", $0) } ?? ""
+            return "\(entry.detail ?? entry.kind.title) \(value)".trimmingCharacters(in: .whitespaces)
+        default:
+            return entry.kind.title
+        }
+    }
+
+    private func requestNotificationPermission() async {
+        do {
+            _ = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
+        } catch {
+            // Notification permission is optional; sync should still work.
+        }
+    }
+
+    private func notifyTransferredLogs(_ items: [PendingSyncItem]) async {
+        let titles = items.map { $0.title }.filter { !$0.isEmpty }
+        PhoneSyncNotifier.shared.sendTransferredLogs(titles)
+
+        let content = UNMutableNotificationContent()
+        content.title = items.count == 1 ? "Log synced" : "\(items.count) logs synced"
+        content.body = titles.isEmpty ? "Transferred to server." : titles.joined(separator: ", ")
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: "pending-sync-\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+
+        try? await UNUserNotificationCenter.current().add(request)
     }
 
     private func updatePendingSyncStatus() {
@@ -384,12 +759,41 @@ final class LogStore: ObservableObject {
 
 private struct PendingSyncItem: Identifiable, Codable, Hashable {
     let id: UUID
+    var entryID: UUID?
+    var remoteID: String?
+    var method: String?
+    var title: String
     var createdAt: Date
     var body: Data
 
-    init(id: UUID = UUID(), createdAt: Date = Date(), body: Data) {
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case entryID
+        case remoteID
+        case method
+        case title
+        case createdAt
+        case body
+    }
+
+    init(id: UUID = UUID(), entryID: UUID? = nil, remoteID: String? = nil, method: String? = nil, title: String = "Log", createdAt: Date = Date(), body: Data) {
         self.id = id
+        self.entryID = entryID
+        self.remoteID = remoteID
+        self.method = method
+        self.title = title
         self.createdAt = createdAt
         self.body = body
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        entryID = try container.decodeIfPresent(UUID.self, forKey: .entryID)
+        remoteID = try container.decodeIfPresent(String.self, forKey: .remoteID)
+        method = try container.decodeIfPresent(String.self, forKey: .method)
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? "Log"
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        body = try container.decode(Data.self, forKey: .body)
     }
 }
