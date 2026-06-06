@@ -5,25 +5,20 @@ private let homeServerURL = URL(string: "http://192.168.86.55:3002")!
 private let tailscaleServerURL = URL(string: "http://100.100.187.79:3002")!
 
 private func readableElapsed(_ elapsed: TimeInterval) -> String {
-    let seconds = max(Int(elapsed.rounded()), 0)
-    if seconds < 60 {
-        return seconds == 1 ? "1 second" : "\(seconds) seconds"
+    let totalSeconds = max(Int(elapsed.rounded()), 0)
+    let hours = totalSeconds / 3600
+    let minutes = (totalSeconds % 3600) / 60
+    let seconds = totalSeconds % 60
+
+    if hours > 0 {
+        return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
     }
-    return "\(seconds / 60):\(String(format: "%02d", seconds % 60))"
+
+    return String(format: "%02d:%02d", minutes, seconds)
 }
 
 private func readableDurationSummary(_ elapsed: TimeInterval) -> String {
-    let seconds = max(Int(elapsed.rounded()), 0)
-    if seconds < 60 {
-        return seconds == 1 ? "1 sec" : "\(seconds) sec"
-    }
-
-    let minutes = seconds / 60
-    if minutes < 60 {
-        return "\(minutes)m"
-    }
-
-    return "\(minutes / 60)h \(minutes % 60)m"
+    readableElapsed(elapsed)
 }
 
 private func phoneFormatAmount(_ value: Double, unit: String) -> String {
@@ -470,8 +465,8 @@ struct PhoneContentView: View {
 
         return PhoneLoggerCard(
             title: store.activeSleepStartedAt == nil ? "Sleep" : "Awake",
-            value: activeStartedAt == nil ? store.lastCompletedDurationText(for: .sleep) : "",
-            subtitle: "today \(store.todaysDurationText(for: .sleep))",
+            value: activeStartedAt == nil ? store.todaysDurationText(for: .sleep) : "",
+            subtitle: "today",
             symbolName: PhoneLogKind.sleep.symbolName,
             color: store.activeSleepStartedAt == nil ? .indigo : .orange,
             timerStartedAt: activeStartedAt
@@ -481,19 +476,19 @@ struct PhoneContentView: View {
     }
 
     private var boobieCard: some View {
-        PhoneLoggerCard(title: "Boobie", value: "", subtitle: store.lastSummary(for: .nursing), symbolName: PhoneLogKind.nursing.symbolName, color: .pink) {
+        PhoneLoggerCard(title: "Boobie", value: "\(store.todaysCount(for: .nursing))", subtitle: "feeds today", symbolName: PhoneLogKind.nursing.symbolName, color: .pink) {
             activeSheet = .boobie
         }
     }
 
     private var bottleCard: some View {
-        PhoneLoggerCard(title: "Bottle", value: phoneFormatAmount(store.latestBottleAmount(for: bottleMilkType), unit: store.bottleDisplayUnit()), subtitle: "\(bottleMilkType.rawValue) last", symbolName: PhoneLogKind.bottle.symbolName, color: .teal) {
+        PhoneLoggerCard(title: "Bottle", value: store.formatBottleAmount(fromML: store.todaysBottleML), subtitle: "today", symbolName: PhoneLogKind.bottle.symbolName, color: .teal) {
             activeSheet = .bottle
         }
     }
 
     private var diaperCard: some View {
-        PhoneLoggerCard(title: "Wee & Poo", value: "\(store.todaysCount(for: .diaper))", subtitle: store.lastSummary(for: .diaper), symbolName: PhoneLogKind.diaper.symbolName, color: .brown) {
+        PhoneLoggerCard(title: "Wee & Poo", value: store.todaysDiaperSummary(), subtitle: "today", symbolName: PhoneLogKind.diaper.symbolName, color: .brown) {
             activeSheet = .diaper
         }
     }
@@ -501,8 +496,8 @@ struct PhoneContentView: View {
     private var statsCard: some View {
         PhoneLoggerCard(
             title: "Baby Stats",
-            value: measurementKind.rawValue,
-            subtitle: store.lastSummary(for: .babyStats),
+            value: store.latestStatsSummary(),
+            subtitle: "latest",
             symbolName: PhoneLogKind.babyStats.symbolName,
             color: .blue
         ) {
@@ -514,8 +509,8 @@ struct PhoneContentView: View {
         let startedAt = store.activeActivities[kind]
         return PhoneLoggerCard(
             title: kind.title,
-            value: startedAt == nil ? store.lastCompletedDurationText(for: kind) : "",
-            subtitle: "today \(store.todaysDurationText(for: kind))",
+            value: startedAt == nil ? store.todaysDurationText(for: kind) : "",
+            subtitle: "today",
             symbolName: kind.symbolName,
             color: color,
             timerStartedAt: startedAt
@@ -525,13 +520,13 @@ struct PhoneContentView: View {
     }
 
     private func quickCard(_ kind: PhoneLogKind, color: Color) -> some View {
-        PhoneLoggerCard(title: kind.title, value: "Log", subtitle: store.lastSummary(for: kind), symbolName: kind.symbolName, color: color) {
+        PhoneLoggerCard(title: kind.title, value: "\(store.todaysCount(for: kind))", subtitle: "today", symbolName: kind.symbolName, color: color) {
             activeSheet = .quick(kind)
         }
     }
 
     private var routinesCard: some View {
-        PhoneLoggerCard(title: "Routines", value: "", subtitle: store.lastSummary(for: .routines), symbolName: PhoneLogKind.routines.symbolName, color: .purple) {
+        PhoneLoggerCard(title: "Routines", value: "\(store.todaysCount(for: .routines))", subtitle: "today", symbolName: PhoneLogKind.routines.symbolName, color: .purple) {
             activeSheet = .routines
         }
     }
@@ -658,12 +653,12 @@ struct PhoneContentView: View {
                 activeSheet = nil
             }
         case .boobie:
-            PhoneChoiceSheet(title: "Boobie", detail: store.todaysTotalText(for: .nursing), choices: PhoneNursingSide.allCases.map(\.rawValue)) { choice in
+            PhoneChoiceSheet(title: "Boobie", detail: store.todaysTotalText(for: .nursing), lastDetail: store.lastDetail(for: .nursing), choices: PhoneNursingSide.allCases.map(\.rawValue)) { choice in
                 store.logNursing(side: choice == "Right" ? .right : .left)
                 activeSheet = nil
             }
         case .bottle:
-            PhoneBottleSheet(amount: $bottleML, milkType: $bottleMilkType, totalToday: store.todaysTotalText(for: .bottle), milkUnit: store.bottleDisplayUnit(), presetAmount: { milkType in
+            PhoneBottleSheet(amount: $bottleML, milkType: $bottleMilkType, totalToday: store.todaysTotalText(for: .bottle), lastDetail: store.lastDetail(for: .bottle), milkUnit: store.bottleDisplayUnit(), presetAmount: { milkType in
                 store.latestBottleAmount(for: milkType)
             }) {
                 store.logBottle(amountML: bottleML, milkType: bottleMilkType)
@@ -673,12 +668,12 @@ struct PhoneContentView: View {
                 bottleML = store.latestBottleAmount(for: bottleMilkType)
             }
         case .diaper:
-            PhoneDiaperSheet(totalToday: store.todaysTotalText(for: .diaper)) { event, poopColor in
+            PhoneDiaperSheet(totalToday: store.todaysTotalText(for: .diaper), lastDetail: store.lastDetail(for: .diaper)) { event, poopColor in
                 store.logDiaper(event, poopColor: poopColor)
                 activeSheet = nil
             }
         case .babyStats:
-            PhoneStatsSheet(kind: $measurementKind, value: $measurementValue, totalToday: store.todaysTotalText(for: .babyStats), unitFor: { kind in
+            PhoneStatsSheet(kind: $measurementKind, value: $measurementValue, totalToday: store.todaysTotalText(for: .babyStats), lastDetail: store.lastDetail(for: .babyStats), unitFor: { kind in
                 store.measurementUnit(for: kind)
             }, presetValue: { kind in
                 store.latestMeasurementValue(for: kind)
@@ -704,12 +699,12 @@ struct PhoneContentView: View {
                 activeSheet = nil
             }
         case .quick(let kind):
-            PhoneConfirmSheet(title: kind.title, detail: store.todaysTotalText(for: kind), buttonTitle: "Log") {
+            PhoneConfirmSheet(title: kind.title, detail: store.todaysTotalText(for: kind), lastDetail: store.lastDetail(for: kind), buttonTitle: "Log") {
                 store.logQuickActivity(kind)
                 activeSheet = nil
             }
         case .routines:
-            PhoneChoiceSheet(title: "Routines", detail: store.todaysTotalText(for: .routines), choices: PhoneRoutineKind.allCases.map(\.rawValue)) { choice in
+            PhoneChoiceSheet(title: "Routines", detail: store.todaysTotalText(for: .routines), lastDetail: store.lastDetail(for: .routines), choices: PhoneRoutineKind.allCases.map(\.rawValue)) { choice in
                 let routine = PhoneRoutineKind.allCases.first { $0.rawValue == choice } ?? .morning
                 store.logRoutine(routine)
                 activeSheet = nil
@@ -855,6 +850,7 @@ private struct PendingHourglassIcon: View {
 private struct PhoneConfirmSheet: View {
     let title: String
     let detail: String
+    var lastDetail: String? = nil
     let buttonTitle: String
     let onConfirm: () -> Void
 
@@ -865,6 +861,13 @@ private struct PhoneConfirmSheet: View {
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+
+                if let lastDetail {
+                    Label(lastDetail, systemImage: "clock.arrow.circlepath")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
 
                 Button(buttonTitle, action: onConfirm)
                     .buttonStyle(.borderedProminent)
@@ -961,6 +964,7 @@ private struct PhoneElapsedTimerRow: View {
 private struct PhoneChoiceSheet: View {
     let title: String
     var detail: String?
+    var lastDetail: String? = nil
     let choices: [String]
     let onChoose: (String) -> Void
 
@@ -969,6 +973,11 @@ private struct PhoneChoiceSheet: View {
             List {
                 if let detail {
                     Label(detail, systemImage: "sum")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                if let lastDetail {
+                    Label(lastDetail, systemImage: "clock.arrow.circlepath")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -991,12 +1000,16 @@ private struct PhoneChoiceSheet: View {
 
 private struct PhoneDiaperSheet: View {
     let totalToday: String
+    let lastDetail: String
     let onLog: (PhoneDiaperEvent, PhonePoopColorOption?) -> Void
 
     var body: some View {
         NavigationStack {
             List {
                 Label(totalToday, systemImage: "sum")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Label(lastDetail, systemImage: "clock.arrow.circlepath")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
@@ -1222,6 +1235,7 @@ private struct PhoneBottleSheet: View {
     @Binding var amount: Double
     @Binding var milkType: PhoneBottleMilkType
     let totalToday: String
+    let lastDetail: String
     let milkUnit: String
     let presetAmount: (PhoneBottleMilkType) -> Double
     let onLog: () -> Void
@@ -1231,6 +1245,8 @@ private struct PhoneBottleSheet: View {
             Form {
                 Section {
                     Label(totalToday, systemImage: "sum")
+                        .foregroundStyle(.secondary)
+                    Label(lastDetail, systemImage: "clock.arrow.circlepath")
                         .foregroundStyle(.secondary)
                 }
                 Picker("Milk", selection: $milkType) {
@@ -1268,6 +1284,7 @@ private struct PhoneStatsSheet: View {
     @Binding var kind: PhoneMeasurementKind
     @Binding var value: Double
     let totalToday: String
+    let lastDetail: String
     let unitFor: (PhoneMeasurementKind) -> String
     let presetValue: (PhoneMeasurementKind) -> Double
     let onLog: () -> Void
@@ -1303,6 +1320,8 @@ private struct PhoneStatsSheet: View {
             Form {
                 Section {
                     Label(totalToday, systemImage: "sum")
+                        .foregroundStyle(.secondary)
+                    Label(lastDetail, systemImage: "clock.arrow.circlepath")
                         .foregroundStyle(.secondary)
                 }
                 Picker("Type", selection: $kind) {
@@ -1447,9 +1466,7 @@ final class PhoneLogStore: ObservableObject {
         case .bottle:
             return "\(formatBottleAmount(fromML: todaysBottleML)) today"
         case .diaper:
-            let wees = todaysEntries.filter { $0.kind == .diaper && $0.poopColorID == nil && ($0.detail ?? "Wee") == "Wee" }.count
-            let poos = todaysEntries.filter { $0.kind == .diaper && ($0.poopColorID != nil || ($0.detail ?? "").contains("Poo")) }.count
-            return "\(wees) wee, \(poos) poo today"
+            return "\(todaysDiaperSummary()) today"
         case .babyStats:
             return "\(todaysCount(for: .babyStats)) stats today"
         case .babyGym:
@@ -1458,6 +1475,28 @@ final class PhoneLogStore: ObservableObject {
             return "\(todaysCount(for: .routines)) routines today"
         default:
             return "\(todaysCount(for: kind)) today"
+        }
+    }
+
+    func todaysDiaperSummary() -> String {
+        let wees = todaysEntries.filter { $0.kind == .diaper && $0.poopColorID == nil && ($0.detail ?? "Wee") == "Wee" }.count
+        let poos = todaysEntries.filter { $0.kind == .diaper && ($0.poopColorID != nil || ($0.detail ?? "").contains("Poo")) }.count
+        return "\(wees) Wee \(poos) Poo"
+    }
+
+    func latestStatsSummary() -> String {
+        let weight = latestMeasurementSummary(for: .weight)
+        let height = latestMeasurementSummary(for: .height)
+
+        switch (weight, height) {
+        case let (weight?, height?):
+            return "\(weight), \(height)"
+        case let (weight?, nil):
+            return weight
+        case let (nil, height?):
+            return height
+        default:
+            return "No stats"
         }
     }
 
@@ -1499,11 +1538,38 @@ final class PhoneLogStore: ObservableObject {
         phoneConvertHeight(value, from: unit, to: unitSettings.heightUnit)
     }
 
+    private func latestMeasurementSummary(for kind: PhoneMeasurementKind) -> String? {
+        let unit = measurementUnit(for: kind)
+        let latest = entries
+            .filter { $0.kind == .babyStats && $0.detail == kind.rawValue }
+            .sorted { $0.startedAt > $1.startedAt }
+            .first
+
+        guard let latest, let value = latest.amount else {
+            return nil
+        }
+
+        let sourceUnit = latest.unit ?? kind.unit
+        let displayValue = kind == .weight
+            ? phoneConvertWeight(value, from: sourceUnit, to: unit)
+            : phoneConvertHeight(value, from: sourceUnit, to: unit)
+        let formatted = PhoneNumberFormatter.shortDecimal.string(from: NSNumber(value: displayValue)) ?? "\(displayValue)"
+        return "\(formatted) \(unit)"
+    }
+
     func lastSummary(for kind: PhoneLogKind) -> String {
         guard let entry = latestEntry(for: kind) else {
             return "Last time: none"
         }
         return "Last: \(entry.startedAt.formatted(date: .abbreviated, time: .shortened)) \(detailText(for: entry))"
+    }
+
+    func lastDetail(for kind: PhoneLogKind) -> String {
+        guard let entry = latestEntry(for: kind) else {
+            return "No previous log"
+        }
+
+        return "\(entry.startedAt.formatted(date: .abbreviated, time: .shortened)) \(detailText(for: entry))"
     }
 
     func start() async {
@@ -2163,8 +2229,16 @@ final class PhoneLogStore: ObservableObject {
     }()
 
     private func formatDuration(_ seconds: TimeInterval) -> String {
-        let minutes = max(Int(seconds / 60), 0)
-        return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
+        let totalSeconds = max(Int(seconds.rounded()), 0)
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let seconds = totalSeconds % 60
+
+        if hours > 0 {
+            return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+        }
+
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 
     private func notifyTransferredLogs(_ items: [PhonePendingSyncItem]) async {
