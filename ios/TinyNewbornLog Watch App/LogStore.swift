@@ -382,6 +382,9 @@ final class LogStore: ObservableObject {
     private func enqueueSync(_ payload: [String: Any], entryID: UUID, title: String) {
         var payloadWithID = payload
         payloadWithID["id"] = entryID.uuidString
+        if let entry = entries.first(where: { $0.id == entryID }) {
+            payloadWithID = payloadWithEventTime(payloadWithID, for: entry)
+        }
 
         guard let body = try? JSONSerialization.data(withJSONObject: payloadWithID) else {
             syncStatus = "Sync failed"
@@ -395,6 +398,15 @@ final class LogStore: ObservableObject {
         Task {
             await retryPendingSyncs()
         }
+    }
+
+    private func payloadWithEventTime(_ payload: [String: Any], for entry: NewbornLogEntry) -> [String: Any] {
+        var payload = payload
+        let eventDate = serverEventDate(for: entry)
+        payload["date"] = Self.payloadDateFormatter.string(from: eventDate)
+        payload["time"] = Self.payloadTimeFormatter.string(from: eventDate)
+        payload["createdAt"] = Self.payloadISOFormatter.string(from: eventDate)
+        return payload
     }
 
     private func webType(for kind: LogKind) -> String {
@@ -545,6 +557,12 @@ final class LogStore: ObservableObject {
         return formatter
     }()
 
+    private static let payloadISOFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
     private func note(for kind: LogKind, status: String?) -> String {
         if let status {
             return "\(kind.title) \(status)"
@@ -692,7 +710,41 @@ final class LogStore: ObservableObject {
         }
 
         pendingSyncItems = (try? decoder.decode([PendingSyncItem].self, from: data)) ?? []
+        backfillPendingEventTimes()
         pendingSyncCount = pendingSyncItems.count
+    }
+
+    private func backfillPendingEventTimes() {
+        var changed = false
+
+        pendingSyncItems = pendingSyncItems.map { item in
+            guard item.method != "DELETE",
+                  var payload = try? JSONSerialization.jsonObject(with: item.body) as? [String: Any],
+                  payload["date"] == nil || payload["time"] == nil else {
+                return item
+            }
+
+            let eventDate = item.entryID.flatMap { entryID in
+                entries.first(where: { $0.id == entryID }).map(serverEventDate)
+            } ?? item.createdAt
+
+            payload["date"] = Self.payloadDateFormatter.string(from: eventDate)
+            payload["time"] = Self.payloadTimeFormatter.string(from: eventDate)
+            payload["createdAt"] = Self.payloadISOFormatter.string(from: eventDate)
+
+            guard let body = try? JSONSerialization.data(withJSONObject: payload) else {
+                return item
+            }
+
+            var next = item
+            next.body = body
+            changed = true
+            return next
+        }
+
+        if changed {
+            savePendingSyncItems()
+        }
     }
 
     private func savePendingSyncItems() {

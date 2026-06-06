@@ -1340,6 +1340,9 @@ final class PhoneLogStore: ObservableObject {
     private func enqueue(_ payload: [String: Any], entryID: UUID, title: String) {
         var payloadWithID = payload
         payloadWithID["id"] = entryID.uuidString
+        if let entry = entries.first(where: { $0.id == entryID }) {
+            payloadWithID = payloadWithEventTime(payloadWithID, for: entry)
+        }
 
         guard let body = try? JSONSerialization.data(withJSONObject: payloadWithID) else {
             syncStatus = "Sync failed"
@@ -1349,6 +1352,15 @@ final class PhoneLogStore: ObservableObject {
         savePendingItems()
         updatePendingStatus()
         scheduleSync(after: 2)
+    }
+
+    private func payloadWithEventTime(_ payload: [String: Any], for entry: PhoneLogEntry) -> [String: Any] {
+        var payload = payload
+        let eventDate = serverEventDate(for: entry)
+        payload["date"] = Self.payloadDateFormatter.string(from: eventDate)
+        payload["time"] = Self.payloadTimeFormatter.string(from: eventDate)
+        payload["createdAt"] = Self.payloadISOFormatter.string(from: eventDate)
+        return payload
     }
 
     private func createBody(for entry: PhoneLogEntry) -> Data {
@@ -1589,6 +1601,12 @@ final class PhoneLogStore: ObservableObject {
         return formatter
     }()
 
+    private static let payloadISOFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
     private func formatDuration(_ seconds: TimeInterval) -> String {
         let minutes = max(Int(seconds / 60), 0)
         return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
@@ -1630,6 +1648,40 @@ final class PhoneLogStore: ObservableObject {
     private func loadPendingItems() {
         guard let data = try? Data(contentsOf: pendingURL) else { return }
         pendingItems = (try? decoder.decode([PhonePendingSyncItem].self, from: data)) ?? []
+        backfillPendingEventTimes()
+    }
+
+    private func backfillPendingEventTimes() {
+        var changed = false
+
+        pendingItems = pendingItems.map { item in
+            guard item.method != "DELETE",
+                  var payload = try? JSONSerialization.jsonObject(with: item.body) as? [String: Any],
+                  payload["date"] == nil || payload["time"] == nil else {
+                return item
+            }
+
+            let eventDate = item.entryID.flatMap { entryID in
+                entries.first(where: { $0.id == entryID }).map(serverEventDate)
+            } ?? item.createdAt
+
+            payload["date"] = Self.payloadDateFormatter.string(from: eventDate)
+            payload["time"] = Self.payloadTimeFormatter.string(from: eventDate)
+            payload["createdAt"] = Self.payloadISOFormatter.string(from: eventDate)
+
+            guard let body = try? JSONSerialization.data(withJSONObject: payload) else {
+                return item
+            }
+
+            var next = item
+            next.body = body
+            changed = true
+            return next
+        }
+
+        if changed {
+            savePendingItems()
+        }
     }
 
     private func savePendingItems() {
