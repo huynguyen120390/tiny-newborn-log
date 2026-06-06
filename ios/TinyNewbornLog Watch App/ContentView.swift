@@ -14,6 +14,34 @@ private func formatElapsed(_ elapsed: TimeInterval) -> String {
     return "\(minutes):\(String(format: "%02d", seconds))"
 }
 
+private func formatAmount(_ value: Double, unit: String) -> String {
+    if unit == "ml" || unit == "g" || unit == "mm" {
+        return "\(Int(value.rounded()))"
+    }
+    return String(format: "%.1f", value)
+}
+
+private func displayWeightAmount(_ value: Double, from sourceUnit: String, to targetUnit: String) -> Double {
+    let gramsByUnit = ["oz": 28.349523125, "lb": 453.59237, "g": 1.0, "kg": 1000.0]
+    let grams = value * (gramsByUnit[sourceUnit] ?? gramsByUnit["lb"]!)
+    let converted = grams / (gramsByUnit[targetUnit] ?? gramsByUnit["lb"]!)
+    return roundedDisplayAmount(converted, unit: targetUnit)
+}
+
+private func displayHeightAmount(_ value: Double, from sourceUnit: String, to targetUnit: String) -> Double {
+    let mmByUnit = ["in": 25.4, "ft": 304.8, "cm": 10.0, "mm": 1.0]
+    let mm = value * (mmByUnit[sourceUnit] ?? mmByUnit["in"]!)
+    let converted = mm / (mmByUnit[targetUnit] ?? mmByUnit["in"]!)
+    return roundedDisplayAmount(converted, unit: targetUnit)
+}
+
+private func roundedDisplayAmount(_ value: Double, unit: String) -> Double {
+    if unit == "g" || unit == "mm" {
+        return value.rounded()
+    }
+    return (value * 10).rounded() / 10
+}
+
 private func formatDurationSummary(_ elapsed: TimeInterval) -> String {
     let totalSeconds = max(Int(elapsed.rounded()), 0)
     if totalSeconds < 60 {
@@ -213,7 +241,7 @@ struct ContentView: View {
     private var bottleCard: some View {
         LoggerCard(
             title: "Bottle",
-            value: "\(Int(store.latestBottleAmount(for: bottleMilkType)))",
+            value: formatAmount(store.latestBottleAmount(for: bottleMilkType), unit: store.bottleDisplayUnit()),
             subtitle: "\(bottleMilkType.rawValue) last",
             symbolName: LogKind.bottle.symbolName,
             color: .teal
@@ -483,7 +511,7 @@ struct ContentView: View {
                 activeSheet = nil
             }
         case .bottle:
-            BottleSheet(bottleML: $bottleML, milkType: $bottleMilkType, totalToday: store.todaysTotalText(for: .bottle), presetAmount: { milkType in
+            BottleSheet(bottleML: $bottleML, milkType: $bottleMilkType, totalToday: store.todaysTotalText(for: .bottle), milkUnit: store.bottleDisplayUnit(), presetAmount: { milkType in
                 store.latestBottleAmount(for: milkType)
             }) {
                 store.logBottle(amountML: bottleML, milkType: bottleMilkType)
@@ -498,7 +526,9 @@ struct ContentView: View {
                 activeSheet = nil
             }
         case .babyStats:
-            BabyStatsSheet(kind: $measurementKind, value: $measurementValue, totalToday: store.todaysTotalText(for: .babyStats), presetValue: { kind in
+            BabyStatsSheet(kind: $measurementKind, value: $measurementValue, totalToday: store.todaysTotalText(for: .babyStats), unitFor: { kind in
+                store.measurementUnit(for: kind)
+            }, presetValue: { kind in
                 store.latestMeasurementValue(for: kind)
             }) {
                 store.logMeasurement(kind: measurementKind, value: measurementValue)
@@ -547,7 +577,13 @@ struct ContentView: View {
                 }
             }
         case .edit(let entry):
-            EditLogSheet(entry: entry, detailText: store.detailText(for: entry)) { updated in
+            EditLogSheet(
+                entry: entry,
+                detailText: store.detailText(for: entry),
+                milkUnit: store.bottleDisplayUnit(),
+                weightUnit: store.measurementUnit(for: .weight),
+                heightUnit: store.measurementUnit(for: .height)
+            ) { updated in
                 Task { await store.relog(updated) }
                 activeSheet = nil
             } onDelete: { entry in
@@ -888,6 +924,7 @@ private struct BottleSheet: View {
     @Binding var bottleML: Double
     @Binding var milkType: BottleMilkType
     var totalToday: String
+    var milkUnit: String
     var presetAmount: (BottleMilkType) -> Double
     var onLog: () -> Void
 
@@ -909,10 +946,10 @@ private struct BottleSheet: View {
 
                 CompactStepper(
                     title: "Amount",
-                    value: "\(Int(bottleML))",
-                    unit: "ml",
-                    onMinus: { bottleML = max(bottleML - 10, 10) },
-                    onPlus: { bottleML = min(bottleML + 10, 240) }
+                    value: formatAmount(bottleML, unit: milkUnit),
+                    unit: milkUnit,
+                    onMinus: { bottleML = max(bottleML - step, step) },
+                    onPlus: { bottleML = min(bottleML + step, maxAmount) }
                 )
 
                 Button(action: onLog) {
@@ -922,6 +959,14 @@ private struct BottleSheet: View {
             }
             .navigationTitle("Bottle")
         }
+    }
+
+    private var step: Double {
+        milkUnit == "oz" ? 0.25 : 10
+    }
+
+    private var maxAmount: Double {
+        milkUnit == "oz" ? 8 : 240
     }
 }
 
@@ -994,18 +1039,37 @@ private struct EditLogSheet: View {
     @State private var poopColorID: String
     @State private var measurementKind: MeasurementKind
     let detailText: String
+    let milkUnit: String
+    let weightUnit: String
+    let heightUnit: String
     let onRelog: (NewbornLogEntry) -> Void
     let onDelete: (NewbornLogEntry) -> Void
 
-    init(entry: NewbornLogEntry, detailText: String, onRelog: @escaping (NewbornLogEntry) -> Void, onDelete: @escaping (NewbornLogEntry) -> Void) {
+    init(entry: NewbornLogEntry, detailText: String, milkUnit: String, weightUnit: String, heightUnit: String, onRelog: @escaping (NewbornLogEntry) -> Void, onDelete: @escaping (NewbornLogEntry) -> Void) {
+        let measurementKind: MeasurementKind = entry.detail == "Height" ? .height : .weight
+        let sourceUnit = entry.amountUnit ?? measurementKind.unit
+        let displayAmount: Double
+        if entry.kind == .bottle {
+            displayAmount = milkUnit == "oz" ? ((entry.amountML ?? 0) / 29.5735 * 100).rounded() / 100 : (entry.amountML ?? 0)
+        } else if entry.kind == .babyStats, measurementKind == .height {
+            displayAmount = displayHeightAmount(entry.amountML ?? 0, from: sourceUnit, to: heightUnit)
+        } else if entry.kind == .babyStats {
+            displayAmount = displayWeightAmount(entry.amountML ?? 0, from: sourceUnit, to: weightUnit)
+        } else {
+            displayAmount = entry.amountML ?? 0
+        }
+
         self._entry = State(initialValue: entry)
         self._eventDate = State(initialValue: entry.endedAt ?? entry.startedAt)
-        self._amount = State(initialValue: entry.amountML ?? 0)
+        self._amount = State(initialValue: displayAmount)
         self._side = State(initialValue: entry.side ?? .left)
         self._milkType = State(initialValue: entry.milkType ?? BottleMilkType.fromPayload(entry.detail))
         self._poopColorID = State(initialValue: entry.poopColorID ?? PoopColorOption.all.first?.id ?? "")
-        self._measurementKind = State(initialValue: entry.detail == "Height" ? .height : .weight)
+        self._measurementKind = State(initialValue: measurementKind)
         self.detailText = detailText
+        self.milkUnit = milkUnit
+        self.weightUnit = weightUnit
+        self.heightUnit = heightUnit
         self.onRelog = onRelog
         self.onDelete = onDelete
     }
@@ -1032,7 +1096,7 @@ private struct EditLogSheet: View {
                             Text(type.rawValue).tag(type)
                         }
                     }
-                    CompactStepper(title: "Milk", value: "\(Int(amount))", unit: "ml", onMinus: { amount = max(5, amount - 5) }, onPlus: { amount = min(300, amount + 5) })
+                    CompactStepper(title: "Milk", value: formatAmount(amount, unit: milkUnit), unit: milkUnit, onMinus: { amount = max(bottleBounds.lowerBound, amount - bottleStep) }, onPlus: { amount = min(bottleBounds.upperBound, amount + bottleStep) })
                 case .diaper:
                     Picker("Kind", selection: $entry.detail) {
                         Text("Wee").tag(Optional("Wee"))
@@ -1051,7 +1115,7 @@ private struct EditLogSheet: View {
                             Text(kind.rawValue).tag(kind)
                         }
                     }
-                    CompactStepper(title: measurementKind.rawValue, value: String(format: "%.1f", amount), unit: measurementKind.unit, onMinus: { amount = max(0.1, amount - 0.1) }, onPlus: { amount += 0.1 })
+                    CompactStepper(title: measurementKind.rawValue, value: formatAmount(amount, unit: measurementUnit), unit: measurementUnit, onMinus: { amount = max(measurementBounds.lowerBound, amount - measurementStep) }, onPlus: { amount = min(measurementBounds.upperBound, amount + measurementStep) })
                 default:
                     EmptyView()
                 }
@@ -1066,6 +1130,8 @@ private struct EditLogSheet: View {
                     updated.amountML = amount > 0 ? amount : updated.amountML
                     updated.side = updated.kind == .nursing ? side : updated.side
                     if updated.kind == .bottle {
+                        updated.amountML = milkUnit == "oz" ? amount * 29.5735 : amount
+                        updated.amountUnit = "ml"
                         updated.milkType = milkType
                         updated.detail = milkType.rawValue
                     }
@@ -1076,7 +1142,7 @@ private struct EditLogSheet: View {
                     }
                     if updated.kind == .babyStats {
                         updated.detail = measurementKind.rawValue
-                        updated.amountUnit = measurementKind.unit
+                        updated.amountUnit = measurementUnit
                     }
                     onRelog(updated)
                 }
@@ -1091,17 +1157,70 @@ private struct EditLogSheet: View {
             .navigationTitle("Edit")
         }
     }
+
+    private var bottleBounds: ClosedRange<Double> {
+        milkUnit == "oz" ? 0.25...8 : 5...300
+    }
+
+    private var bottleStep: Double {
+        milkUnit == "oz" ? 0.25 : 5
+    }
+
+    private var measurementUnit: String {
+        measurementKind == .weight ? weightUnit : heightUnit
+    }
+
+    private var measurementBounds: ClosedRange<Double> {
+        switch (measurementKind, measurementUnit) {
+        case (.weight, "oz"): return 64...480
+        case (.weight, "g"): return 1800...14000
+        case (.weight, "kg"): return 1.8...14
+        case (.height, "ft"): return 1.3...3.5
+        case (.height, "cm"): return 40...100
+        case (.height, "mm"): return 400...1000
+        case (.height, _): return 16...40
+        default: return 4...30
+        }
+    }
+
+    private var measurementStep: Double {
+        switch measurementUnit {
+        case "g", "mm": return 10
+        case "kg": return 0.1
+        case "cm": return 0.5
+        default: return 0.1
+        }
+    }
 }
 
 private struct BabyStatsSheet: View {
     @Binding var kind: MeasurementKind
     @Binding var value: Double
     var totalToday: String
+    var unitFor: (MeasurementKind) -> String
     var presetValue: (MeasurementKind) -> Double
     var onLog: () -> Void
 
     private var bounds: ClosedRange<Double> {
-        kind == .weight ? 4...30 : 16...40
+        switch (kind, unitFor(kind)) {
+        case (.weight, "oz"): return 64...480
+        case (.weight, "g"): return 1800...14000
+        case (.weight, "kg"): return 1.8...14
+        case (.height, "ft"): return 1.3...3.5
+        case (.height, "cm"): return 40...100
+        case (.height, "mm"): return 400...1000
+        case (.height, _): return 16...40
+        default: return 4...30
+        }
+    }
+
+    private var step: Double {
+        switch unitFor(kind) {
+        case "g", "mm": return 10
+        case "kg": return 0.1
+        case "cm": return 0.5
+        default: return 0.1
+        }
     }
 
     var body: some View {
@@ -1119,10 +1238,10 @@ private struct BabyStatsSheet: View {
 
                 CompactStepper(
                     title: kind.rawValue,
-                    value: String(format: "%.1f", value),
-                    unit: kind.unit,
-                    onMinus: { value = max((value - 0.1) * 10, bounds.lowerBound * 10).rounded() / 10 },
-                    onPlus: { value = min((value + 0.1) * 10, bounds.upperBound * 10).rounded() / 10 }
+                    value: formatAmount(value, unit: unitFor(kind)),
+                    unit: unitFor(kind),
+                    onMinus: { value = max(value - step, bounds.lowerBound) },
+                    onPlus: { value = min(value + step, bounds.upperBound) }
                 )
 
                 Button(action: onLog) {

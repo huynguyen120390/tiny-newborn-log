@@ -26,6 +26,13 @@ private func readableDurationSummary(_ elapsed: TimeInterval) -> String {
     return "\(minutes / 60)h \(minutes % 60)m"
 }
 
+private func phoneFormatAmount(_ value: Double, unit: String) -> String {
+    if unit == "ml" || unit == "g" || unit == "mm" {
+        return "\(Int(value.rounded()))"
+    }
+    return String(format: "%.1f", value)
+}
+
 private extension Color {
     init(hex: UInt32) {
         self.init(
@@ -206,6 +213,34 @@ enum PhoneMeasurementKind: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .weight: "lb"
         case .height: "in"
+        }
+    }
+}
+
+struct PhoneUnitSettings: Codable, Equatable {
+    var milkUnit: String = "ml"
+    var weightUnit: String = "lb"
+    var heightUnit: String = "in"
+
+    init(milkUnit: String = "ml", weightUnit: String = "lb", heightUnit: String = "in") {
+        self.milkUnit = ["ml", "oz"].contains(milkUnit) ? milkUnit : "ml"
+        self.weightUnit = ["oz", "lb", "g", "kg"].contains(weightUnit) ? weightUnit : "lb"
+        self.heightUnit = ["in", "ft", "cm", "mm"].contains(heightUnit) ? heightUnit : "in"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            milkUnit: try container.decodeIfPresent(String.self, forKey: .milkUnit) ?? "ml",
+            weightUnit: try container.decodeIfPresent(String.self, forKey: .weightUnit) ?? "lb",
+            heightUnit: try container.decodeIfPresent(String.self, forKey: .heightUnit) ?? "in"
+        )
+    }
+
+    func unit(for kind: PhoneMeasurementKind) -> String {
+        switch kind {
+        case .weight: return weightUnit
+        case .height: return heightUnit
         }
     }
 }
@@ -452,7 +487,7 @@ struct PhoneContentView: View {
     }
 
     private var bottleCard: some View {
-        PhoneLoggerCard(title: "Bottle", value: "\(Int(store.latestBottleAmount(for: bottleMilkType)))", subtitle: "\(bottleMilkType.rawValue) last", symbolName: PhoneLogKind.bottle.symbolName, color: .teal) {
+        PhoneLoggerCard(title: "Bottle", value: phoneFormatAmount(store.latestBottleAmount(for: bottleMilkType), unit: store.bottleDisplayUnit()), subtitle: "\(bottleMilkType.rawValue) last", symbolName: PhoneLogKind.bottle.symbolName, color: .teal) {
             activeSheet = .bottle
         }
     }
@@ -628,7 +663,7 @@ struct PhoneContentView: View {
                 activeSheet = nil
             }
         case .bottle:
-            PhoneBottleSheet(amount: $bottleML, milkType: $bottleMilkType, totalToday: store.todaysTotalText(for: .bottle), presetAmount: { milkType in
+            PhoneBottleSheet(amount: $bottleML, milkType: $bottleMilkType, totalToday: store.todaysTotalText(for: .bottle), milkUnit: store.bottleDisplayUnit(), presetAmount: { milkType in
                 store.latestBottleAmount(for: milkType)
             }) {
                 store.logBottle(amountML: bottleML, milkType: bottleMilkType)
@@ -643,7 +678,9 @@ struct PhoneContentView: View {
                 activeSheet = nil
             }
         case .babyStats:
-            PhoneStatsSheet(kind: $measurementKind, value: $measurementValue, totalToday: store.todaysTotalText(for: .babyStats), presetValue: { kind in
+            PhoneStatsSheet(kind: $measurementKind, value: $measurementValue, totalToday: store.todaysTotalText(for: .babyStats), unitFor: { kind in
+                store.measurementUnit(for: kind)
+            }, presetValue: { kind in
                 store.latestMeasurementValue(for: kind)
             }) {
                 store.logMeasurement(kind: measurementKind, value: measurementValue)
@@ -680,7 +717,13 @@ struct PhoneContentView: View {
         case .settings:
             PhoneSettingsSheet()
         case .edit(let entry):
-            PhoneEditLogSheet(entry: entry, detailText: store.detailText(for: entry)) { updated in
+            PhoneEditLogSheet(
+                entry: entry,
+                detailText: store.detailText(for: entry),
+                milkUnit: store.bottleDisplayUnit(),
+                weightUnit: store.measurementUnit(for: .weight),
+                heightUnit: store.measurementUnit(for: .height)
+            ) { updated in
                 Task { await store.relog(updated) }
                 activeSheet = nil
             } onDelete: { entry in
@@ -1016,18 +1059,37 @@ private struct PhoneEditLogSheet: View {
     @State private var poopColorID: String
     @State private var measurementKind: PhoneMeasurementKind
     let detailText: String
+    let milkUnit: String
+    let weightUnit: String
+    let heightUnit: String
     let onRelog: (PhoneLogEntry) -> Void
     let onDelete: (PhoneLogEntry) -> Void
 
-    init(entry: PhoneLogEntry, detailText: String, onRelog: @escaping (PhoneLogEntry) -> Void, onDelete: @escaping (PhoneLogEntry) -> Void) {
+    init(entry: PhoneLogEntry, detailText: String, milkUnit: String, weightUnit: String, heightUnit: String, onRelog: @escaping (PhoneLogEntry) -> Void, onDelete: @escaping (PhoneLogEntry) -> Void) {
+        let measurementKind: PhoneMeasurementKind = entry.detail == "Height" ? .height : .weight
+        let sourceUnit = entry.unit ?? measurementKind.unit
+        let displayAmount: Double
+        if entry.kind == .bottle {
+            displayAmount = milkUnit == "oz" ? ((entry.amount ?? 0) / 29.5735 * 100).rounded() / 100 : (entry.amount ?? 0)
+        } else if entry.kind == .babyStats, measurementKind == .height {
+            displayAmount = phoneConvertHeight(entry.amount ?? 0, from: sourceUnit, to: heightUnit)
+        } else if entry.kind == .babyStats {
+            displayAmount = phoneConvertWeight(entry.amount ?? 0, from: sourceUnit, to: weightUnit)
+        } else {
+            displayAmount = entry.amount ?? 0
+        }
+
         self._entry = State(initialValue: entry)
         self._eventDate = State(initialValue: entry.endedAt ?? entry.startedAt)
-        self._amount = State(initialValue: entry.amount ?? 0)
+        self._amount = State(initialValue: displayAmount)
         self._side = State(initialValue: entry.side ?? .left)
         self._milkType = State(initialValue: entry.milkType ?? PhoneBottleMilkType.fromPayload(entry.detail))
         self._poopColorID = State(initialValue: entry.poopColorID ?? PhonePoopColorOption.all.first?.id ?? "")
-        self._measurementKind = State(initialValue: entry.detail == "Height" ? .height : .weight)
+        self._measurementKind = State(initialValue: measurementKind)
         self.detailText = detailText
+        self.milkUnit = milkUnit
+        self.weightUnit = weightUnit
+        self.heightUnit = heightUnit
         self.onRelog = onRelog
         self.onDelete = onDelete
     }
@@ -1055,8 +1117,8 @@ private struct PhoneEditLogSheet: View {
                             Text(type.rawValue).tag(type)
                         }
                     }
-                    Stepper(value: $amount, in: 5...300, step: 5) {
-                        Text("\(Int(amount)) ml")
+                    Stepper(value: $amount, in: bottleBounds, step: bottleStep) {
+                        Text("\(phoneFormatAmount(amount, unit: milkUnit)) \(milkUnit)")
                     }
                 case .diaper:
                     Picker("Kind", selection: $entry.detail) {
@@ -1076,8 +1138,8 @@ private struct PhoneEditLogSheet: View {
                             Text(kind.rawValue).tag(kind)
                         }
                     }
-                    Stepper(value: $amount, in: measurementKind == .weight ? 1...40 : 10...60, step: measurementKind == .weight ? 0.1 : 0.25) {
-                        Text("\(String(format: "%.1f", amount)) \(measurementKind.unit)")
+                    Stepper(value: $amount, in: measurementBounds, step: measurementStep) {
+                        Text("\(phoneFormatAmount(amount, unit: measurementUnit)) \(measurementUnit)")
                     }
                 default:
                     EmptyView()
@@ -1093,6 +1155,8 @@ private struct PhoneEditLogSheet: View {
                     updated.amount = amount > 0 ? amount : updated.amount
                     updated.side = updated.kind == .nursing ? side : updated.side
                     if updated.kind == .bottle {
+                        updated.amount = milkUnit == "oz" ? amount * 29.5735 : amount
+                        updated.unit = "ml"
                         updated.milkType = milkType
                         updated.detail = milkType.rawValue
                     }
@@ -1103,7 +1167,7 @@ private struct PhoneEditLogSheet: View {
                     }
                     if updated.kind == .babyStats {
                         updated.detail = measurementKind.rawValue
-                        updated.unit = measurementKind.unit
+                        updated.unit = measurementUnit
                     }
                     onRelog(updated)
                 }
@@ -1118,12 +1182,47 @@ private struct PhoneEditLogSheet: View {
             .navigationTitle("Edit Log")
         }
     }
+
+    private var bottleBounds: ClosedRange<Double> {
+        milkUnit == "oz" ? 0.25...8 : 5...300
+    }
+
+    private var bottleStep: Double {
+        milkUnit == "oz" ? 0.25 : 5
+    }
+
+    private var measurementUnit: String {
+        measurementKind == .weight ? weightUnit : heightUnit
+    }
+
+    private var measurementBounds: ClosedRange<Double> {
+        switch (measurementKind, measurementUnit) {
+        case (.weight, "oz"): return 64...480
+        case (.weight, "g"): return 1800...14000
+        case (.weight, "kg"): return 1.8...14
+        case (.height, "ft"): return 1.3...3.5
+        case (.height, "cm"): return 40...100
+        case (.height, "mm"): return 400...1000
+        case (.height, _): return 16...40
+        default: return 4...30
+        }
+    }
+
+    private var measurementStep: Double {
+        switch measurementUnit {
+        case "g", "mm": return 10
+        case "kg": return 0.1
+        case "cm": return 0.5
+        default: return 0.1
+        }
+    }
 }
 
 private struct PhoneBottleSheet: View {
     @Binding var amount: Double
     @Binding var milkType: PhoneBottleMilkType
     let totalToday: String
+    let milkUnit: String
     let presetAmount: (PhoneBottleMilkType) -> Double
     let onLog: () -> Void
 
@@ -1144,8 +1243,8 @@ private struct PhoneBottleSheet: View {
                 }
 
                 Section("Bottle") {
-                    Stepper(value: $amount, in: 5...300, step: 5) {
-                        Text("\(Int(amount)) ml")
+                    Stepper(value: $amount, in: step...maxAmount, step: step) {
+                        Text("\(phoneFormatAmount(amount, unit: milkUnit)) \(milkUnit)")
                             .font(.title2.weight(.bold))
                     }
                 }
@@ -1155,14 +1254,49 @@ private struct PhoneBottleSheet: View {
             .navigationTitle("Bottle")
         }
     }
+
+    private var step: Double {
+        milkUnit == "oz" ? 0.25 : 5
+    }
+
+    private var maxAmount: Double {
+        milkUnit == "oz" ? 8 : 300
+    }
 }
 
 private struct PhoneStatsSheet: View {
     @Binding var kind: PhoneMeasurementKind
     @Binding var value: Double
     let totalToday: String
+    let unitFor: (PhoneMeasurementKind) -> String
     let presetValue: (PhoneMeasurementKind) -> Double
     let onLog: () -> Void
+
+    private var unit: String {
+        unitFor(kind)
+    }
+
+    private var bounds: ClosedRange<Double> {
+        switch (kind, unit) {
+        case (.weight, "oz"): return 64...480
+        case (.weight, "g"): return 1800...14000
+        case (.weight, "kg"): return 1.8...14
+        case (.height, "ft"): return 1.3...3.5
+        case (.height, "cm"): return 40...100
+        case (.height, "mm"): return 400...1000
+        case (.height, _): return 16...40
+        default: return 4...30
+        }
+    }
+
+    private var step: Double {
+        switch unit {
+        case "g", "mm": return 10
+        case "kg": return 0.1
+        case "cm": return 0.5
+        default: return 0.1
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -1180,8 +1314,8 @@ private struct PhoneStatsSheet: View {
                     value = presetValue(newKind)
                 }
                 Section(kind.rawValue) {
-                    Stepper(value: $value, in: kind == .weight ? 1...40 : 10...60, step: kind == .weight ? 0.1 : 0.25) {
-                        Text("\(String(format: "%.1f", value)) \(kind.unit)")
+                    Stepper(value: $value, in: bounds, step: step) {
+                        Text("\(phoneFormatAmount(value, unit: unit)) \(unit)")
                             .font(.title2.weight(.bold))
                     }
                 }
@@ -1247,6 +1381,7 @@ final class PhoneLogStore: ObservableObject {
     @Published private(set) var lastSyncError = ""
     @Published private(set) var pendingSyncCount = 0
     @Published private(set) var isSyncing = false
+    @Published private(set) var unitSettings = PhoneUnitSettings()
 
     private let activeSleepKey = "TinyNewbornLog.phone.activeSleepStartedAt"
     private let activeActivitiesKey = "TinyNewbornLog.phone.activeActivities"
@@ -1284,17 +1419,25 @@ final class PhoneLogStore: ObservableObject {
     }
 
     func latestBottleAmount(for milkType: PhoneBottleMilkType) -> Double {
-        entries
+        let amountML = entries
             .filter { $0.kind == .bottle && ($0.milkType ?? PhoneBottleMilkType.fromPayload($0.detail)) == milkType }
             .sorted { $0.startedAt > $1.startedAt }
             .first?.amount ?? 60
+        return displayBottleAmount(fromML: amountML)
     }
 
     func latestMeasurementValue(for kind: PhoneMeasurementKind) -> Double {
-        entries
+        let latest = entries
             .filter { $0.kind == .babyStats && $0.detail == kind.rawValue }
             .sorted { $0.startedAt > $1.startedAt }
-            .first?.amount ?? (kind == .weight ? 8.0 : 20.0)
+            .first
+
+        guard let entry = latest, let value = entry.amount else {
+            return kind == .weight ? displayWeight(8.0, from: "lb") : displayHeight(20.0, from: "in")
+        }
+        return kind == .weight
+            ? displayWeight(value, from: entry.unit ?? "lb")
+            : displayHeight(value, from: entry.unit ?? "in")
     }
 
     func todaysTotalText(for kind: PhoneLogKind) -> String {
@@ -1302,7 +1445,7 @@ final class PhoneLogStore: ObservableObject {
         case .nursing:
             return "\(todaysCount(for: .nursing)) feeds today"
         case .bottle:
-            return "\(Int(todaysBottleML)) ml today"
+            return "\(formatBottleAmount(fromML: todaysBottleML)) today"
         case .diaper:
             let wees = todaysEntries.filter { $0.kind == .diaper && $0.poopColorID == nil && ($0.detail ?? "Wee") == "Wee" }.count
             let poos = todaysEntries.filter { $0.kind == .diaper && ($0.poopColorID != nil || ($0.detail ?? "").contains("Poo")) }.count
@@ -1316,6 +1459,44 @@ final class PhoneLogStore: ObservableObject {
         default:
             return "\(todaysCount(for: kind)) today"
         }
+    }
+
+    func measurementUnit(for kind: PhoneMeasurementKind) -> String {
+        unitSettings.unit(for: kind)
+    }
+
+    func bottleDisplayUnit() -> String {
+        unitSettings.milkUnit
+    }
+
+    func displayBottleAmount(fromML amountML: Double) -> Double {
+        if unitSettings.milkUnit == "oz" {
+            return (amountML / 29.5735 * 100).rounded() / 100
+        }
+        return (amountML / 5).rounded() * 5
+    }
+
+    func bottleML(fromDisplayAmount amount: Double) -> Double {
+        if unitSettings.milkUnit == "oz" {
+            return amount * 29.5735
+        }
+        return amount
+    }
+
+    func formatBottleAmount(fromML amountML: Double) -> String {
+        let amount = displayBottleAmount(fromML: amountML)
+        if unitSettings.milkUnit == "oz" {
+            return "\(PhoneNumberFormatter.shortDecimal.string(from: NSNumber(value: amount)) ?? "\(amount)") oz"
+        }
+        return "\(Int(amount.rounded())) ml"
+    }
+
+    func displayWeight(_ value: Double, from unit: String) -> Double {
+        phoneConvertWeight(value, from: unit, to: unitSettings.weightUnit)
+    }
+
+    func displayHeight(_ value: Double, from unit: String) -> Double {
+        phoneConvertHeight(value, from: unit, to: unitSettings.heightUnit)
     }
 
     func lastSummary(for kind: PhoneLogKind) -> String {
@@ -1401,9 +1582,10 @@ final class PhoneLogStore: ObservableObject {
     }
 
     func logBottle(amountML: Double, milkType: PhoneBottleMilkType) {
-        let entry = addEntry(PhoneLogEntry(kind: .bottle, amount: amountML, detail: milkType.rawValue, unit: "ml", milkType: milkType))
-        let ounces = (amountML / 29.5735 * 100).rounded() / 100
-        enqueue(["type": "bottle", "ounces": ounces, "milkType": milkType.payloadValue, "notes": "\(milkType.rawValue) bottle feed"], entryID: entry.id, title: "\(Int(amountML)) ml \(milkType.rawValue)")
+        let storedML = bottleML(fromDisplayAmount: amountML)
+        let entry = addEntry(PhoneLogEntry(kind: .bottle, amount: storedML, detail: milkType.rawValue, unit: "ml", milkType: milkType))
+        let ounces = (storedML / 29.5735 * 100).rounded() / 100
+        enqueue(["type": "bottle", "ounces": ounces, "milkType": milkType.payloadValue, "notes": "\(milkType.rawValue) bottle feed"], entryID: entry.id, title: "\(formatBottleAmount(fromML: storedML)) \(milkType.rawValue)")
     }
 
     func logDiaper(_ event: PhoneDiaperEvent, poopColor: PhonePoopColorOption? = nil) {
@@ -1423,11 +1605,12 @@ final class PhoneLogStore: ObservableObject {
     }
 
     func logMeasurement(kind: PhoneMeasurementKind, value: Double) {
-        let entry = addEntry(PhoneLogEntry(kind: .babyStats, amount: value, detail: kind.rawValue, unit: kind.unit))
+        let unit = measurementUnit(for: kind)
+        let entry = addEntry(PhoneLogEntry(kind: .babyStats, amount: value, detail: kind.rawValue, unit: unit))
         if kind == .weight {
-            enqueue(["type": "growth_stats", "stat": "weight", "weight": value, "weightUnit": kind.unit, "notes": "\(kind.rawValue): \(value) \(kind.unit)"], entryID: entry.id, title: "Weight")
+            enqueue(["type": "growth_stats", "stat": "weight", "weight": value, "weightUnit": unit, "notes": "\(kind.rawValue): \(value) \(unit)"], entryID: entry.id, title: "Weight")
         } else {
-            enqueue(["type": "growth_stats", "stat": "height", "height": value, "heightUnit": kind.unit, "notes": "\(kind.rawValue): \(value) \(kind.unit)"], entryID: entry.id, title: "Height")
+            enqueue(["type": "growth_stats", "stat": "height", "height": value, "heightUnit": unit, "notes": "\(kind.rawValue): \(value) \(unit)"], entryID: entry.id, title: "Height")
         }
     }
 
@@ -1464,14 +1647,21 @@ final class PhoneLogStore: ObservableObject {
             return entry.side?.rawValue ?? "Side"
         case .bottle:
             let type = entry.milkType?.rawValue ?? entry.detail ?? "Milk"
-            return "\(Int(entry.amount ?? 0)) ml \(type)"
+            return "\(formatBottleAmount(fromML: entry.amount ?? 0)) \(type)"
         case .diaper:
             if let label = PhonePoopColorOption.label(for: entry.poopColorID) {
                 return "Poo: \(label)"
             }
             return entry.detail ?? "Logged"
         case .babyStats:
-            return "\(entry.detail ?? "Value") \(String(format: "%.1f", entry.amount ?? 0)) \(entry.unit ?? "")"
+            let isHeight = entry.detail == "Height"
+            let unit = measurementUnit(for: isHeight ? .height : .weight)
+            let sourceUnit = entry.unit ?? (isHeight ? "in" : "lb")
+            let displayValue = entry.amount.map {
+                isHeight ? phoneConvertHeight($0, from: sourceUnit, to: unit) : phoneConvertWeight($0, from: sourceUnit, to: unit)
+            }
+            let value = displayValue.map { PhoneNumberFormatter.shortDecimal.string(from: NSNumber(value: $0)) ?? "\($0)" } ?? ""
+            return "\(entry.detail ?? "Value") \(value) \(unit)"
         case .bath, .tummyTime, .outdoorTime:
             return entry.endedAt == nil ? (entry.detail ?? "Started") : formatDuration(entry.durationSeconds)
         case .babyGym:
@@ -1676,6 +1866,12 @@ final class PhoneLogStore: ObservableObject {
     }
 
     private func pullServerLogs() async {
+        do {
+            unitSettings = try await PhoneLogSyncClient.shared.fetchUnitSettings()
+        } catch {
+            // Keep the last known/default units when settings are unreachable.
+        }
+
         do {
             let remoteLogs = try await PhoneLogSyncClient.shared.fetchLogs()
             mergeRemoteLogs(remoteLogs)
@@ -2123,6 +2319,30 @@ actor PhoneLogSyncClient {
         throw PhoneSyncFailure(message: failures.joined(separator: "; "))
     }
 
+    fileprivate func fetchUnitSettings() async throws -> PhoneUnitSettings {
+        let mode = PhoneServerMode(rawValue: UserDefaults.standard.string(forKey: PhoneServerMode.storageKey) ?? "") ?? .automatic
+        guard mode != .none else {
+            throw PhoneSyncFailure(message: "Server mode is None")
+        }
+
+        var failures: [String] = []
+        for baseURL in await reachableCandidates(mode: mode) {
+            do {
+                let settings = try await fetchUnitSettings(from: baseURL)
+                selectedBaseURL = baseURL
+                UserDefaults.standard.set(baseURL.absoluteString, forKey: selectedBaseURLKey)
+                return settings
+            } catch {
+                failures.append("\(serverLabel(for: baseURL)): \(shortMessage(for: error))")
+                if mode != .automatic { break }
+            }
+        }
+
+        selectedBaseURL = nil
+        UserDefaults.standard.removeObject(forKey: selectedBaseURLKey)
+        throw PhoneSyncFailure(message: failures.joined(separator: "; "))
+    }
+
     func postLogData(_ body: Data) async throws {
         let mode = PhoneServerMode(rawValue: UserDefaults.standard.string(forKey: PhoneServerMode.storageKey) ?? "") ?? .automatic
         guard mode != .none else {
@@ -2299,6 +2519,18 @@ actor PhoneLogSyncClient {
             throw URLError(.badServerResponse)
         }
         return try JSONDecoder().decode([PhoneRemoteLog].self, from: data)
+    }
+
+    private func fetchUnitSettings(from baseURL: URL) async throws -> PhoneUnitSettings {
+        let url = baseURL.appendingPathComponent("api/unit-settings")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 5
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(PhoneUnitSettingsResponse.self, from: data).unitSettings
     }
 
     private func orderedCandidates(mode: PhoneServerMode) -> [URL] {
@@ -2483,4 +2715,42 @@ private struct PhoneSyncConflict: LocalizedError {
     var errorDescription: String? {
         message
     }
+}
+
+private struct PhoneUnitSettingsResponse: Decodable {
+    let unitSettings: PhoneUnitSettings
+
+    private enum CodingKeys: String, CodingKey {
+        case unitSettings = "unit_settings"
+    }
+}
+
+private enum PhoneNumberFormatter {
+    static let shortDecimal: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        return formatter
+    }()
+}
+
+private func phoneConvertWeight(_ value: Double, from sourceUnit: String, to targetUnit: String) -> Double {
+    let gramsByUnit = ["oz": 28.349523125, "lb": 453.59237, "g": 1.0, "kg": 1000.0]
+    let grams = value * (gramsByUnit[sourceUnit] ?? gramsByUnit["lb"]!)
+    let converted = grams / (gramsByUnit[targetUnit] ?? gramsByUnit["lb"]!)
+    return phoneRoundedMeasurement(converted, unit: targetUnit)
+}
+
+private func phoneConvertHeight(_ value: Double, from sourceUnit: String, to targetUnit: String) -> Double {
+    let mmByUnit = ["in": 25.4, "ft": 304.8, "cm": 10.0, "mm": 1.0]
+    let mm = value * (mmByUnit[sourceUnit] ?? mmByUnit["in"]!)
+    let converted = mm / (mmByUnit[targetUnit] ?? mmByUnit["in"]!)
+    return phoneRoundedMeasurement(converted, unit: targetUnit)
+}
+
+private func phoneRoundedMeasurement(_ value: Double, unit: String) -> Double {
+    if unit == "g" || unit == "mm" {
+        return value.rounded()
+    }
+    return (value * 10).rounded() / 10
 }

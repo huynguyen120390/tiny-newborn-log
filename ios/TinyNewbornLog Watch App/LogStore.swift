@@ -9,6 +9,7 @@ final class LogStore: ObservableObject {
     @Published private(set) var syncStatus = "Ready"
     @Published private(set) var lastLogMessage = "Ready"
     @Published private(set) var pendingSyncCount = 0
+    @Published private(set) var unitSettings = UnitSettings()
 
     private let activeSleepKey = "activeSleepStartedAt"
     private let activeActivitiesKey = "activeActivityStartedAt"
@@ -64,14 +65,22 @@ final class LogStore: ObservableObject {
     }
 
     func latestBottleAmount(for milkType: BottleMilkType) -> Double {
-        latestBottleEntry(for: milkType)?.amountML ?? 60
+        displayBottleAmount(fromML: latestBottleEntry(for: milkType)?.amountML ?? 60)
     }
 
     func latestMeasurementValue(for kind: MeasurementKind) -> Double {
-        entries
+        let latest = entries
             .filter { $0.kind == .babyStats && $0.detail == kind.rawValue }
             .sorted { $0.startedAt > $1.startedAt }
-            .first?.amountML ?? (kind == .weight ? 8.0 : 20.0)
+            .first
+
+        guard let entry = latest, let value = entry.amountML else {
+            return kind == .weight ? displayWeight(8.0, from: "lb") : displayHeight(20.0, from: "in")
+        }
+
+        return kind == .weight
+            ? displayWeight(value, from: entry.amountUnit ?? "lb")
+            : displayHeight(value, from: entry.amountUnit ?? "in")
     }
 
     func todaysTotalText(for kind: LogKind) -> String {
@@ -79,7 +88,7 @@ final class LogStore: ObservableObject {
         case .nursing:
             return "\(todaysCount(for: .nursing)) feeds today"
         case .bottle:
-            return "\(Int(todaysBottleML)) ml today"
+            return "\(formatBottleAmount(fromML: todaysBottleML)) today"
         case .diaper:
             let wees = todaysEntries.filter { $0.kind == .diaper && $0.poopColorID == nil && ($0.detail ?? "Wee") == "Wee" }.count
             let poos = todaysEntries.filter { $0.kind == .diaper && ($0.poopColorID != nil || ($0.detail ?? "").contains("Poo")) }.count
@@ -93,6 +102,44 @@ final class LogStore: ObservableObject {
         default:
             return "\(todaysCount(for: kind)) today"
         }
+    }
+
+    func measurementUnit(for kind: MeasurementKind) -> String {
+        unitSettings.unit(for: kind)
+    }
+
+    func bottleDisplayUnit() -> String {
+        unitSettings.milkUnit
+    }
+
+    func displayBottleAmount(fromML amountML: Double) -> Double {
+        if unitSettings.milkUnit == "oz" {
+            return (amountML / 29.5735 * 100).rounded() / 100
+        }
+        return (amountML / 5).rounded() * 5
+    }
+
+    func bottleML(fromDisplayAmount amount: Double) -> Double {
+        if unitSettings.milkUnit == "oz" {
+            return amount * 29.5735
+        }
+        return amount
+    }
+
+    func formatBottleAmount(fromML amountML: Double) -> String {
+        let amount = displayBottleAmount(fromML: amountML)
+        if unitSettings.milkUnit == "oz" {
+            return "\(NumberFormatter.shortDecimal.string(from: NSNumber(value: amount)) ?? "\(amount)") oz"
+        }
+        return "\(Int(amount.rounded())) ml"
+    }
+
+    func displayWeight(_ value: Double, from unit: String) -> Double {
+        convertWeight(value, from: unit, to: unitSettings.weightUnit)
+    }
+
+    func displayHeight(_ value: Double, from unit: String) -> Double {
+        convertHeight(value, from: unit, to: unitSettings.heightUnit)
     }
 
     func lastSummary(for kind: LogKind) -> String {
@@ -173,8 +220,9 @@ final class LogStore: ObservableObject {
     }
 
     func logBottle(amountML: Double, milkType: BottleMilkType) {
-        let entry = addEntry(NewbornLogEntry(kind: .bottle, amountML: amountML, detail: milkType.rawValue, amountUnit: "ml", milkType: milkType))
-        syncBottle(amountML: amountML, milkType: milkType, entryID: entry.id)
+        let storedML = bottleML(fromDisplayAmount: amountML)
+        let entry = addEntry(NewbornLogEntry(kind: .bottle, amountML: storedML, detail: milkType.rawValue, amountUnit: "ml", milkType: milkType))
+        syncBottle(amountML: storedML, milkType: milkType, entryID: entry.id)
     }
 
     func logDiaper(_ event: DiaperEvent, poopColor: PoopColorOption? = nil) {
@@ -194,22 +242,23 @@ final class LogStore: ObservableObject {
     }
 
     func logMeasurement(kind: MeasurementKind, value: Double) {
-        let entry = addEntry(NewbornLogEntry(kind: .babyStats, amountML: value, detail: kind.rawValue, amountUnit: kind.unit))
+        let unit = measurementUnit(for: kind)
+        let entry = addEntry(NewbornLogEntry(kind: .babyStats, amountML: value, detail: kind.rawValue, amountUnit: unit))
         if kind == .weight {
             enqueueSync([
                 "type": "growth_stats",
                 "stat": "weight",
                 "weight": value,
-                "weightUnit": kind.unit,
-                "notes": "\(kind.rawValue): \(value) \(kind.unit)"
+                "weightUnit": unit,
+                "notes": "\(kind.rawValue): \(value) \(unit)"
             ], entryID: entry.id, title: entryTitle(entry))
         } else {
             enqueueSync([
                 "type": "growth_stats",
                 "stat": "height",
                 "height": value,
-                "heightUnit": kind.unit,
-                "notes": "\(kind.rawValue): \(value) \(kind.unit)"
+                "heightUnit": unit,
+                "notes": "\(kind.rawValue): \(value) \(unit)"
             ], entryID: entry.id, title: entryTitle(entry))
         }
     }
@@ -257,15 +306,21 @@ final class LogStore: ObservableObject {
             return side
         case .bottle:
             let type = entry.milkType?.rawValue ?? entry.detail ?? "Milk"
-            return "\(Int(entry.amountML ?? 0)) ml \(type)"
+            return "\(formatBottleAmount(fromML: entry.amountML ?? 0)) \(type)"
         case .diaper:
             if let label = PoopColorOption.label(for: entry.poopColorID) {
                 return "Poo: \(label)"
             }
             return entry.detail ?? "Logged"
         case .babyStats:
-            let value = entry.amountML.map { String(format: "%.1f", $0) } ?? ""
-            return "\(entry.detail ?? "Value") \(value) \(entry.amountUnit ?? "")"
+            let isHeight = entry.detail == "Height"
+            let unit = measurementUnit(for: isHeight ? .height : .weight)
+            let sourceUnit = entry.amountUnit ?? (isHeight ? "in" : "lb")
+            let displayValue = entry.amountML.map {
+                isHeight ? convertHeight($0, from: sourceUnit, to: unit) : convertWeight($0, from: sourceUnit, to: unit)
+            }
+            let value = displayValue.map { NumberFormatter.shortDecimal.string(from: NSNumber(value: $0)) ?? "\($0)" } ?? ""
+            return "\(entry.detail ?? "Value") \(value) \(unit)"
         case .bath, .tummyTime, .outdoorTime:
             if entry.endedAt != nil {
                 return formatDuration(entry.durationSeconds)
@@ -692,6 +747,12 @@ final class LogStore: ObservableObject {
 
     private func pullServerLogs() async {
         do {
+            unitSettings = try await WebLogSyncClient.shared.fetchUnitSettings()
+        } catch {
+            // Keep the last known/default units when settings are unreachable.
+        }
+
+        do {
             let remoteLogs = try await WebLogSyncClient.shared.fetchLogs()
             mergeRemoteLogs(remoteLogs)
         } catch {
@@ -810,7 +871,7 @@ final class LogStore: ObservableObject {
         case .nursing:
             return "\(entry.side?.rawValue ?? "") boobie".trimmingCharacters(in: .whitespaces)
         case .bottle:
-            return "\(Int(entry.amountML ?? 0)) ml \(entry.milkType?.rawValue ?? entry.detail ?? "bottle")"
+            return "\(formatBottleAmount(fromML: entry.amountML ?? 0)) \(entry.milkType?.rawValue ?? entry.detail ?? "bottle")"
         case .diaper:
             return entry.detail ?? entry.kind.title
         case .babyStats:
@@ -1020,4 +1081,34 @@ private struct PendingSyncItem: Identifiable, Codable, Hashable {
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         body = try container.decode(Data.self, forKey: .body)
     }
+}
+
+private extension NumberFormatter {
+    static let shortDecimal: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        return formatter
+    }()
+}
+
+private func convertWeight(_ value: Double, from sourceUnit: String, to targetUnit: String) -> Double {
+    let gramsByUnit = ["oz": 28.349523125, "lb": 453.59237, "g": 1.0, "kg": 1000.0]
+    let grams = value * (gramsByUnit[sourceUnit] ?? gramsByUnit["lb"]!)
+    let converted = grams / (gramsByUnit[targetUnit] ?? gramsByUnit["lb"]!)
+    return roundedMeasurement(converted, unit: targetUnit)
+}
+
+private func convertHeight(_ value: Double, from sourceUnit: String, to targetUnit: String) -> Double {
+    let mmByUnit = ["in": 25.4, "ft": 304.8, "cm": 10.0, "mm": 1.0]
+    let mm = value * (mmByUnit[sourceUnit] ?? mmByUnit["in"]!)
+    let converted = mm / (mmByUnit[targetUnit] ?? mmByUnit["in"]!)
+    return roundedMeasurement(converted, unit: targetUnit)
+}
+
+private func roundedMeasurement(_ value: Double, unit: String) -> Double {
+    if unit == "g" || unit == "mm" {
+        return value.rounded()
+    }
+    return (value * 10).rounded() / 10
 }

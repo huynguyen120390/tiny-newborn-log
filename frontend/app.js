@@ -76,6 +76,7 @@ const state = {
   tummySoundEnabled: false,
   tummyReminderSeconds: loadTummyReminderSeconds(),
   lastTummyAnnouncementStep: 0,
+  milkUnit: loadMilkUnit(),
   weightUnit: loadWeightUnit(),
   heightUnit: loadHeightUnit(),
   reminderVoiceURI: loadReminderVoiceURI(),
@@ -136,6 +137,11 @@ const heightUnits = {
   ft: { label: "ft", mm: 304.8 },
   cm: { label: "cm", mm: 10 },
   mm: { label: "mm", mm: 1 }
+};
+
+const milkUnits = {
+  ml: { label: "ml", ounces: 1 / 29.5735, max: 240, step: 5 },
+  oz: { label: "oz", ounces: 1, max: 8, step: 0.25 }
 };
 
 const feedingBurpReminder = "Burp baby after feeding.";
@@ -427,14 +433,14 @@ document.getElementById("milestone-dialog").addEventListener("click", (event) =>
 });
 
 document.getElementById("bottle-slider").addEventListener("input", (event) => {
-  document.getElementById("bottle-value").textContent = Number(event.target.value).toFixed(2).replace(/0$/, "");
+  updateBottleAmountDisplay(Number(event.target.value));
 });
 
 document.getElementById("bottle-milk-type").addEventListener("change", updateBottleDefaults);
 
 document.getElementById("bottle-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const ounces = Number(document.getElementById("bottle-slider").value);
+  const ounces = milkAmountToOunces(Number(document.getElementById("bottle-slider").value), state.milkUnit);
   const milkType = document.getElementById("bottle-milk-type").value;
   document.getElementById("bottle-dialog").close();
   await createLog({ type: "bottle", ounces, milkType }, feedingBurpReminder);
@@ -500,6 +506,7 @@ async function refreshData() {
   state.poopColors = Array.isArray(poopColors) ? poopColors : [];
   state.bathSoundEnabled = Boolean(appData.sound_settings?.bathSoundEnabled);
   state.tummySoundEnabled = Boolean(appData.sound_settings?.tummySoundEnabled);
+  applyUnitSettings(appData.unit_settings);
   state.overviewSettings = cleanOverviewSettings(appData.overview_settings);
   state.milestoneProgress = appData.milestone_progress || (Array.isArray(appData.milestones) ? {} : appData.milestones || {});
 
@@ -2238,6 +2245,7 @@ function setupSettingsPanel() {
   document.getElementById("bath-reminder-form").addEventListener("submit", saveBathReminder);
   document.getElementById("tummy-reminder-form").addEventListener("submit", saveTummyReminder);
   document.getElementById("reminder-voice-select").addEventListener("change", saveReminderVoice);
+  document.getElementById("settings-milk-unit").addEventListener("change", saveSettingsMilkUnit);
   document.getElementById("settings-weight-unit").addEventListener("change", saveSettingsWeightUnit);
   document.getElementById("settings-height-unit").addEventListener("change", saveSettingsHeightUnit);
   document.getElementById("test-reminder-voice").addEventListener("click", testReminderVoice);
@@ -2750,6 +2758,9 @@ function renderSettings() {
   const tummyReminderInput = document.getElementById("tummy-reminder-seconds");
   if (tummyReminderInput && document.activeElement !== tummyReminderInput) tummyReminderInput.value = state.tummyReminderSeconds;
 
+  const milkUnitSelect = document.getElementById("settings-milk-unit");
+  if (milkUnitSelect && document.activeElement !== milkUnitSelect) milkUnitSelect.value = state.milkUnit;
+
   const weightUnitSelect = document.getElementById("settings-weight-unit");
   if (weightUnitSelect && document.activeElement !== weightUnitSelect) weightUnitSelect.value = state.weightUnit;
 
@@ -2896,22 +2907,65 @@ function testReminderVoice() {
   prepareReminderSound("Two minutes");
 }
 
+function cleanUnitSettings(value = {}) {
+  const current = value && typeof value === "object" ? value : {};
+  return {
+    milkUnit: Object.keys(milkUnits).includes(current.milkUnit) ? current.milkUnit : "ml",
+    weightUnit: Object.keys(weightUnits).includes(current.weightUnit) ? current.weightUnit : "lb",
+    heightUnit: Object.keys(heightUnits).includes(current.heightUnit) ? current.heightUnit : "in"
+  };
+}
+
+function applyUnitSettings(value = {}) {
+  const settings = cleanUnitSettings(value);
+  state.milkUnit = settings.milkUnit;
+  state.weightUnit = settings.weightUnit;
+  state.heightUnit = settings.heightUnit;
+  saveMilkUnit();
+  saveWeightUnit();
+  saveHeightUnit();
+}
+
+async function saveUnitSettings(statusMessage) {
+  const next = cleanUnitSettings({
+    milkUnit: state.milkUnit,
+    weightUnit: state.weightUnit,
+    heightUnit: state.heightUnit
+  });
+  applyUnitSettings(next);
+  try {
+    const result = await fetchJson("/api/unit-settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next)
+    });
+    applyUnitSettings(result.unit_settings || next);
+    renderSettings();
+    updateBottleDefaults();
+    updateWeightDialogDefaults();
+    updateHeightDialogDefaults();
+    renderActivityStats();
+    renderDashboard();
+    updateTopbarBabyStats();
+    showSettingsStatus(statusMessage);
+  } catch (error) {
+    showSettingsStatus(`Save failed: ${error.message}`);
+  }
+}
+
+function saveSettingsMilkUnit(event) {
+  state.milkUnit = event.target.value;
+  saveUnitSettings(`Milk unit saved: ${state.milkUnit}.`);
+}
+
 function saveSettingsWeightUnit(event) {
   state.weightUnit = event.target.value;
-  saveWeightUnit();
-  renderActivityStats();
-  renderDashboard();
-  updateTopbarBabyStats();
-  showSettingsStatus(`Weight unit saved: ${state.weightUnit}.`);
+  saveUnitSettings(`Weight unit saved: ${state.weightUnit}.`);
 }
 
 function saveSettingsHeightUnit(event) {
   state.heightUnit = event.target.value;
-  saveHeightUnit();
-  renderActivityStats();
-  renderDashboard();
-  updateTopbarBabyStats();
-  showSettingsStatus(`Height unit saved: ${state.heightUnit}.`);
+  saveUnitSettings(`Height unit saved: ${state.heightUnit}.`);
 }
 
 function saveBathReminder(event) {
@@ -3091,6 +3145,15 @@ function loadTummyReminderSeconds() {
 
 function saveTummyReminderSeconds() {
   storageSet("tummyReminderSeconds", String(state.tummyReminderSeconds));
+}
+
+function loadMilkUnit() {
+  const saved = storageGet("milkUnit");
+  return ["ml", "oz"].includes(saved) ? saved : "ml";
+}
+
+function saveMilkUnit() {
+  storageSet("milkUnit", state.milkUnit);
 }
 
 function loadWeightUnit() {
@@ -3278,9 +3341,40 @@ function updateBottleDefaults() {
   const slider = document.getElementById("bottle-slider");
   const milkType = normalizeMilkType(document.getElementById("bottle-milk-type")?.value, state.recent.lastBottleMilkType || "formula");
   const recentAmount = milkType === "breast_milk" ? state.recent.breastMilkBottleOunces : state.recent.formulaBottleOunces;
-  const amount = Math.min(8, Math.max(0, Number(recentAmount || state.recent.bottleOunces || 3)));
+  const ounces = Math.min(8, Math.max(0, Number(recentAmount || state.recent.bottleOunces || 3)));
+  const amount = ouncesToMilkAmount(ounces, state.milkUnit);
+  const config = milkUnits[state.milkUnit] || milkUnits.ml;
+  slider.min = "0";
+  slider.max = String(config.max);
+  slider.step = String(config.step);
   slider.value = amount;
-  document.getElementById("bottle-value").textContent = amount.toFixed(2).replace(/0$/, "");
+  updateBottleAmountDisplay(amount);
+}
+
+function milkAmountToOunces(value, unit = state.milkUnit) {
+  const config = milkUnits[unit] || milkUnits.ml;
+  return +(Number(value || 0) * config.ounces).toFixed(3);
+}
+
+function ouncesToMilkAmount(ounces, unit = state.milkUnit) {
+  if (unit === "oz") return +Number(ounces || 0).toFixed(2);
+  return Math.round(Number(ounces || 0) * 29.5735 / 5) * 5;
+}
+
+function formatMilkAmount(value, unit = state.milkUnit) {
+  const number = Number(value || 0);
+  if (unit === "oz") return number.toFixed(2).replace(/\.?0+$/, "");
+  return String(Math.round(number));
+}
+
+function formatMilkVolume(ounces, unit = state.milkUnit) {
+  return `${formatMilkAmount(ouncesToMilkAmount(Number(ounces || 0), unit), unit)} ${unit}`;
+}
+
+function updateBottleAmountDisplay(value) {
+  const label = document.getElementById("bottle-unit-label");
+  if (label) label.textContent = state.milkUnit;
+  document.getElementById("bottle-value").textContent = formatMilkAmount(value, state.milkUnit);
 }
 
 function updateWeightDialogDefaults() {
@@ -3602,7 +3696,7 @@ function getActivityStats() {
     },
     bottle: {
       label: "Bottle total",
-      value: `${todaySummary.bottleOunces} oz`,
+      value: formatMilkVolume(todaySummary.bottleOunces),
       helper: lastLogSummary("bottle")
     },
     routine: {
@@ -4178,7 +4272,7 @@ function renderTodaySummary() {
   const cards = [
     ["Logs", state.summary.totalLogs || 0, "All activities"],
     ["Breast", state.summary.breastFeeds || 0, "Feeds"],
-    ["Bottle", `${state.summary.bottleOunces || 0} oz`, "Today total"],
+    ["Bottle", formatMilkVolume(state.summary.bottleOunces || 0), "Today total"],
     ["Routines", state.summary.routineEvents || 0, "Done"],
     ["Wee", state.summary.wetDiapers || 0, "Wee diapers"],
     ["Poo", state.summary.poops || 0, "Poo diapers"],
@@ -5022,7 +5116,7 @@ function buildDashboardPlots(rangeLogs, periodRecords) {
     const sleepNight = sleep.filter((session) => session.period === "nighttime").reduce((sum, session) => sum + session.durationMinutes, 0);
     return {
       date,
-      milkAvg: bottles.length ? bottles.reduce((sum, log) => sum + Number(log.ounces || 0), 0) / bottles.length : 0,
+      milkAvg: bottles.length ? ouncesToMilkAmount(bottles.reduce((sum, log) => sum + Number(log.ounces || 0), 0) / bottles.length, state.milkUnit) : 0,
       weight: Number(formatUnitValue(latestWeight, state.weightUnit, "weight") || 0),
       height: Number(formatUnitValue(latestHeight, state.heightUnit, "height") || 0),
       sleepDay,
@@ -5039,8 +5133,8 @@ function buildDashboardPlots(rangeLogs, periodRecords) {
   return [
     {
       title: "Average Milk Per Bottle",
-      help: "Average bottle ounces per bottle feeding each day.",
-      unit: "oz",
+      help: "Average bottle amount per bottle feeding each day.",
+      unit: state.milkUnit,
       series: [{ label: "Milk", values: dayRows.map((row) => row.milkAvg), color: eventCategory("bottle").color }],
       labels: days
     },
@@ -5805,7 +5899,7 @@ async function saveHistoryCorrection(event) {
 
 function labelForLog(log) {
   if (log.type === "feeding") return `Boobie, ${log.side || "unknown"} side`;
-  if (log.type === "bottle") return `${milkTypeLabel(log.milkType)} bottle, ${log.ounces} oz`;
+  if (log.type === "bottle") return `${milkTypeLabel(log.milkType)} bottle, ${formatMilkVolume(log.ounces)}`;
   if (log.type === "routine") return `${routineLabel(log.routine)} done`;
   if (log.type === "growth_stats") {
     if (readWeightGrams(log) > 0 && (log.stat === "weight" || !log.stat)) return `Weight, ${formatWeightLog(log)}`;

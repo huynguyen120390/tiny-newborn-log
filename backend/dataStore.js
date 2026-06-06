@@ -41,6 +41,12 @@ const DEFAULT_OVERVIEW_SETTINGS = {
   reviewWindowDays: 3
 };
 
+const DEFAULT_UNIT_SETTINGS = {
+  milkUnit: "ml",
+  weightUnit: "lb",
+  heightUnit: "in"
+};
+
 function readJson(filePath, fallback) {
   if (!fs.existsSync(filePath)) return fallback;
   return JSON.parse(fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, ""));
@@ -75,6 +81,7 @@ function buildAppDataFromLegacy(data = legacyData(), recent = legacyRecent()) {
     schedule_templates: arrayValue(data.schedule_templates),
     foods: arrayValue(data.foods),
     sound_settings: objectMap(data.sound_settings),
+    unit_settings: { ...DEFAULT_UNIT_SETTINGS, ...objectMap(data.unit_settings) },
     overview_settings: { ...DEFAULT_OVERVIEW_SETTINGS, ...objectMap(data.overview_settings) }
   };
 }
@@ -187,6 +194,7 @@ function saveAppData(data) {
     schedule_templates: arrayValue(data.schedule_templates),
     foods: arrayValue(data.foods),
     sound_settings: objectMap(data.sound_settings),
+    unit_settings: { ...DEFAULT_UNIT_SETTINGS, ...objectMap(data.unit_settings) },
     overview_settings: { ...DEFAULT_OVERVIEW_SETTINGS, ...objectMap(data.overview_settings) }
   });
 }

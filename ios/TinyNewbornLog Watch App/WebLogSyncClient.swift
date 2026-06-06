@@ -168,6 +168,19 @@ actor WebLogSyncClient {
         }
     }
 
+    func fetchUnitSettings() async throws -> UnitSettings {
+        do {
+            let baseURL = try await reachableBaseURL()
+            return try await fetchUnitSettings(from: baseURL)
+        } catch {
+            selectedBaseURL = nil
+            UserDefaults.standard.removeObject(forKey: selectedBaseURLKey)
+
+            let baseURL = try await reachableBaseURL()
+            return try await fetchUnitSettings(from: baseURL)
+        }
+    }
+
     func updateLog(remoteID: String, body: Data) async throws {
         do {
             let baseURL = try await reachableBaseURL()
@@ -252,6 +265,20 @@ actor WebLogSyncClient {
         }
 
         return try JSONDecoder().decode([RemoteBabyLog].self, from: data)
+    }
+
+    private func fetchUnitSettings(from baseURL: URL) async throws -> UnitSettings {
+        let url = baseURL.appending(path: "api/unit-settings")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 5
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+
+        return try JSONDecoder().decode(UnitSettingsResponse.self, from: data).unitSettings
     }
 
     private func reachableBaseURL() async throws -> URL {
@@ -457,8 +484,8 @@ struct RemoteBabyLog: Decodable {
         case "naptime": return "Naptime routine"
         case "bedtime": return "Bedtime routine"
         default: return "Morning routine"
-        }
     }
+}
 
     private static let isoFormatter = ISO8601DateFormatter()
     private static let localFormatter: DateFormatter = {
@@ -467,4 +494,12 @@ struct RemoteBabyLog: Decodable {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         return formatter
     }()
+}
+
+private struct UnitSettingsResponse: Decodable {
+    let unitSettings: UnitSettings
+
+    private enum CodingKeys: String, CodingKey {
+        case unitSettings = "unit_settings"
+    }
 }

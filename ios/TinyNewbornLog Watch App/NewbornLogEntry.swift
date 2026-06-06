@@ -128,11 +128,49 @@ enum MeasurementKind: String, Codable, CaseIterable, Identifiable {
 
     var unit: String {
         switch self {
-        case .weight:
-            return "lb"
-        case .height:
-            return "in"
+        case .weight: return "lb"
+        case .height: return "in"
         }
+    }
+}
+
+struct UnitSettings: Codable, Equatable {
+    var milkUnit: String = "ml"
+    var weightUnit: String = "lb"
+    var heightUnit: String = "in"
+
+    init(milkUnit: String = "ml", weightUnit: String = "lb", heightUnit: String = "in") {
+        self.milkUnit = Self.cleanMilkUnit(milkUnit)
+        self.weightUnit = Self.cleanWeightUnit(weightUnit)
+        self.heightUnit = Self.cleanHeightUnit(heightUnit)
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            milkUnit: try container.decodeIfPresent(String.self, forKey: .milkUnit) ?? "ml",
+            weightUnit: try container.decodeIfPresent(String.self, forKey: .weightUnit) ?? "lb",
+            heightUnit: try container.decodeIfPresent(String.self, forKey: .heightUnit) ?? "in"
+        )
+    }
+
+    func unit(for kind: MeasurementKind) -> String {
+        switch kind {
+        case .weight: return weightUnit
+        case .height: return heightUnit
+        }
+    }
+
+    private static func cleanMilkUnit(_ value: String) -> String {
+        ["ml", "oz"].contains(value) ? value : "ml"
+    }
+
+    private static func cleanWeightUnit(_ value: String) -> String {
+        ["oz", "lb", "g", "kg"].contains(value) ? value : "lb"
+    }
+
+    private static func cleanHeightUnit(_ value: String) -> String {
+        ["in", "ft", "cm", "mm"].contains(value) ? value : "in"
     }
 }
 

@@ -47,6 +47,12 @@ const DEFAULT_OVERVIEW_SETTINGS = {
   reviewWindowDays: OVERVIEW_REVIEW_DAYS
 };
 
+const DEFAULT_UNIT_SETTINGS = {
+  milkUnit: "ml",
+  weightUnit: "lb",
+  heightUnit: "in"
+};
+
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -74,6 +80,18 @@ function cleanOverviewSettings(value = {}) {
     refreshIntervalMinutes: Math.max(1, Math.min(60, Math.round(cleanNumber(settings.refreshIntervalMinutes, DEFAULT_OVERVIEW_SETTINGS.refreshIntervalMinutes)))),
     maxOutputTokens: Math.max(200, Math.min(1600, Math.round(cleanNumber(settings.maxOutputTokens, DEFAULT_OVERVIEW_SETTINGS.maxOutputTokens)))),
     reviewWindowDays: Math.max(1, Math.min(14, Math.round(cleanNumber(settings.reviewWindowDays, DEFAULT_OVERVIEW_SETTINGS.reviewWindowDays))))
+  };
+}
+
+function cleanUnitSettings(value = {}) {
+  const settings = { ...DEFAULT_UNIT_SETTINGS, ...objectMap(value) };
+  const milkUnits = new Set(["ml", "oz"]);
+  const weightUnits = new Set(["oz", "lb", "g", "kg"]);
+  const heightUnits = new Set(["in", "ft", "cm", "mm"]);
+  return {
+    milkUnit: milkUnits.has(settings.milkUnit) ? settings.milkUnit : DEFAULT_UNIT_SETTINGS.milkUnit,
+    weightUnit: weightUnits.has(settings.weightUnit) ? settings.weightUnit : DEFAULT_UNIT_SETTINGS.weightUnit,
+    heightUnit: heightUnits.has(settings.heightUnit) ? settings.heightUnit : DEFAULT_UNIT_SETTINGS.heightUnit
   };
 }
 
@@ -2226,6 +2244,14 @@ async function handleUpdateSoundSettings(req, res) {
   sendJson(res, 200, { sound_settings: data.sound_settings });
 }
 
+async function handleUpdateUnitSettings(req, res) {
+  const input = await readBody(req);
+  const data = loadData();
+  data.unit_settings = cleanUnitSettings({ ...objectMap(data.unit_settings), ...objectMap(input) });
+  saveData(data);
+  sendJson(res, 200, { unit_settings: data.unit_settings });
+}
+
 async function handleUpdateOverviewSettings(req, res) {
   const input = await readBody(req);
   const data = loadData();
@@ -2562,6 +2588,16 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "PUT" && url.pathname === "/api/sound-settings") {
       await handleUpdateSoundSettings(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/unit-settings") {
+      sendJson(res, 200, { unit_settings: cleanUnitSettings(loadData().unit_settings) });
+      return;
+    }
+
+    if (req.method === "PUT" && url.pathname === "/api/unit-settings") {
+      await handleUpdateUnitSettings(req, res);
       return;
     }
 
