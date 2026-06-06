@@ -206,6 +206,17 @@ function cleanText(value, fallback = "") {
   return trimmed || fallback;
 }
 
+function cleanMilkType(value, fallback = "formula") {
+  const normalized = String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (normalized === "breast_milk" || normalized === "breastmilk") return "breast_milk";
+  if (normalized === "formula") return "formula";
+  return fallback;
+}
+
+function milkTypeLabel(milkType) {
+  return milkType === "breast_milk" ? "Breast Milk" : "Formula";
+}
+
 function weightToGrams(value, unit = "lb") {
   const amount = cleanNumber(value, 0);
   const factors = { oz: 28.349523125, lb: 453.59237, g: 1, kg: 1000 };
@@ -331,8 +342,8 @@ function buildLog(input) {
   }
 
   if (input.type === "bottle") {
-    const milkType = ["formula", "breast_milk"].includes(input.milkType) ? input.milkType : "formula";
-    const milkLabel = milkType === "breast_milk" ? "Breast Milk" : "Formula";
+    const milkType = cleanMilkType(input.milkType);
+    const milkLabel = milkTypeLabel(milkType);
     return { ...base, ounces: cleanNumber(input.ounces, 0), milkType, notes: `${milkLabel} bottle feed` };
   }
 
@@ -414,6 +425,7 @@ function updateRecent(recent, log) {
   if (log.type === "bottle") {
     recent.lastFeedAt = log.createdAt;
     recent.bottleOunces = log.ounces;
+    recent.lastBottleMilkType = cleanMilkType(log.milkType, recent.lastBottleMilkType || "formula");
     if (log.milkType === "breast_milk") recent.breastMilkBottleOunces = log.ounces;
     else recent.formulaBottleOunces = log.ounces;
   }
@@ -426,6 +438,7 @@ function rebuildRecent(data) {
     bottleOunces: 2.5,
     formulaBottleOunces: 2.5,
     breastMilkBottleOunces: 2.5,
+    lastBottleMilkType: "formula",
     nextBreastSide: "left",
     lastActivityAt: null,
     lastFeedAt: null,
@@ -2391,9 +2404,9 @@ async function handleUpdateLog(req, res, id) {
 
   if (current.type === "bottle") {
     next.ounces = cleanNumber(input.ounces, current.ounces || 0);
-    if (["formula", "breast_milk"].includes(input.milkType)) {
-      next.milkType = input.milkType;
-      next.notes = input.milkType === "breast_milk" ? "Breast Milk bottle feed" : "Formula bottle feed";
+    if (input.milkType) {
+      next.milkType = cleanMilkType(input.milkType, current.milkType || "formula");
+      next.notes = `${milkTypeLabel(next.milkType)} bottle feed`;
     }
   }
 

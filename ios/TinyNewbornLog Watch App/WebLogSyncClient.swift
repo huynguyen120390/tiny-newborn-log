@@ -82,7 +82,8 @@ actor WebLogSyncClient {
         try await postLogPayload([
             "type": "bottle",
             "ounces": ounces,
-            "notes": "Bottle feed"
+            "milkType": BottleMilkType.formula.payloadValue,
+            "notes": "\(BottleMilkType.formula.rawValue) bottle feed"
         ])
     }
 

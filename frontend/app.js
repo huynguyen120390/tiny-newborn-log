@@ -594,11 +594,12 @@ function queuePendingLog(payload) {
 }
 
 function localLogFromPendingItem(item) {
+  const payload = normalizeClientLogPayload(item.payload);
   return {
-    ...item.payload,
+    ...payload,
     id: item.id,
-    timestamp: item.payload.createdAt,
-    createdAt: item.payload.createdAt,
+    timestamp: payload.createdAt,
+    createdAt: payload.createdAt,
     pendingSync: true
   };
 }
@@ -626,6 +627,23 @@ async function postLogPayload(payload) {
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function normalizeMilkType(value, fallback = "formula") {
+  const normalized = String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (normalized === "breast_milk" || normalized === "breastmilk") return "breast_milk";
+  if (normalized === "formula") return "formula";
+  return fallback;
+}
+
+function normalizeClientLogPayload(payload) {
+  if (payload?.type !== "bottle") return payload;
+  const milkType = normalizeMilkType(payload.milkType);
+  return {
+    ...payload,
+    milkType,
+    notes: payload.notes || `${milkTypeLabel(milkType)} bottle feed`
+  };
 }
 
 function shouldQueueLogError(error) {
@@ -3132,7 +3150,7 @@ function storageRemove(key) {
 }
 
 async function createLog(payload, reminder) {
-  const logPayload = prepareLogPayload(payload);
+  const logPayload = prepareLogPayload(normalizeClientLogPayload(payload));
   try {
     const conflict = transitionConflict(logPayload);
     if (conflict) {
@@ -3160,6 +3178,8 @@ async function createLog(payload, reminder) {
 }
 
 function openBottleDialog() {
+  const milkType = document.getElementById("bottle-milk-type");
+  if (milkType) milkType.value = normalizeMilkType(state.recent.lastBottleMilkType);
   updateBottleDefaults();
   document.getElementById("bottle-dialog").showModal();
 }
@@ -3256,7 +3276,7 @@ function statusLabel(status) {
 
 function updateBottleDefaults() {
   const slider = document.getElementById("bottle-slider");
-  const milkType = document.getElementById("bottle-milk-type")?.value || "formula";
+  const milkType = normalizeMilkType(document.getElementById("bottle-milk-type")?.value, state.recent.lastBottleMilkType || "formula");
   const recentAmount = milkType === "breast_milk" ? state.recent.breastMilkBottleOunces : state.recent.formulaBottleOunces;
   const amount = Math.min(8, Math.max(0, Number(recentAmount || state.recent.bottleOunces || 3)));
   slider.value = amount;

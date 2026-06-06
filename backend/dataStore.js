@@ -20,6 +20,9 @@ const DEFAULT_PROFILE = {
 
 const DEFAULT_RECENT_STATE = {
   bottleOunces: 2.5,
+  formulaBottleOunces: 2.5,
+  breastMilkBottleOunces: 2.5,
+  lastBottleMilkType: "formula",
   nextBreastSide: "left",
   lastActivityAt: null,
   lastFeedAt: null,
@@ -165,7 +168,13 @@ function ensureDataFiles() {
 
 function loadAppData() {
   ensureDataFiles();
-  return readJson(APP_DATA_PATH, buildAppDataFromLegacy());
+  const data = readJson(APP_DATA_PATH, buildAppDataFromLegacy());
+  return {
+    ...data,
+    baby_profile: { ...DEFAULT_PROFILE, ...objectMap(data.baby_profile) },
+    recent_state: cleanRecentState(data.recent_state),
+    overview_settings: { ...DEFAULT_OVERVIEW_SETTINGS, ...objectMap(data.overview_settings) }
+  };
 }
 
 function saveAppData(data) {
