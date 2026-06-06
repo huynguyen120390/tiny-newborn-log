@@ -90,9 +90,7 @@ final class LogStore: ObservableObject {
         case .bottle:
             return "\(formatBottleAmount(fromML: todaysBottleML)) today"
         case .diaper:
-            let wees = todaysEntries.filter { $0.kind == .diaper && $0.poopColorID == nil && ($0.detail ?? "Wee") == "Wee" }.count
-            let poos = todaysEntries.filter { $0.kind == .diaper && ($0.poopColorID != nil || ($0.detail ?? "").contains("Poo")) }.count
-            return "\(wees) wee, \(poos) poo today"
+            return "\(todaysDiaperSummary()) today"
         case .babyStats:
             return "\(todaysCount(for: .babyStats)) stats today"
         case .babyGym:
@@ -101,6 +99,28 @@ final class LogStore: ObservableObject {
             return "\(todaysCount(for: .routines)) routines today"
         default:
             return "\(todaysCount(for: kind)) today"
+        }
+    }
+
+    func todaysDiaperSummary() -> String {
+        let wees = todaysEntries.filter { $0.kind == .diaper && $0.poopColorID == nil && ($0.detail ?? "Wee") == "Wee" }.count
+        let poos = todaysEntries.filter { $0.kind == .diaper && ($0.poopColorID != nil || ($0.detail ?? "").contains("Poo")) }.count
+        return "\(wees) Wee \(poos) Poo"
+    }
+
+    func latestStatsSummary() -> String {
+        let weight = latestMeasurementSummary(for: .weight)
+        let height = latestMeasurementSummary(for: .height)
+
+        switch (weight, height) {
+        case let (weight?, height?):
+            return "\(weight), \(height)"
+        case let (weight?, nil):
+            return weight
+        case let (nil, height?):
+            return height
+        default:
+            return "No stats"
         }
     }
 
@@ -148,6 +168,14 @@ final class LogStore: ObservableObject {
         }
 
         return "Last: \(entry.startedAt.formatted(date: .abbreviated, time: .shortened)) \(detailText(for: entry))"
+    }
+
+    func lastDetail(for kind: LogKind) -> String {
+        guard let entry = latestEntry(for: kind) else {
+            return "No previous log"
+        }
+
+        return "\(entry.startedAt.formatted(date: .abbreviated, time: .shortened)) \(detailText(for: entry))"
     }
 
     func todaysCount(for kind: LogKind) -> Int {
@@ -414,15 +442,16 @@ final class LogStore: ObservableObject {
     }
 
     func formatDuration(_ seconds: TimeInterval) -> String {
-        let totalMinutes = max(Int(seconds / 60), 0)
-        let hours = totalMinutes / 60
-        let minutes = totalMinutes % 60
+        let totalSeconds = max(Int(seconds.rounded()), 0)
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let seconds = totalSeconds % 60
 
         if hours > 0 {
-            return "\(hours)h \(minutes)m"
+            return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
         }
 
-        return "\(minutes)m"
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 
     func retryPendingSyncs() async {
@@ -895,6 +924,25 @@ final class LogStore: ObservableObject {
             .filter { $0.kind == .bottle && ($0.milkType ?? BottleMilkType.fromPayload($0.detail)) == milkType }
             .sorted { $0.startedAt > $1.startedAt }
             .first
+    }
+
+    private func latestMeasurementSummary(for kind: MeasurementKind) -> String? {
+        let unit = measurementUnit(for: kind)
+        let latest = entries
+            .filter { $0.kind == .babyStats && $0.detail == kind.rawValue }
+            .sorted { $0.startedAt > $1.startedAt }
+            .first
+
+        guard let latest, let value = latest.amountML else {
+            return nil
+        }
+
+        let sourceUnit = latest.amountUnit ?? kind.unit
+        let displayValue = kind == .weight
+            ? convertWeight(value, from: sourceUnit, to: unit)
+            : convertHeight(value, from: sourceUnit, to: unit)
+        let formatted = NumberFormatter.shortDecimal.string(from: NSNumber(value: displayValue)) ?? "\(displayValue)"
+        return "\(formatted) \(unit)"
     }
 
     private func notifyBoobieReminder(after side: NursingSide) async {
