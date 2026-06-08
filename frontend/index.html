@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>TinyNewbornLog</title>
-    <link rel="stylesheet" href="/styles.css?v=20260603-weather-only">
+    <link rel="stylesheet" href="/styles.css?v=20260608-schedule-tab">
   </head>
   <body>
     <div class="app-shell">
@@ -40,6 +40,7 @@
         <nav id="home-tabs" class="home-tabs active" aria-label="Home views">
           <button class="home-tab active" type="button" data-home-tab="log"><span class="nav-icon" aria-hidden="true">✎</span>Log</button>
           <button class="home-tab" type="button" data-home-tab="care"><span class="nav-icon" aria-hidden="true">☝</span>Care</button>
+          <button class="home-tab" type="button" data-home-tab="schedule"><span class="nav-icon" aria-hidden="true">⌚</span>Schedule</button>
           <button class="home-tab" type="button" data-home-tab="milestones"><span class="nav-icon" aria-hidden="true">★</span>Milestones</button>
           <button class="home-tab" type="button" data-home-tab="dashboard"><span class="nav-icon" aria-hidden="true">▥</span>Dashboard</button>
         </nav>
@@ -61,6 +62,14 @@
             <p>Quick paths for baby care questions.</p>
           </div>
           <div id="care-panel" class="care-panel"></div>
+        </section>
+
+        <section id="schedule" class="panel">
+          <div class="page-title">
+            <h2>Schedule</h2>
+            <p>Doctor schedule templates connected with today's actual logs.</p>
+          </div>
+          <div id="schedule-panel" class="schedule-panel"></div>
         </section>
 
         <section id="history" class="panel">
@@ -213,6 +222,14 @@
                 </select>
               </label>
               <button id="test-reminder-voice" class="primary" type="button">Test voice</button>
+            </div>
+
+            <div class="settings-card">
+              <div>
+                <h3>Schedule Notifications</h3>
+                <p>Notify this device when a saved schedule slot starts.</p>
+              </div>
+              <button id="schedule-notifications-settings-button" class="primary" type="button">Enable schedule notifications</button>
             </div>
 
             <div class="settings-card">
@@ -558,6 +575,6 @@
       </form>
     </template>
 
-    <script src="/app.js?v=20260604-overview-expander"></script>
+    <script src="/app.js?v=20260608-schedule-tab"></script>
   </body>
 </html>

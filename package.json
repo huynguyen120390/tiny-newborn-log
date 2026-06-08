@@ -17,7 +17,8 @@
     "data:prod": "node scripts/data-mode.js use prod",
     "data:demo": "node scripts/data-mode.js use dev",
     "data:real": "node scripts/data-mode.js use prod",
-    "data:snapshot": "node scripts/data-mode.js snapshot"
+    "data:snapshot": "node scripts/data-mode.js snapshot",
+    "test:schedule": "node scripts/test-schedule-goal-rules.js"
   },
   "dependencies": {}
 }
