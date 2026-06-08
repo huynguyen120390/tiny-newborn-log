@@ -5426,8 +5426,8 @@ input[type="range"] {
   }
 
   .schedule-slot {
-    grid-template-columns: 118px minmax(0, 1fr);
-    gap: 8px;
+    grid-template-columns: 148px minmax(0, 1fr);
+    gap: 10px;
   }
 
   .schedule-controls {
@@ -5448,15 +5448,22 @@ input[type="range"] {
   }
 
   .schedule-time-node {
-    grid-template-columns: 14px minmax(0, 1fr);
-    column-gap: 7px;
+    grid-template-columns: 14px 128px;
+    column-gap: 6px;
   }
 
-  .schedule-time-input,
-  .schedule-duration-input {
+  .schedule-time-input {
+    width: 128px;
     min-height: 34px;
     padding: 0 7px;
-    font-size: 12px;
+    font-size: 11px;
+  }
+
+  .schedule-duration-input {
+    width: 88px;
+    min-height: 34px;
+    padding: 0 7px;
+    font-size: 11px;
   }
 
   .care-grid {
