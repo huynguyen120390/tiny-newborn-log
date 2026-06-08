@@ -26,6 +26,14 @@ const state = {
   selectedCareIssue: null,
   selectedCareSubtab: {},
   careInfo: {},
+  scheduleTemplates: [],
+  selectedScheduleTemplateId: localStorage.getItem("tinyNewborn.schedule.selectedTemplateId") || "",
+  scheduleLogs: [],
+  selectedScheduleDate: localStorage.getItem("tinyNewborn.schedule.selectedDate") || todayString(),
+  scheduleEdits: JSON.parse(localStorage.getItem("tinyNewborn.schedule.edits") || "{}"),
+  scheduleTimerId: null,
+  scheduleNotificationsEnabled: localStorage.getItem("tinyNewborn.schedule.notificationsEnabled") === "1",
+  sentScheduleNotifications: new Set(JSON.parse(localStorage.getItem("tinyNewborn.schedule.sentNotifications") || "[]")),
   doctorGuideline: null,
   babyCriesAssistant: {
     open: false,
@@ -48,6 +56,8 @@ const state = {
     updatedAt: "",
     error: "",
     reviewTrace: null,
+    history: [],
+    selectedHistoryId: localStorage.getItem("tinyNewborn.dashboardOverview.selectedHistoryId") || "latest",
     overviewOpen: localStorage.getItem("tinyNewborn.dashboardOverview.overviewOpen") !== "0",
     reviewTraceOpen: localStorage.getItem("tinyNewborn.dashboardOverview.reviewTraceOpen") === "1",
     openCardDetails: new Set(JSON.parse(localStorage.getItem("tinyNewborn.dashboardOverview.openCardDetails") || "[]")),
@@ -355,7 +365,7 @@ function supportingMilestoneExercises() {
 }
 
 const milestoneStates = ["Not Yet", "Maybe", "Practicing", "Confirmed"];
-const dashboardOverviewCacheKey = "tinyNewborn.dashboardOverview.publishedReview.v2";
+const dashboardOverviewCacheKey = "tinyNewborn.dashboardOverview.publishedReview.v3";
 const overviewReviewModes = [
   { value: "rules_only", label: "Fast local rules" },
   { value: "ollama_strict", label: "Strict Ollama" },
@@ -488,14 +498,17 @@ async function init() {
   await refreshData();
   await retryPendingLogSyncs({ quiet: true });
   startDashboardOverviewReviews();
+  startScheduleTimelineTimer();
 }
 
 async function refreshData() {
-  const [appData, recent, summary, poopColors] = await Promise.all([
+  const [appData, recent, summary, poopColors, schedulePayload, scheduleLogPayload] = await Promise.all([
     fetchJson("/api/app-data"),
     fetchJson("/api/recent"),
     fetchJson("/api/today-summary"),
-    fetchJson("/api/poop-colors")
+    fetchJson("/api/poop-colors"),
+    fetchJson("/api/schedule-templates"),
+    fetchJson("/api/schedule-logs")
   ]);
 
   state.profile = appData.baby_profile || {};
@@ -504,11 +517,16 @@ async function refreshData() {
   state.recent = recent;
   state.summary = summary;
   state.poopColors = Array.isArray(poopColors) ? poopColors : [];
+  state.scheduleTemplates = Array.isArray(schedulePayload.templates) ? schedulePayload.templates : [];
+  state.scheduleLogs = Array.isArray(scheduleLogPayload.schedule_logs) ? scheduleLogPayload.schedule_logs : [];
+  state.selectedScheduleTemplateId = currentScheduleLog().templateId || bestScheduleTemplateIdForDate(state.selectedScheduleDate);
   state.bathSoundEnabled = Boolean(appData.sound_settings?.bathSoundEnabled);
   state.tummySoundEnabled = Boolean(appData.sound_settings?.tummySoundEnabled);
   applyUnitSettings(appData.unit_settings);
   state.overviewSettings = cleanOverviewSettings(appData.overview_settings);
   state.milestoneProgress = appData.milestone_progress || (Array.isArray(appData.milestones) ? {} : appData.milestones || {});
+  syncDashboardOverviewHistory(appData.overview_history);
+  if (!state.dashboardOverview.publishedReview) applyDashboardOverviewHistorySelection();
 
   renderAll();
 }
@@ -708,7 +726,7 @@ async function loadCareInfo() {
 }
 
 function activateTab(tab) {
-  const homeViews = ["log", "care", "milestones", "dashboard"];
+  const homeViews = ["log", "care", "schedule", "milestones", "dashboard"];
   const settingsViews = ["settings", "history", "exports"];
 
   if (homeViews.includes(tab)) {
@@ -752,6 +770,7 @@ function renderAll() {
   renderTodaySummary();
   renderRecent();
   renderCare();
+  renderSchedule();
   renderHistory();
   renderDashboard();
   renderMilestones();
@@ -908,6 +927,702 @@ function renderCare() {
       renderCare();
     });
   });
+}
+
+function renderSchedule() {
+  const panel = document.getElementById("schedule-panel");
+  if (!panel) return;
+
+  const templates = state.scheduleTemplates || [];
+  if (!templates.length) {
+    panel.innerHTML = `
+      <section class="schedule-info">
+        <h3>Doctor schedule</h3>
+        <p>No schedule templates found in the shared database yet.</p>
+      </section>
+    `;
+    return;
+  }
+
+  const scheduleLog = currentScheduleLog();
+  const template = selectedScheduleTemplate(scheduleLog.templateId);
+  const rows = currentScheduleRows(scheduleLog, template);
+  panel.innerHTML = `
+    <section class="schedule-info">
+      <div>
+        <span class="eyebrow">Doctor template</span>
+        <h3>${escapeHtml(template.name || "Daily schedule")}</h3>
+        <p>${escapeHtml(scheduleTemplateSummary(template))}</p>
+      </div>
+      <div class="schedule-controls">
+        <button class="schedule-notification-button${("Notification" in window) && Notification.permission === "denied" ? " blocked" : ""}" type="button" data-schedule-notifications>
+          ${scheduleNotificationsButtonText()}
+        </button>
+        <label class="schedule-template-picker">
+          <span>Date</span>
+          <input id="schedule-date-select" type="date" value="${escapeAttr(state.selectedScheduleDate)}">
+        </label>
+        <label class="schedule-template-picker">
+          <span>Age range</span>
+          <select id="schedule-template-select">
+            ${templates.map((item) => `
+              <option value="${escapeAttr(item.id)}" ${item.id === template.id ? "selected" : ""}>${escapeHtml(item.ageRange?.label || item.name || item.id)}</option>
+            `).join("")}
+          </select>
+        </label>
+      </div>
+    </section>
+    <section class="schedule-timeline" aria-label="Daily schedule timeline">
+      ${rows.map((row, index) => renderScheduleSlot(row, index)).join("")}
+    </section>
+  `;
+
+  panel.querySelector("#schedule-date-select")?.addEventListener("change", (event) => {
+    state.selectedScheduleDate = event.target.value || todayString();
+    localStorage.setItem("tinyNewborn.schedule.selectedDate", state.selectedScheduleDate);
+    state.selectedScheduleTemplateId = currentScheduleLog().templateId || bestScheduleTemplateIdForDate(state.selectedScheduleDate);
+    renderSchedule();
+  });
+  panel.querySelector("#schedule-template-select")?.addEventListener("change", (event) => {
+    updateScheduleLogTemplate(event.target.value);
+  });
+  panel.querySelector("[data-schedule-notifications]")?.addEventListener("click", toggleScheduleNotifications);
+  panel.querySelectorAll("[data-schedule-edit]").forEach((input) => {
+    input.addEventListener("change", saveScheduleEdit);
+  });
+}
+
+function startScheduleTimelineTimer() {
+  if (state.scheduleTimerId) window.clearInterval(state.scheduleTimerId);
+  state.scheduleTimerId = window.setInterval(() => {
+    if (state.activeTab === "home" && state.activeHomeTab === "schedule") renderSchedule();
+    checkScheduleNotifications();
+  }, 60000);
+  checkScheduleNotifications();
+}
+
+function scheduleNotificationsButtonText() {
+  if (!("Notification" in window)) return "Notifications unavailable";
+  if (Notification.permission === "denied") return "Notifications blocked";
+  return state.scheduleNotificationsEnabled ? "Schedule reminders on" : "Enable schedule reminders";
+}
+
+async function toggleScheduleNotifications() {
+  if (!("Notification" in window)) {
+    showToast("This browser does not support schedule notifications.");
+    return;
+  }
+  if (Notification.permission === "denied") {
+    showToast("Notifications are blocked. In Chrome, click the site controls icon by the address bar, allow Notifications, then refresh.");
+    renderScheduleNotificationSettings();
+    return;
+  }
+  if (!state.scheduleNotificationsEnabled) {
+    const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+    if (permission !== "granted") {
+      showToast("Schedule notifications were not enabled.");
+      renderSchedule();
+      return;
+    }
+    state.scheduleNotificationsEnabled = true;
+    localStorage.setItem("tinyNewborn.schedule.notificationsEnabled", "1");
+    showToast("Schedule reminders enabled on this device.");
+    checkScheduleNotifications();
+  } else {
+    state.scheduleNotificationsEnabled = false;
+    localStorage.setItem("tinyNewborn.schedule.notificationsEnabled", "0");
+    showToast("Schedule reminders paused on this device.");
+  }
+  renderScheduleNotificationSettings();
+  renderSchedule();
+}
+
+function selectedScheduleTemplate(templateId = "") {
+  const templates = state.scheduleTemplates || [];
+  return templates.find((template) => template.id === templateId)
+    || templates.find((template) => template.id === state.selectedScheduleTemplateId)
+    || templates.find((template) => template.id === bestScheduleTemplateIdForDate(state.selectedScheduleDate))
+    || templates[0]
+    || {};
+}
+
+function currentScheduleLog() {
+  return scheduleLogForDate(state.selectedScheduleDate);
+}
+
+function scheduleLogForDate(date) {
+  return (state.scheduleLogs || []).find((log) => log.date === date) || {
+    date,
+    templateId: bestScheduleTemplateIdForDate(date),
+    rows: []
+  };
+}
+
+function currentScheduleRows(scheduleLog, template) {
+  return Array.isArray(scheduleLog.rows) && scheduleLog.rows.length
+    ? scheduleLog.rows
+    : (template.rows || []).map((row) => ({ ...row }));
+}
+
+function upsertScheduleLog(nextLog) {
+  state.scheduleLogs = [
+    ...(state.scheduleLogs || []).filter((log) => log.date !== nextLog.date),
+    nextLog
+  ].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+}
+
+async function persistScheduleLog(nextLog) {
+  upsertScheduleLog(nextLog);
+  try {
+    const result = await fetchJson(`/api/schedule-logs/${encodeURIComponent(nextLog.date)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(nextLog)
+    });
+    if (result.schedule_log) upsertScheduleLog(result.schedule_log);
+    if (Array.isArray(result.schedule_logs)) state.scheduleLogs = result.schedule_logs;
+  } catch (error) {
+    showToast(`Schedule not saved: ${error.message}`);
+  }
+}
+
+function buildScheduleLog(date, templateId, rows) {
+  return {
+    ...currentScheduleLog(),
+    date,
+    templateId,
+    rows
+  };
+}
+
+function updateScheduleLogTemplate(templateId) {
+  const template = selectedScheduleTemplate(templateId);
+  state.selectedScheduleTemplateId = template.id;
+  localStorage.setItem("tinyNewborn.schedule.selectedTemplateId", state.selectedScheduleTemplateId);
+  persistScheduleLog(buildScheduleLog(state.selectedScheduleDate, template.id, (template.rows || []).map((row) => ({ ...row }))));
+  renderSchedule();
+}
+
+function saveScheduleEdit(event) {
+  const input = event.currentTarget;
+  const scheduleLog = currentScheduleLog();
+  const template = selectedScheduleTemplate(scheduleLog.templateId);
+  const index = input.dataset.scheduleIndex;
+  const field = input.dataset.scheduleField;
+  if (index === undefined || !field) return;
+  const rows = currentScheduleRows(scheduleLog, template).map((row) => ({ ...row }));
+  rows[Number(index)] = { ...objectGuideValue(rows[Number(index)]), [field]: input.value };
+  persistScheduleLog(buildScheduleLog(state.selectedScheduleDate, template.id, rows));
+}
+
+function bestScheduleTemplateIdForDate(date = todayString()) {
+  const templates = state.scheduleTemplates || [];
+  if (!templates.length) return "";
+  const ageMonths = babyAgeMonthsAtDate(date);
+  if (!Number.isFinite(ageMonths)) return templates[0].id;
+  const match = templates.find((template) => {
+    const range = template.ageRange || {};
+    const min = Number(range.min);
+    const max = Number(range.max);
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return false;
+    const scale = range.unit === "weeks" ? 0.25 : 1;
+    return ageMonths >= min * scale && ageMonths <= max * scale;
+  });
+  return (match || templates[0]).id;
+}
+
+function babyAgeMonthsAtDate(date = todayString()) {
+  if (!state.profile?.birthday) return NaN;
+  const born = new Date(`${state.profile.birthday}T00:00:00`);
+  const target = new Date(`${date}T00:00:00`);
+  if (!Number.isFinite(born.getTime()) || !Number.isFinite(target.getTime())) return NaN;
+  return Math.max(0, (target.getTime() - born.getTime()) / (1000 * 60 * 60 * 24 * 30.4375));
+}
+
+function scheduleTemplateSummary(template) {
+  const summary = template.summary || {};
+  const parts = [
+    summary.plannedNaps ? `${summary.plannedNaps} naps` : "",
+    summary.plannedDaytimeSleep ? `${summary.plannedDaytimeSleep} daytime sleep` : "",
+    summary.plannedFeedings ? `${summary.plannedFeedings} feeds` : "",
+    summary.plannedBathTime ? `bath ${summary.plannedBathTime}` : "",
+    summary.plannedBedtime ? `bedtime ${summary.plannedBedtime}` : ""
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "Editable plan connected to today's actual activity logs.";
+}
+
+function formatScheduleDurationValue(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return text;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return text;
+  return formatCompactDurationParts(hours, minutes);
+}
+
+function renderScheduleSlot(row, index) {
+  const kind = scheduleActivityKind(row);
+  const actualItems = scheduleActualItemsForSlot(row);
+  const timeState = scheduleSlotTimeState(row);
+  const goalState = scheduleGoalState(row);
+  return `
+    <article class="schedule-slot schedule-slot-${escapeAttr(kind)} schedule-slot-${escapeAttr(timeState)}${isScheduleAfterFivePm(row) ? " schedule-after-5pm" : ""}">
+      <div class="schedule-time-node">
+        <span class="schedule-edge schedule-edge-before" aria-hidden="true"></span>
+        <span class="schedule-dot" aria-hidden="true"></span>
+        <span class="schedule-edge schedule-edge-after" aria-hidden="true"></span>
+        <input class="schedule-time-input" data-schedule-edit data-schedule-index="${index}" data-schedule-field="timeOfDay" aria-label="Slot time" value="${escapeAttr(row.timeOfDay || "")}">
+        <input class="schedule-duration-input" data-schedule-edit data-schedule-index="${index}" data-schedule-field="plannedDuration" aria-label="Slot duration" value="${escapeAttr(formatScheduleDurationValue(row.plannedDuration || ""))}">
+      </div>
+      <div class="schedule-card">
+        <div class="schedule-card-main">
+          <img src="${escapeAttr(scheduleActivityIcon(row))}" alt="">
+          <div>
+            <h3><span class="schedule-goal-check ${escapeAttr(goalState.state)}" title="${escapeAttr(goalState.label)}">✓</span>${escapeHtml(row.activity || "Activity")}</h3>
+            ${renderScheduleGoalControl(row, kind, index)}
+          </div>
+        </div>
+        <div class="schedule-actual">
+          <strong>Actual</strong>
+          ${actualItems.length ? `
+            <ul>
+              ${actualItems.map((item) => `
+                <li>
+                  <img src="${escapeAttr(item.icon)}" alt="">
+                  <span>${escapeHtml(item.label)}${item.time ? ` <small>${escapeHtml(item.time)}</small>` : ""}</span>
+                </li>
+              `).join("")}
+            </ul>
+          ` : `<p>No matching logs yet.</p>`}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function isScheduleAfterFivePm(row) {
+  const range = scheduleTimeRange(row.timeOfDay);
+  return Boolean(range && range.start >= 17 * 60);
+}
+
+function scheduleSlotTimeState(row) {
+  const range = scheduleTimeRange(row.timeOfDay);
+  if (!range) return "upcoming";
+  const now = Date.now();
+  const start = scheduleMinutesToMs(range.start);
+  const end = scheduleMinutesToMs(range.end);
+  if (now < start) return "upcoming";
+  if (now >= end) return "past";
+  return "current";
+}
+
+function scheduleGoalState(row) {
+  const range = scheduleTimeRange(row.timeOfDay);
+  if (!range) return { state: "not-yet", label: "Time not reached yet" };
+  const now = Date.now();
+  const start = scheduleMinutesToMs(range.start);
+  if (now < start) return { state: "not-yet", label: "Time not reached yet" };
+
+  const kind = scheduleActivityKind(row);
+  if (kind === "feeding") return scheduleFeedingGoalState(row);
+  if (kind === "sleep") return scheduleDurationGoalState(row, ["sleep"]);
+  if (kind === "bath") return scheduleDurationGoalState(row, ["bath"]);
+  if (kind === "play") {
+    const playGoal = String(row.playGoal || "").toLowerCase();
+    if (playGoal.includes("tummy")) return scheduleDurationGoalState(row, ["tummy_time"]);
+    if (playGoal.includes("outdoor")) return scheduleDurationGoalState(row, ["outdoor_time"]);
+    if (playGoal.includes("gym")) return scheduleAnyLogGoalState(row, ["baby_gym"]);
+    return scheduleAnyLogGoalState(row, ["tummy_time", "baby_gym", "outdoor_time", "routine"]);
+  }
+
+  return scheduleAnyLogGoalState(row, []);
+}
+
+function scheduleFeedingGoalState(row) {
+  const breastFeed = scheduleLogsInGoalWindow(row, (log) => log.type === "feeding").length > 0;
+  if (breastFeed) return { state: "complete", label: "Completed: breastfeeding logged nearby" };
+
+  const goalOz = scheduleFeedGoalOz(row);
+  const actualOz = scheduleFeedingActualOunces(row);
+  const lower = goalOz * 0.9;
+  const upper = goalOz * 1.1;
+  if (actualOz >= lower && actualOz <= upper) {
+    return { state: "complete", label: `Completed: ${formatOunces(actualOz)} of ${formatOunces(goalOz)}` };
+  }
+  return { state: "incomplete", label: `Not complete: ${formatOunces(actualOz)} of ${formatOunces(goalOz)}` };
+}
+
+function scheduleFeedingActualOunces(row) {
+  return scheduleLogsInGoalWindow(row, (log) => log.type === "bottle")
+    .reduce((sum, log) => sum + numberValue(log.ounces, 0), 0);
+}
+
+function scheduleDurationGoalState(row, types) {
+  const goalMinutes = scheduleDurationGoalMinutes(row);
+  if (!goalMinutes) return scheduleAnyLogGoalState(row, types);
+  const actualMs = types.reduce((sum, type) => sum + schedulePeriodDurationMs(row, type), 0);
+  const actualMinutes = actualMs / 60000;
+  const lower = goalMinutes * 0.9;
+  const upper = goalMinutes * 1.1;
+  if (actualMinutes >= lower && actualMinutes <= upper) {
+    return { state: "complete", label: `Completed: ${formatCompactDurationMs(actualMs)} of ${formatCompactDurationParts(Math.floor(goalMinutes / 60), goalMinutes % 60)}` };
+  }
+  return { state: "incomplete", label: `Not complete: ${formatCompactDurationMs(actualMs)} of ${formatCompactDurationParts(Math.floor(goalMinutes / 60), goalMinutes % 60)}` };
+}
+
+function scheduleAnyLogGoalState(row, types) {
+  const logs = types.length ? scheduleLogsInGoalWindow(row, (log) => types.includes(log.type)) : [];
+  return logs.length
+    ? { state: "complete", label: "Completed: activity logged nearby" }
+    : { state: "incomplete", label: "Not complete: no nearby activity log" };
+}
+
+function scheduleGoalWindow(row) {
+  const range = scheduleTimeRange(row.timeOfDay);
+  if (!range) return null;
+  return {
+    start: scheduleMinutesToMs(range.start) - 10 * 60 * 1000,
+    end: scheduleMinutesToMs(range.end) + 10 * 60 * 1000
+  };
+}
+
+function scheduleLogsInGoalWindow(row, predicate) {
+  const windowRange = scheduleGoalWindow(row);
+  if (!windowRange) return [];
+  return (state.logs || [])
+    .filter(predicate)
+    .filter((log) => {
+      const time = logTime(log);
+      return Number.isFinite(time) && time >= windowRange.start && time <= windowRange.end;
+    });
+}
+
+function scheduleDurationGoalMinutes(row) {
+  const text = String(row.sleepGoal || row.plannedDuration || "").trim();
+  const colon = text.match(/^(\d{1,2}):(\d{2})$/);
+  if (colon) return Number(colon[1]) * 60 + Number(colon[2]);
+  const compact = text.match(/^(?:(\d+)\s*hrs?)?\s*(?:(\d+)\s*min)?$/i);
+  if (compact && (compact[1] || compact[2])) return Number(compact[1] || 0) * 60 + Number(compact[2] || 0);
+  return 0;
+}
+
+function schedulePeriodDurationMs(row, type) {
+  const config = eventCategoryConfig[type];
+  const startStatus = config?.start || "asleep";
+  const endStatus = config?.end || "awake";
+  const windowRange = scheduleGoalWindow(row);
+  if (!windowRange) return 0;
+  let activeStart = null;
+  let total = 0;
+  (state.logs || [])
+    .filter((log) => log.type === type && log.status)
+    .sort((a, b) => logTime(a) - logTime(b))
+    .forEach((log) => {
+      if (log.status === startStatus) activeStart = logTime(log);
+      if (log.status === endStatus && activeStart) {
+        total += clippedDuration(activeStart, logTime(log), windowRange.start, windowRange.end);
+        activeStart = null;
+      }
+    });
+  if (activeStart) total += clippedDuration(activeStart, Date.now(), windowRange.start, windowRange.end);
+  return total;
+}
+
+function checkScheduleNotifications() {
+  if (!state.scheduleNotificationsEnabled || !("Notification" in window) || Notification.permission !== "granted") return;
+  const notificationDate = todayString();
+  const scheduleLog = scheduleLogForDate(notificationDate);
+  const template = selectedScheduleTemplate(scheduleLog.templateId);
+  const rows = currentScheduleRows(scheduleLog, template);
+  const now = Date.now();
+  rows.forEach((row, index) => {
+    const range = scheduleTimeRange(row.timeOfDay);
+    if (!range) return;
+    const start = scheduleMinutesToMs(range.start, notificationDate);
+    const ageMs = now - start;
+    if (ageMs < 0 || ageMs > 75 * 1000) return;
+    const key = `${notificationDate}-${index}-${row.timeOfDay}-${row.activity}`;
+    if (state.sentScheduleNotifications.has(key)) return;
+    state.sentScheduleNotifications.add(key);
+    saveSentScheduleNotifications();
+    sendScheduleNotification(row);
+  });
+}
+
+function saveSentScheduleNotifications() {
+  const recentKeys = Array.from(state.sentScheduleNotifications).slice(-200);
+  state.sentScheduleNotifications = new Set(recentKeys);
+  localStorage.setItem("tinyNewborn.schedule.sentNotifications", JSON.stringify(recentKeys));
+}
+
+function sendScheduleNotification(row) {
+  const activity = row.activity || "Schedule";
+  const title = `Schedule: ${activity}`;
+  const bodyParts = [
+    row.timeOfDay || "",
+    scheduleActivityKind(row) === "feeding" ? `Goal ${scheduleFeedGoalOz(row)} oz` : "",
+    scheduleActivityKind(row) === "sleep" ? `Goal ${formatScheduleDurationValue(row.sleepGoal || row.plannedDuration || "")}` : "",
+    scheduleActivityKind(row) === "play" ? (row.playGoal || "Play time") : ""
+  ].filter(Boolean);
+  try {
+    new Notification(title, {
+      body: bodyParts.join(" · "),
+      icon: scheduleActivityIcon(row),
+      tag: `tiny-newborn-schedule-${todayString()}-${row.timeOfDay}`,
+      renotify: true
+    });
+  } catch {
+    showToast(`${title}: ${bodyParts.join(" · ")}`);
+  }
+  showToast(`${activity} time`);
+}
+
+function renderScheduleGoalControl(row, kind, index) {
+  if (kind === "feeding") {
+    const value = scheduleFeedGoalOz(row);
+    return `
+      <label class="schedule-goal-control">
+        <span>Goal</span>
+        <select data-schedule-edit data-schedule-index="${index}" data-schedule-field="feedGoalOz" aria-label="Feeding ounces goal">
+          ${[1, 2, 3, 4, 5, 6, 7, 8].map((amount) => `<option value="${amount}" ${amount === value ? "selected" : ""}>${amount} oz</option>`).join("")}
+        </select>
+      </label>
+    `;
+  }
+  if (kind === "sleep") {
+    return `
+      <label class="schedule-goal-control">
+        <span>Sleep goal</span>
+        <input data-schedule-edit data-schedule-index="${index}" data-schedule-field="sleepGoal" aria-label="Sleep goal" value="${escapeAttr(formatScheduleDurationValue(row.sleepGoal || row.plannedDuration || ""))}">
+      </label>
+    `;
+  }
+  if (kind === "play") {
+    return `
+      <label class="schedule-goal-control">
+        <span>Activity</span>
+        <select data-schedule-edit data-schedule-index="${index}" data-schedule-field="playGoal" aria-label="Playtime activity goal">
+          ${["Tummy time", "Baby gym", "Reading", "Outdoor time", "Free play"].map((option) => `<option ${option === (row.playGoal || "Free play") ? "selected" : ""}>${option}</option>`).join("")}
+        </select>
+      </label>
+    `;
+  }
+  return `<p class="schedule-goal-note">${escapeHtml(row.notes || "Use this slot as a guide, then compare with logs.")}</p>`;
+}
+
+function scheduleActivityKind(row) {
+  const activity = String(row.activity || "").toLowerCase();
+  if (activity.includes("feed")) return "feeding";
+  if (activity.includes("nap") || activity.includes("sleep") || activity.includes("bedtime")) return "sleep";
+  if (activity.includes("play")) return "play";
+  if (activity.includes("bath")) return "bath";
+  return "other";
+}
+
+function scheduleActivityIcon(row) {
+  const icons = {
+    feeding: "/assets/activity/icon-bottle.png",
+    sleep: "/assets/activity/icon-asleep.png",
+    play: "/assets/activity/icon-gym.png",
+    bath: "/assets/activity/icon-bath.png",
+    other: "/assets/activity/icon-success.png"
+  };
+  return icons[scheduleActivityKind(row)] || icons.other;
+}
+
+function scheduleFeedGoalOz(row) {
+  const raw = Number(row.feedGoalOz || row.feedGoal);
+  return Number.isFinite(raw) ? Math.max(1, Math.min(8, Math.round(raw))) : 3;
+}
+
+function scheduleTimeRange(value) {
+  const parts = String(value || "").split("-");
+  const inferredMeridiem = scheduleMeridiem(parts[1]) || scheduleMeridiem(parts[0]);
+  const start = timeToMinutes(parts[0], inferredMeridiem);
+  if (!Number.isFinite(start)) return null;
+  const endMinutes = timeToMinutes(parts[1], inferredMeridiem);
+  const end = Number.isFinite(endMinutes) ? endMinutes : start + 30;
+  return { start, end: end < start ? end + 24 * 60 : end };
+}
+
+function scheduleActualItemsForSlot(row) {
+  const range = scheduleTimeRange(row.timeOfDay);
+  if (!range) return [];
+  const slotStart = scheduleMinutesToMs(range.start);
+  const slotEnd = scheduleMinutesToMs(range.end);
+  if (Date.now() < slotStart) return [];
+  const slotCenter = slotStart + (slotEnd - slotStart) / 2;
+  const nearLogs = logsNearSlot(slotStart, slotEnd);
+  const items = [];
+  const sleepItem = scheduleSleepActualItem(slotStart, slotEnd, slotCenter, nearLogs);
+  if (sleepItem) items.push(sleepItem);
+  items.push(...scheduleFeedActualItems(nearLogs, slotCenter));
+  items.push(...scheduleDiaperActualItems(nearLogs, slotCenter));
+  items.push(...scheduleActivityActualItems(nearLogs, slotCenter));
+  return dedupeScheduleActualItems(items).slice(0, 5);
+}
+
+function scheduleMinutesToMs(minutes, date = state.selectedScheduleDate || todayString()) {
+  const base = new Date(`${date}T00:00:00`).getTime();
+  return base + minutes * 60 * 1000;
+}
+
+function logsNearSlot(slotStart, slotEnd) {
+  return (state.logs || [])
+    .filter((log) => {
+      const time = logTime(log);
+      return Number.isFinite(time) && time >= slotStart && time < slotEnd;
+    })
+    .sort((a, b) => logTime(a) - logTime(b));
+}
+
+function scheduleSleepActualItem(slotStart, slotEnd, slotCenter, nearLogs) {
+  const sleepLogs = (state.logs || [])
+    .filter((log) => log.type === "sleep" && log.status)
+    .sort((a, b) => logTime(a) - logTime(b));
+  const previous = sleepLogs.filter((log) => logTime(log) <= slotEnd).at(-1);
+  const nearbyAwake = nearLogs
+    .filter((log) => log.type === "sleep" && log.status === "awake")
+    .sort((a, b) => Math.abs(logTime(a) - slotCenter) - Math.abs(logTime(b) - slotCenter))[0];
+
+  if (nearbyAwake) {
+    const start = sleepLogs
+      .filter((log) => log.status === "asleep" && logTime(log) <= logTime(nearbyAwake))
+      .at(-1);
+    if (start) {
+      return {
+        key: `sleep-awake-${nearbyAwake.id || logTime(nearbyAwake)}`,
+        icon: "/assets/activity/icon-awake.png",
+        label: `Slept ${formatCompactDurationMs(logTime(nearbyAwake) - logTime(start))}`,
+        time: `woke ${formatScheduleWakeTime(logTime(nearbyAwake))}`
+      };
+    }
+  }
+
+  if (previous?.status === "asleep") {
+    const awakeAfter = sleepLogs.find((log) => log.status === "awake" && logTime(log) > logTime(previous));
+    const stillSleepingAtSlot = !awakeAfter || logTime(awakeAfter) > slotEnd;
+    if (stillSleepingAtSlot) {
+      const durationEnd = awakeAfter ? slotEnd : Date.now();
+      return {
+        key: `sleeping-${previous.id || logTime(previous)}`,
+        icon: "/assets/activity/icon-asleep.png",
+        label: `Sleeping ${formatCompactDurationMs(durationEnd - logTime(previous))}`,
+        time: `since ${formatScheduleWakeTime(logTime(previous))}`
+      };
+    }
+  }
+
+  return null;
+}
+
+function scheduleFeedActualItems(logs, slotCenter) {
+  return logs
+    .filter((log) => log.type === "bottle" || log.type === "feeding")
+    .sort((a, b) => Math.abs(logTime(a) - slotCenter) - Math.abs(logTime(b) - slotCenter))
+    .slice(0, 2)
+    .map((log) => ({
+      key: `feed-${log.id || logTime(log)}`,
+      icon: iconForLog(log),
+      label: log.type === "bottle"
+        ? `${milkTypeLabel(log.milkType)} ${formatOunces(log.ounces)}`
+        : `Boobie ${log.side || "feed"}`,
+      time: formatScheduleWakeTime(logTime(log))
+    }));
+}
+
+function scheduleDiaperActualItems(logs, slotCenter) {
+  return logs
+    .filter((log) => log.type === "diaper")
+    .sort((a, b) => Math.abs(logTime(a) - slotCenter) - Math.abs(logTime(b) - slotCenter))
+    .slice(0, 2)
+    .map((log) => {
+      const color = poopColorById(log.poopColorId || log.poopColor);
+      return {
+        key: `diaper-${log.id || logTime(log)}`,
+        icon: iconForLog(log),
+        label: log.poop ? `Poop ${color?.label || "logged"}` : log.pee ? "Pee" : "Diaper",
+        time: formatScheduleWakeTime(logTime(log))
+      };
+    });
+}
+
+function scheduleActivityActualItems(logs, slotCenter) {
+  return logs
+    .filter((log) => ["tummy_time", "baby_gym", "outdoor_time", "bath"].includes(log.type))
+    .sort((a, b) => Math.abs(logTime(a) - slotCenter) - Math.abs(logTime(b) - slotCenter))
+    .slice(0, 2)
+    .map((log) => ({
+      key: `activity-${log.id || logTime(log)}`,
+      icon: iconForLog(log),
+      label: scheduleActualLogLabel(log),
+      time: formatScheduleWakeTime(logTime(log))
+    }));
+}
+
+function dedupeScheduleActualItems(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    if (seen.has(item.key)) return false;
+    seen.add(item.key);
+    return true;
+  });
+}
+
+function scheduleMeridiem(value) {
+  return String(value || "").trim().match(/\b(am|pm)\b/i)?.[1]?.toLowerCase() || "";
+}
+
+function timeToMinutes(value, inferredMeridiem = "") {
+  const match = String(value || "").trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+  if (!match) return NaN;
+  let hour = Number(match[1]);
+  const minute = Number(match[2] || 0);
+  const meridiem = String(match[3] || inferredMeridiem || "").toLowerCase();
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return NaN;
+  if (meridiem === "pm" && hour < 12) hour += 12;
+  if (meridiem === "am" && hour === 12) hour = 0;
+  return hour * 60 + minute;
+}
+
+function scheduleActualLogLabel(log) {
+  if (log.type === "bottle") return `${numberValue(log.ounces, 0) || "--"} oz bottle`;
+  if (log.type === "feeding") return `${log.side || "breast"} feed`;
+  if (log.type === "sleep") return log.status ? `sleep ${log.status}` : "sleep";
+  if (log.type === "tummy_time") return `tummy ${log.status || ""}`.trim();
+  if (log.type === "bath") return `bath ${log.status || ""}`.trim();
+  return labelForLog(log);
+}
+
+function formatOunces(value) {
+  const amount = numberValue(value, 0);
+  if (!amount) return "-- oz";
+  return `${Number.isInteger(amount) ? amount : amount.toFixed(1)} oz`;
+}
+
+function numberValue(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function formatCompactDurationMs(ms) {
+  const totalMinutes = Math.max(0, Math.round(ms / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return formatCompactDurationParts(hours, minutes);
+}
+
+function formatCompactDurationParts(hours, minutes) {
+  if (hours && minutes) return `${hours}hrs${minutes}min`;
+  if (hours) return `${hours}hrs`;
+  return `${minutes}min`;
+}
+
+function formatScheduleWakeTime(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "--";
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 function careIssueColumns() {
@@ -2249,6 +2964,7 @@ function setupSettingsPanel() {
   document.getElementById("settings-weight-unit").addEventListener("change", saveSettingsWeightUnit);
   document.getElementById("settings-height-unit").addEventListener("change", saveSettingsHeightUnit);
   document.getElementById("test-reminder-voice").addEventListener("click", testReminderVoice);
+  document.getElementById("schedule-notifications-settings-button").addEventListener("click", toggleScheduleNotifications);
   document.getElementById("generate-analytics-button").addEventListener("click", generateAnalyticsJson);
   document.getElementById("generate-trends-button").addEventListener("click", generateTrendJson);
   document.getElementById("clear-data-button").addEventListener("click", clearData);
@@ -2769,6 +3485,7 @@ function renderSettings() {
 
   syncOverviewSettingsInputs();
   renderVoiceOptions();
+  renderScheduleNotificationSettings();
 
   const container = document.getElementById("category-settings");
   if (!container) return;
@@ -2792,6 +3509,13 @@ function renderSettings() {
       showSettingsStatus("Category cards updated.");
     });
   });
+}
+
+function renderScheduleNotificationSettings() {
+  const button = document.getElementById("schedule-notifications-settings-button");
+  if (!button) return;
+  button.textContent = scheduleNotificationsButtonText();
+  button.classList.toggle("blocked", ("Notification" in window) && Notification.permission === "denied");
 }
 
 function cleanOverviewSettings(value = {}) {
@@ -4358,7 +5082,7 @@ function renderDashboardOverview() {
     setupOverviewTraceToggle(container);
     return;
   }
-  const cards = overview?.cards || [];
+  const cards = orderedOverviewCards(overview?.cards || []);
   const isReviewing = overviewState.status === "reviewing";
   const source = overviewState.source === "gpt" ? "GPT" : overviewState.source === "llama" ? "Ollama" : overviewState.source === "rules" ? "Local rules" : "Local overview";
   const updated = overviewUpdatedAt(overviewState, overview);
@@ -4375,8 +5099,8 @@ function renderDashboardOverview() {
       <summary class="dashboard-overview-top">
         <div>
           <span>Overview</span>
-          <h3>${escapeHtml(overviewHeadline(overview))}</h3>
-          <p>${escapeHtml(overviewSummary(overview))}</p>
+          <h3>${renderOverviewInline(overviewHeadline(overview))}</h3>
+          <p>${renderOverviewInline(overviewSummary(overview))}</p>
         </div>
         <div class="dashboard-overview-actions">
           <span class="overview-status status-${escapeAttr(statusClassName)}">${escapeHtml(overviewPriorityLabel(priority))}</span>
@@ -4385,28 +5109,29 @@ function renderDashboardOverview() {
       </summary>
       <div class="dashboard-overview-body">
         <div class="dashboard-overview-toolbar">
+          ${renderDashboardOverviewHistoryPicker()}
           <button class="ghost" type="button" data-dashboard-overview-refresh ${isReviewing ? "disabled" : ""}>${isReviewing ? "Reviewing..." : "Refresh"}</button>
         </div>
-        ${overview.summaryBullets?.length ? `
-          <ul class="dashboard-overview-bullets">
-            ${overview.summaryBullets.slice(0, 5).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
-          </ul>
-        ` : ""}
-        ${overview.overall?.reviewText ? `
-          <div class="dashboard-overview-next">
-            <strong>Overall</strong>
-            ${renderOverviewBulletsFromText(overview.overall.reviewText)}
-          </div>
-        ` : ""}
+        <div class="dashboard-overview-summary-grid">
+          <section class="dashboard-overview-summary-panel dashboard-overview-summary-panel-main">
+            <span>Overall summary</span>
+            ${overview.overall?.reviewText ? renderOverviewParagraphs(overview.overall.reviewText) : `<p>${renderOverviewInline(overviewSummary(overview))}</p>`}
+            ${overview.summaryBullets?.length ? `
+              <ul>
+                ${overview.summaryBullets.slice(0, 3).map((item) => `<li>${renderOverviewInline(item)}</li>`).join("")}
+              </ul>
+            ` : ""}
+          </section>
+          <section class="dashboard-overview-summary-panel">
+            <span>Parent next steps</span>
+            ${overview?.parentNextSteps?.length
+              ? `<ol>${overview.parentNextSteps.slice(0, 4).map((step) => `<li>${renderOverviewInline(step)}</li>`).join("")}</ol>`
+              : `<p>${renderOverviewInline("Keep logging feeds, diapers, sleep, and new symptoms.")}</p>`}
+          </section>
+        </div>
         ${cards.length ? `
           <div class="dashboard-overview-grid">
             ${cards.map((card) => renderDashboardOverviewCard(card)).join("")}
-          </div>
-        ` : ""}
-        ${overview?.parentNextSteps?.length ? `
-          <div class="dashboard-overview-next">
-            <strong>Parent next steps</strong>
-            <ul>${overview.parentNextSteps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ul>
           </div>
         ` : ""}
         ${renderOverviewReviewTrace(overviewState.reviewTrace)}
@@ -4424,6 +5149,7 @@ function renderDashboardOverview() {
     maybeRefreshDashboardOverview(true);
   });
   setupOverviewExpanderToggle(container);
+  setupOverviewHistoryPicker(container);
   setupOverviewCardDetailsToggle(container);
   setupOverviewTraceToggle(container);
 }
@@ -4469,6 +5195,16 @@ function setupOverviewExpanderToggle(container) {
   expander.addEventListener("toggle", () => {
     state.dashboardOverview.overviewOpen = expander.open;
     localStorage.setItem("tinyNewborn.dashboardOverview.overviewOpen", expander.open ? "1" : "0");
+  });
+}
+
+function setupOverviewHistoryPicker(container) {
+  const picker = container.querySelector("[data-dashboard-overview-history]");
+  if (!picker) return;
+  picker.addEventListener("change", () => {
+    state.dashboardOverview.selectedHistoryId = picker.value || "latest";
+    localStorage.setItem("tinyNewborn.dashboardOverview.selectedHistoryId", state.dashboardOverview.selectedHistoryId);
+    if (applyDashboardOverviewHistorySelection()) renderDashboardOverview();
   });
 }
 
@@ -4519,6 +5255,22 @@ function overviewSummary(overview) {
   return overview?.overall?.oneLineSummary || "Recent logs, care guidance, stool color actions, milestones, and weather in one parent-friendly board.";
 }
 
+function renderOverviewInline(value) {
+  const text = String(value || "");
+  const markerPattern = /\[\[(important|warning|urgent|emergency):([\s\S]*?)\]\]/gi;
+  let html = "";
+  let lastIndex = 0;
+  let match;
+  while ((match = markerPattern.exec(text)) !== null) {
+    html += escapeHtml(text.slice(lastIndex, match.index));
+    const tone = ["urgent", "emergency"].includes(match[1].toLowerCase()) ? "warning" : match[1].toLowerCase();
+    html += `<strong class="overview-emphasis overview-emphasis-${escapeAttr(tone)}">${escapeHtml(match[2].trim())}</strong>`;
+    lastIndex = markerPattern.lastIndex;
+  }
+  html += escapeHtml(text.slice(lastIndex));
+  return html;
+}
+
 function overviewUpdatedAt(overviewState, overview) {
   const updatedAt = overviewState.updatedAt || overview?.updatedAt || overview?.reviewMeta?.generatedAt || overview?.overall?.lastReviewedAt || "";
   return updatedAt ? formatAssistantUpdatedAt(updatedAt) : "--";
@@ -4530,13 +5282,37 @@ function overviewStatusClass(priority) {
 
 function overviewPriorityLabel(priority) {
   const labels = {
-    ok: "No urgent flags",
+    ok: "Good",
     watch: "Watch",
-    call_doctor: "Call doctor",
+    call_doctor: "Call",
     urgent: "Urgent",
-    insufficient_data: "Insufficient data"
+    insufficient_data: "Unknown"
   };
   return labels[priority] || String(priority || "Insufficient data");
+}
+
+const overviewCategoryConfigs = {
+  eat: { label: "Feed", icon: "/assets/activity/icon-bottle.png", order: 0 },
+  sleep: { label: "Sleep", icon: "/assets/activity/icon-asleep.png", order: 1 },
+  hygiene_diaper: { label: "Hygiene", icon: "/assets/activity/icon-poop.png", order: 2 },
+  exercise: { label: "Exercise", icon: "/assets/activity/icon-tummy-start.png", order: 3 },
+  play: { label: "Play", icon: "/assets/activity/icon-gym.png", order: 4 },
+  safety: { label: "Safety", icon: "/assets/activity/icon-success.png", order: 5 },
+  health: { label: "Others", icon: "/assets/activity/icon-weight.png", order: 6 }
+};
+
+function overviewCategoryConfig(card = {}) {
+  return overviewCategoryConfigs[card.id] || {
+    label: card.title || "Others",
+    icon: "/assets/activity/icon-success.png",
+    order: 99
+  };
+}
+
+function orderedOverviewCards(cards) {
+  return cards
+    .slice()
+    .sort((a, b) => overviewCategoryConfig(a).order - overviewCategoryConfig(b).order);
 }
 
 function renderDashboardOverviewCard(card) {
@@ -4551,58 +5327,76 @@ function renderDashboardOverviewCard(card) {
       <dl>
         <div>
           <dt>Recent</dt>
-          <dd>${escapeHtml(card.recentPattern || "No recent information found.")}</dd>
+          <dd>${renderOverviewInline(card.recentPattern || "No recent information found.")}</dd>
         </div>
         <div>
           <dt>Meaning</dt>
-          <dd>${escapeHtml(card.meaning || "Not enough information yet.")}</dd>
+          <dd>${renderOverviewInline(card.meaning || "Not enough information yet.")}</dd>
         </div>
         <div>
           <dt>Recommendation</dt>
-          <dd>${escapeHtml(card.recommendation || "Keep logging and watch baby cues.")}</dd>
+          <dd>${renderOverviewInline(card.recommendation || "Keep logging and watch baby cues.")}</dd>
         </div>
       </dl>
-      ${card.flags?.length ? `<div class="overview-flags">${card.flags.map((flag) => `<span>${escapeHtml(flag)}</span>`).join("")}</div>` : ""}
+      ${card.flags?.length ? `<div class="overview-flags">${card.flags.map((flag) => `<span>${renderOverviewInline(flag)}</span>`).join("")}</div>` : ""}
     </article>
   `;
 }
 
 function renderCautiousDashboardOverviewCard(card) {
   const confidence = String(card.confidence || "low").toLowerCase();
+  const config = overviewCategoryConfig(card);
+  const priority = card.priority || "insufficient_data";
+  const categoryLabel = config.label;
   if (card.review) {
     const headline = card.headline || card.title || "Overview updated";
     const detailBullets = overviewDetailBullets(card);
     const detailsId = card.id || card.title || "overview";
     const detailsOpen = state.dashboardOverview.openCardDetails.has(detailsId);
     return `
-      <article class="dashboard-overview-card">
-        <div class="dashboard-overview-card-head">
-          <h4>${escapeHtml(card.title || "Overview")}</h4>
-          <span class="overview-confidence confidence-${escapeAttr(confidence)}">${escapeHtml(card.confidence || "low")}</span>
-        </div>
-        <p class="overview-card-headline">${escapeHtml(headline)}</p>
-        <details class="overview-card-details" data-overview-card-details="${escapeAttr(detailsId)}" ${detailsOpen ? "open" : ""}>
-          <summary>Learn more</summary>
-          ${detailBullets.length ? `<ul>${detailBullets.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : `<p>${escapeHtml(card.review)}</p>`}
+      <details class="dashboard-overview-card overview-category-expander" data-overview-card-details="${escapeAttr(detailsId)}" ${detailsOpen ? "open" : ""}>
+        <summary class="dashboard-overview-card-head">
+          <div class="overview-category-title">
+            <img src="${escapeAttr(config.icon)}" alt="">
+            <h4>${escapeHtml(categoryLabel)}</h4>
+          </div>
+          <p class="overview-card-headline">${renderOverviewInline(headline)}</p>
+          <div class="overview-card-badges">
+            <span class="overview-status status-${escapeAttr(overviewStatusClass(priority))}">${escapeHtml(overviewPriorityLabel(priority))}</span>
+            <span class="overview-confidence confidence-${escapeAttr(confidence)}">${escapeHtml(card.confidence || "low")}</span>
+          </div>
+          <span class="overview-learn-more">Learn more</span>
+        </summary>
+        <div class="overview-card-details">
+          <p>${renderOverviewInline(card.review)}</p>
+          ${detailBullets.length ? `<ul>${detailBullets.map((item) => `<li>${renderOverviewInline(item)}</li>`).join("")}</ul>` : ""}
           ${card.citations?.length ? renderOverviewCitations(card.citations) : ""}
-        </details>
-      </article>
+        </div>
+      </details>
     `;
   }
   return `
-    <article class="dashboard-overview-card">
-      <div class="dashboard-overview-card-head">
-        <h4>${escapeHtml(card.title || "Overview")}</h4>
-        <span class="overview-confidence confidence-${escapeAttr(confidence)}">${escapeHtml(card.confidence || "low")}</span>
-      </div>
-      <dl>
+    <details class="dashboard-overview-card overview-category-expander">
+      <summary class="dashboard-overview-card-head">
+        <div class="overview-category-title">
+          <img src="${escapeAttr(config.icon)}" alt="">
+          <h4>${escapeHtml(categoryLabel)}</h4>
+        </div>
+        <p class="overview-card-headline">${renderOverviewInline(card.meaning || card.title || "Overview updated")}</p>
+        <div class="overview-card-badges">
+          <span class="overview-status status-${escapeAttr(overviewStatusClass(priority))}">${escapeHtml(overviewPriorityLabel(priority))}</span>
+          <span class="overview-confidence confidence-${escapeAttr(confidence)}">${escapeHtml(card.confidence || "low")}</span>
+        </div>
+        <span class="overview-learn-more">Learn more</span>
+      </summary>
+      <dl class="overview-card-details">
         <div>
           <dt>Observed</dt>
           <dd>${renderOverviewList(card.observed, "No recent information found.")}</dd>
         </div>
         <div>
           <dt>Meaning</dt>
-          <dd>${escapeHtml(card.meaning || "Not enough information yet.")}</dd>
+          <dd>${renderOverviewInline(card.meaning || "Not enough information yet.")}</dd>
         </div>
         ${card.cannotConclude?.length ? `
           <div>
@@ -4629,7 +5423,7 @@ function renderCautiousDashboardOverviewCard(card) {
           </div>
         ` : ""}
       </dl>
-    </article>
+    </details>
   `;
 }
 
@@ -4650,8 +5444,18 @@ function renderOverviewBulletsFromText(text) {
     ?.map((item) => item.trim().replace(/[.!?]+$/, ""))
     .filter(Boolean)
     .slice(0, 7) || [];
-  if (!bullets.length) return `<p>${escapeHtml(text || "")}</p>`;
-  return `<ul>${bullets.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
+  if (!bullets.length) return `<p>${renderOverviewInline(text || "")}</p>`;
+  return `<ul>${bullets.map((item) => `<li>${renderOverviewInline(item)}</li>`).join("")}</ul>`;
+}
+
+function renderOverviewParagraphs(text) {
+  const sentences = String(text || "")
+    .match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g)
+    ?.map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 3) || [];
+  if (!sentences.length) return `<p>${renderOverviewInline(text || "")}</p>`;
+  return sentences.map((item) => `<p>${renderOverviewInline(item)}</p>`).join("");
 }
 
 function renderOverviewCitations(citations) {
@@ -4665,8 +5469,8 @@ function renderOverviewCitations(citations) {
 function renderOverviewList(items, fallback) {
   const list = Array.isArray(items) ? items.filter(Boolean).slice(0, 3) : [];
   if (!list.length) return escapeHtml(fallback);
-  if (list.length === 1) return escapeHtml(list[0]);
-  return `<ul>${list.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
+  if (list.length === 1) return renderOverviewInline(list[0]);
+  return `<ul>${list.map((item) => `<li>${renderOverviewInline(item)}</li>`).join("")}</ul>`;
 }
 
 function dashboardOverviewSignature() {
@@ -4726,7 +5530,7 @@ function validateDashboardOverviewPayload(payload) {
   const review = dashboardOverviewReviewFromPayload(payload);
   const allowedPriorities = new Set(["ok", "watch", "call_doctor", "urgent", "insufficient_data"]);
   const allowedConfidence = new Set(["high", "medium", "low"]);
-  const requiredCards = ["eat", "sleep", "hygiene_diaper", "health", "safety", "exercise", "play"];
+  const requiredCards = ["eat", "sleep", "hygiene_diaper", "exercise", "play", "safety", "health"];
   const allowedCards = new Set(requiredCards);
   if (!review || review.schemaVersion !== 1 || review.reviewStatus !== "ready") return false;
   if (!review.overall || !allowedPriorities.has(review.overall.priority) || !allowedConfidence.has(review.overall.confidence)) return false;
@@ -4742,6 +5546,82 @@ function validateDashboardOverviewPayload(payload) {
     && allowedConfidence.has(card.confidence)
     && card.review
   ));
+}
+
+function normalizeDashboardOverviewHistory(rawHistory) {
+  return (Array.isArray(rawHistory) ? rawHistory : [])
+    .filter((entry) => entry && validateDashboardOverviewPayload({ review: entry.review || entry.publishedReview }))
+    .map((entry) => {
+      const review = entry.review || entry.publishedReview;
+      return {
+        id: entry.id || `${entry.updatedAt || review.updatedAt || Date.now()}-${entry.source || "overview"}`,
+        updatedAt: entry.updatedAt || review.updatedAt || review.overall?.lastReviewedAt || "",
+        source: entry.source || "rules",
+        inputHash: entry.inputHash || review.reviewMeta?.inputHash || "",
+        model: entry.model || review.reviewMeta?.model || "",
+        review,
+        reviewTrace: entry.reviewTrace || null
+      };
+    })
+    .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
+    .slice(0, 12);
+}
+
+function syncDashboardOverviewHistory(rawHistory) {
+  const history = normalizeDashboardOverviewHistory(rawHistory);
+  if (history.length) state.dashboardOverview.history = history;
+  return state.dashboardOverview.history;
+}
+
+function currentDashboardOverviewHistoryEntry() {
+  const history = state.dashboardOverview.history || [];
+  if (!history.length) return null;
+  const selectedId = state.dashboardOverview.selectedHistoryId || "latest";
+  if (selectedId !== "latest") {
+    const selected = history.find((entry) => entry.id === selectedId);
+    if (selected) return selected;
+  }
+  return history[0];
+}
+
+function applyDashboardOverviewHistorySelection() {
+  const entry = currentDashboardOverviewHistoryEntry();
+  if (!entry) return false;
+  const overviewState = state.dashboardOverview;
+  overviewState.publishedReview = entry.review;
+  overviewState.pendingReview = null;
+  overviewState.status = "ready";
+  overviewState.source = entry.source || "rules";
+  overviewState.updatedAt = entry.updatedAt || entry.review?.updatedAt || "";
+  overviewState.serverInputHash = entry.inputHash || "";
+  overviewState.lastInputHash = dashboardOverviewSignature();
+  overviewState.reviewTrace = entry.reviewTrace || null;
+  overviewState.error = "";
+  return true;
+}
+
+function dashboardOverviewHistoryLabel(entry) {
+  const source = entry.source === "gpt" ? "GPT" : entry.source === "llama" ? "Ollama" : "Local";
+  const when = entry.updatedAt ? formatWhen(entry.updatedAt) : "Saved review";
+  const windowLabel = entry.review?.overall?.dataWindowLabel ? ` - ${entry.review.overall.dataWindowLabel}` : "";
+  return `${source} ${when}${windowLabel}`;
+}
+
+function renderDashboardOverviewHistoryPicker() {
+  const history = state.dashboardOverview.history || [];
+  if (!history.length) return "";
+  const selectedId = state.dashboardOverview.selectedHistoryId || "latest";
+  return `
+    <label class="overview-history-picker">
+      <span>Review</span>
+      <select data-dashboard-overview-history>
+        <option value="latest" ${selectedId === "latest" ? "selected" : ""}>Latest saved</option>
+        ${history.map((entry) => `
+          <option value="${escapeAttr(entry.id)}" ${selectedId === entry.id ? "selected" : ""}>${escapeHtml(dashboardOverviewHistoryLabel(entry))}</option>
+        `).join("")}
+      </select>
+    </label>
+  `;
 }
 
 function loadDashboardOverviewCache() {
@@ -4794,6 +5674,9 @@ function publishDashboardOverviewReviewAtomically(payload, clientInputHash) {
   overviewState.serverInputHash = payload.inputHash || "";
   overviewState.reviewTrace = payload.reviewTrace || null;
   overviewState.error = "";
+  overviewState.selectedHistoryId = "latest";
+  localStorage.setItem("tinyNewborn.dashboardOverview.selectedHistoryId", "latest");
+  syncDashboardOverviewHistory(payload.overviewHistory);
   saveDashboardOverviewCache();
 }
 

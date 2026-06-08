@@ -19,6 +19,7 @@ const {
   loadDoctorGuideline,
   loadMilestoneLog,
   loadRecent: loadStoredRecent,
+  writeJson,
   saveAppData,
   saveRecent
 } = require("./dataStore");
@@ -29,10 +30,12 @@ const DEFAULT_DATA_ROOT = path.join("C:", "codelab", "databases", "TinyNewbornLo
 const DATA_ROOT = process.env.DATA_ROOT ? path.resolve(process.env.DATA_ROOT) : DEFAULT_DATA_ROOT;
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(DATA_ROOT, "prod");
 const SHARED_DATA_DIR = process.env.SHARED_DATA_DIR ? path.resolve(process.env.SHARED_DATA_DIR) : path.join(DATA_ROOT, "shared");
+const SCHEDULE_LOGS_PATH = path.join(DATA_DIR, "schedule_logs.json");
 const APP_DATA_MODE = process.env.APP_DATA_MODE || (process.env.DATA_DIR ? path.basename(DATA_DIR) : "prod");
 const PUBLIC_DIR = path.join(__dirname, "..", "frontend");
 const POOP_COLORS_PATH = path.join(SHARED_DATA_DIR, "poop-colors.json");
 const DOCTOR_GUIDELINE_MD_PATH = path.join(SHARED_DATA_DIR, "doctor_guideline.md");
+const SLEEP_SCHEDULE_TEMPLATE_DIR = path.join(SHARED_DATA_DIR, "sleep_schedule_template");
 const OVERVIEW_TREND_30D_PATH = path.join(DATA_DIR, "analytics", "trends", "recent-30d.json");
 const ACTIVITY_CONFIG_PATH = path.join(SHARED_DATA_DIR, "activity_config.json");
 const ACTIVITY_CONFIG = readJson(
@@ -128,6 +131,31 @@ function readJson(filePath, fallback) {
 function readText(filePath, fallback = "") {
   if (!fs.existsSync(filePath)) return fallback;
   return fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, "");
+}
+
+function loadScheduleTemplates() {
+  if (!fs.existsSync(SLEEP_SCHEDULE_TEMPLATE_DIR)) return [];
+  return fs.readdirSync(SLEEP_SCHEDULE_TEMPLATE_DIR)
+    .filter((file) => file.toLowerCase().endsWith(".json"))
+    .map((file) => readJson(path.join(SLEEP_SCHEDULE_TEMPLATE_DIR, file), null))
+    .filter(Boolean)
+    .sort((a, b) => {
+      const aAge = cleanNumber(a.ageRange?.min, 0) * (a.ageRange?.unit === "weeks" ? 0.25 : 1);
+      const bAge = cleanNumber(b.ageRange?.min, 0) * (b.ageRange?.unit === "weeks" ? 0.25 : 1);
+      return aAge - bAge;
+    });
+}
+
+function loadScheduleLogs() {
+  const data = readJson(SCHEDULE_LOGS_PATH, { schedule_logs: [] });
+  const logs = Array.isArray(data) ? data : arrayValue(data.schedule_logs);
+  return logs
+    .filter((log) => log && typeof log.date === "string")
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+}
+
+function saveScheduleLogs(logs) {
+  writeJson(SCHEDULE_LOGS_PATH, { schedule_logs: arrayValue(logs) });
 }
 
 function objectMap(value) {
@@ -2442,6 +2470,32 @@ async function handleUpdateOverviewSettings(req, res) {
   sendJson(res, 200, { overview_settings: data.overview_settings });
 }
 
+async function handleUpdateScheduleLog(req, res, date) {
+  const input = objectMap(await readBody(req));
+  const cleanDate = String(date || input.date || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) {
+    sendJson(res, 400, { error: "Schedule log date must use YYYY-MM-DD." });
+    return;
+  }
+
+  const logs = loadScheduleLogs();
+  const existing = logs.find((log) => log.date === cleanDate) || {};
+  const nextLog = {
+    ...existing,
+    date: cleanDate,
+    templateId: typeof input.templateId === "string" ? input.templateId : existing.templateId || "",
+    rows: Array.isArray(input.rows) ? input.rows : arrayValue(existing.rows),
+    notes: typeof input.notes === "string" ? input.notes : existing.notes || "",
+    createdAt: existing.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  const nextLogs = logs.filter((log) => log.date !== cleanDate);
+  nextLogs.push(nextLog);
+  saveScheduleLogs(nextLogs);
+  sendJson(res, 200, { schedule_log: nextLog, schedule_logs: loadScheduleLogs() });
+}
+
 async function handleGenerateAllMetrics(req, res) {
   const result = saveAllMetrics();
   const { metrics, ...summary } = result;
@@ -2730,6 +2784,26 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/doctor-guideline") {
       sendJson(res, 200, loadData().doctor_guideline || {});
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/schedule-templates") {
+      sendJson(res, 200, { templates: loadScheduleTemplates() });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/schedule-logs") {
+      sendJson(res, 200, { schedule_logs: loadScheduleLogs() });
+      return;
+    }
+
+    const scheduleLogMatch = url.pathname.match(/^\/api\/schedule-logs\/(\d{4}-\d{2}-\d{2})\/?$/);
+    if (scheduleLogMatch) {
+      if (!["PUT", "POST", "PATCH"].includes(req.method)) {
+        sendJson(res, 405, { error: `Use PUT, POST, or PATCH to update a schedule log. Received ${req.method}.` });
+        return;
+      }
+      await handleUpdateScheduleLog(req, res, scheduleLogMatch[1]);
       return;
     }
 
