@@ -19,6 +19,7 @@ final class LogStore: ObservableObject {
     private var isRetryingPendingSync = false
 
     init() {
+        UserDefaults.standard.register(defaults: [WatchScheduleNotifications.storageKey: true])
         decoder.dateDecodingStrategy = .iso8601
         encoder.dateEncodingStrategy = .iso8601
         loadEntries()
@@ -784,6 +785,7 @@ final class LogStore: ObservableObject {
         do {
             let remoteLogs = try await WebLogSyncClient.shared.fetchLogs()
             mergeRemoteLogs(remoteLogs)
+            await refreshScheduleNotifications()
         } catch {
             // Offline is acceptable; pending local logs remain queued.
         }
@@ -953,6 +955,24 @@ final class LogStore: ObservableObject {
         content.sound = .default
         let request = UNNotificationRequest(identifier: "boobie-\(UUID().uuidString)", content: content, trigger: nil)
         try? await UNUserNotificationCenter.current().add(request)
+    }
+
+    private func refreshScheduleNotifications() async {
+        guard UserDefaults.standard.bool(forKey: WatchScheduleNotifications.storageKey) else {
+            WatchScheduleReminderPlanner.cancel(identifierPrefix: WatchScheduleNotifications.identifierPrefix)
+            return
+        }
+        guard let scheduleLogs = try? await WebLogSyncClient.shared.fetchScheduleLogs() else {
+            return
+        }
+
+        let today = WatchScheduleReminderPlanner.todayString()
+        let rows = scheduleLogs.first(where: { $0.date == today })?.rows ?? []
+        await WatchScheduleReminderPlanner.reschedule(
+            rows: rows,
+            date: today,
+            identifierPrefix: WatchScheduleNotifications.identifierPrefix
+        )
     }
 
     private func notifyTransferredLogs(_ items: [PendingSyncItem]) async {
@@ -1128,6 +1148,137 @@ private struct PendingSyncItem: Identifiable, Codable, Hashable {
         title = try container.decodeIfPresent(String.self, forKey: .title) ?? "Log"
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         body = try container.decode(Data.self, forKey: .body)
+    }
+}
+
+enum WatchScheduleReminderPlanner {
+    static func cancel(identifierPrefix: String) {
+        UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
+            let identifiers = requests
+                .filter { $0.identifier.hasPrefix(identifierPrefix) }
+                .map(\.identifier)
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
+        }
+    }
+
+    static func todayString(now: Date = Date()) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar.current
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: now)
+    }
+
+    static func reschedule(rows: [WatchScheduleRow], date: String, identifierPrefix: String) async {
+        let center = UNUserNotificationCenter.current()
+        let pending = await center.pendingNotificationRequests()
+            .filter { $0.identifier.hasPrefix(identifierPrefix) }
+            .map(\.identifier)
+        center.removePendingNotificationRequests(withIdentifiers: pending)
+
+        let now = Date()
+        for (index, row) in rows.enumerated() {
+            guard let startDate = startDate(for: row, date: date), startDate > now else {
+                continue
+            }
+
+            let content = UNMutableNotificationContent()
+            let activity = clean(row.activity, fallback: "Scheduled activity")
+            content.title = "Schedule: \(activity)"
+            content.body = reminderBody(for: row)
+            content.sound = .default
+
+            let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: startDate)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+            let request = UNNotificationRequest(
+                identifier: "\(identifierPrefix)\(date)-\(index)",
+                content: content,
+                trigger: trigger
+            )
+            try? await center.add(request)
+        }
+    }
+
+    private static func reminderBody(for row: WatchScheduleRow) -> String {
+        let activity = clean(row.activity, fallback: "Activity")
+        let lower = activity.lowercased()
+        if lower.contains("feed") {
+            if let goal = row.feedGoalOz {
+                return "\(activity) now. Goal \(formatOunces(goal))."
+            }
+            return "\(activity) now."
+        }
+        if lower.contains("nap") || lower.contains("sleep") {
+            return "\(activity) now. Sleep goal \(clean(row.sleepGoal ?? row.plannedDuration, fallback: "scheduled"))."
+        }
+        if lower.contains("play") {
+            return "\(activity) now. \(clean(row.playGoal, fallback: "Follow today's plan"))."
+        }
+        return "\(activity) now. Goal \(clean(row.plannedDuration, fallback: "scheduled"))."
+    }
+
+    private static func startDate(for row: WatchScheduleRow, date: String) -> Date? {
+        guard let timeOfDay = row.timeOfDay,
+              let range = scheduleTimeRange(timeOfDay),
+              let base = dayStart(date) else {
+            return nil
+        }
+        return Calendar.current.date(byAdding: .minute, value: range.start, to: base)
+    }
+
+    private static func scheduleTimeRange(_ value: String) -> (start: Int, end: Int)? {
+        let parts = value.split(separator: "-", maxSplits: 1).map { String($0) }
+        guard let first = parts.first else { return nil }
+        let fallback = parts.dropFirst().first.flatMap(meridiem) ?? meridiem(first)
+        guard let start = timeToMinutes(first, fallbackMeridiem: fallback) else { return nil }
+        let end = parts.dropFirst().first.flatMap { timeToMinutes($0, fallbackMeridiem: fallback) } ?? start + 30
+        return (start, end < start ? end + 24 * 60 : end)
+    }
+
+    private static func meridiem(_ value: String) -> String? {
+        let upper = value.uppercased()
+        if upper.contains("AM") { return "AM" }
+        if upper.contains("PM") { return "PM" }
+        return nil
+    }
+
+    private static func timeToMinutes(_ value: String, fallbackMeridiem: String?) -> Int? {
+        let cleanValue = value
+            .uppercased()
+            .replacingOccurrences(of: "AM", with: "")
+            .replacingOccurrences(of: "PM", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let pieces = cleanValue.split(separator: ":").map { String($0) }
+        guard let hourText = pieces.first,
+              var hour = Int(hourText) else {
+            return nil
+        }
+        let minute = pieces.dropFirst().first.flatMap(Int.init) ?? 0
+        let marker = meridiem(value) ?? fallbackMeridiem
+        if marker == "PM", hour < 12 { hour += 12 }
+        if marker == "AM", hour == 12 { hour = 0 }
+        return hour * 60 + minute
+    }
+
+    private static func dayStart(_ date: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar.current
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: date)
+    }
+
+    private static func formatOunces(_ value: Double) -> String {
+        let rounded = (value * 10).rounded() / 10
+        if rounded == rounded.rounded() {
+            return "\(Int(rounded)) oz"
+        }
+        return "\(rounded) oz"
+    }
+
+    private static func clean(_ value: String?, fallback: String) -> String {
+        let text = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? fallback : text
     }
 }
 
