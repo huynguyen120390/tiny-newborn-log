@@ -947,33 +947,22 @@ function renderSchedule() {
   const scheduleLog = currentScheduleLog();
   const template = selectedScheduleTemplate(scheduleLog.templateId);
   const rows = currentScheduleRows(scheduleLog, template);
+  const locked = isPastScheduleDate(state.selectedScheduleDate);
   panel.innerHTML = `
     <section class="schedule-info">
       <div>
-        <span class="eyebrow">Doctor template</span>
         <h3>${escapeHtml(template.name || "Daily schedule")}</h3>
         <p>${escapeHtml(scheduleTemplateSummary(template))}</p>
       </div>
       <div class="schedule-controls">
-        <button class="schedule-notification-button${("Notification" in window) && Notification.permission === "denied" ? " blocked" : ""}" type="button" data-schedule-notifications>
-          ${scheduleNotificationsButtonText()}
-        </button>
         <label class="schedule-template-picker">
           <span>Date</span>
           <input id="schedule-date-select" type="date" value="${escapeAttr(state.selectedScheduleDate)}">
         </label>
-        <label class="schedule-template-picker">
-          <span>Age range</span>
-          <select id="schedule-template-select">
-            ${templates.map((item) => `
-              <option value="${escapeAttr(item.id)}" ${item.id === template.id ? "selected" : ""}>${escapeHtml(item.ageRange?.label || item.name || item.id)}</option>
-            `).join("")}
-          </select>
-        </label>
       </div>
     </section>
     <section class="schedule-timeline" aria-label="Daily schedule timeline">
-      ${rows.map((row, index) => renderScheduleSlot(row, index)).join("")}
+      ${rows.map((row, index) => renderScheduleSlot(row, index, rows, locked)).join("")}
     </section>
   `;
 
@@ -983,10 +972,6 @@ function renderSchedule() {
     state.selectedScheduleTemplateId = currentScheduleLog().templateId || bestScheduleTemplateIdForDate(state.selectedScheduleDate);
     renderSchedule();
   });
-  panel.querySelector("#schedule-template-select")?.addEventListener("change", (event) => {
-    updateScheduleLogTemplate(event.target.value);
-  });
-  panel.querySelector("[data-schedule-notifications]")?.addEventListener("click", toggleScheduleNotifications);
   panel.querySelectorAll("[data-schedule-edit]").forEach((input) => {
     input.addEventListener("change", saveScheduleEdit);
   });
@@ -1053,7 +1038,7 @@ function currentScheduleLog() {
 function scheduleLogForDate(date) {
   return (state.scheduleLogs || []).find((log) => log.date === date) || {
     date,
-    templateId: bestScheduleTemplateIdForDate(date),
+    templateId: defaultScheduleTemplateIdForDate(date),
     rows: []
   };
 }
@@ -1088,22 +1073,27 @@ async function persistScheduleLog(nextLog) {
 
 function buildScheduleLog(date, templateId, rows) {
   return {
-    ...currentScheduleLog(),
+    ...scheduleLogForDate(date),
     date,
     templateId,
     rows
   };
 }
 
-function updateScheduleLogTemplate(templateId) {
+async function applyScheduleTemplateToToday(templateId) {
   const template = selectedScheduleTemplate(templateId);
   state.selectedScheduleTemplateId = template.id;
   localStorage.setItem("tinyNewborn.schedule.selectedTemplateId", state.selectedScheduleTemplateId);
-  persistScheduleLog(buildScheduleLog(state.selectedScheduleDate, template.id, (template.rows || []).map((row) => ({ ...row }))));
+  await persistScheduleLog(buildScheduleLog(todayString(), template.id, (template.rows || []).map((row) => ({ ...row }))));
   renderSchedule();
 }
 
 function saveScheduleEdit(event) {
+  if (isPastScheduleDate(state.selectedScheduleDate)) {
+    renderSchedule();
+    showToast("Past schedule logs are frozen.");
+    return;
+  }
   const input = event.currentTarget;
   const scheduleLog = currentScheduleLog();
   const template = selectedScheduleTemplate(scheduleLog.templateId);
@@ -1111,8 +1101,21 @@ function saveScheduleEdit(event) {
   const field = input.dataset.scheduleField;
   if (index === undefined || !field) return;
   const rows = currentScheduleRows(scheduleLog, template).map((row) => ({ ...row }));
-  rows[Number(index)] = { ...objectGuideValue(rows[Number(index)]), [field]: input.value };
+  const value = field === "timeOfDay" && input.dataset.scheduleTimePart
+    ? scheduleTimePickerValue(input.closest("[data-schedule-time-picker]"))
+    : input.value;
+  rows[Number(index)] = { ...objectGuideValue(rows[Number(index)]), [field]: value };
   persistScheduleLog(buildScheduleLog(state.selectedScheduleDate, template.id, rows));
+  if (field === "timeOfDay") renderSchedule();
+}
+
+function defaultScheduleTemplateIdForDate(date = todayString()) {
+  if (!isPastScheduleDate(date) && state.selectedScheduleTemplateId) return state.selectedScheduleTemplateId;
+  return bestScheduleTemplateIdForDate(date);
+}
+
+function isPastScheduleDate(date) {
+  return String(date || "") < todayString();
 }
 
 function bestScheduleTemplateIdForDate(date = todayString()) {
@@ -1161,26 +1164,30 @@ function formatScheduleDurationValue(value) {
   return formatCompactDurationParts(hours, minutes);
 }
 
-function renderScheduleSlot(row, index) {
+function renderScheduleSlot(row, index, rows = [], locked = false) {
   const kind = scheduleActivityKind(row);
   const actualItems = scheduleActualItemsForSlot(row);
   const timeState = scheduleSlotTimeState(row);
   const goalState = scheduleGoalState(row);
+  const timeConflict = scheduleTimeConflictMessage(rows, index);
   return `
-    <article class="schedule-slot schedule-slot-${escapeAttr(kind)} schedule-slot-${escapeAttr(timeState)}${isScheduleAfterFivePm(row) ? " schedule-after-5pm" : ""}">
+    <article class="schedule-slot schedule-slot-${escapeAttr(kind)} schedule-slot-${escapeAttr(timeState)}${timeConflict ? " schedule-slot-conflict" : ""}${locked ? " schedule-slot-locked" : ""}${isScheduleAfterFivePm(row) ? " schedule-after-5pm" : ""}">
       <div class="schedule-time-node">
         <span class="schedule-edge schedule-edge-before" aria-hidden="true"></span>
         <span class="schedule-dot" aria-hidden="true"></span>
         <span class="schedule-edge schedule-edge-after" aria-hidden="true"></span>
-        <input class="schedule-time-input" data-schedule-edit data-schedule-index="${index}" data-schedule-field="timeOfDay" aria-label="Slot time" value="${escapeAttr(row.timeOfDay || "")}">
-        <input class="schedule-duration-input" data-schedule-edit data-schedule-index="${index}" data-schedule-field="plannedDuration" aria-label="Slot duration" value="${escapeAttr(formatScheduleDurationValue(row.plannedDuration || ""))}">
       </div>
       <div class="schedule-card">
         <div class="schedule-card-main">
           <img src="${escapeAttr(scheduleActivityIcon(row))}" alt="">
           <div>
             <h3><span class="schedule-goal-check ${escapeAttr(goalState.state)}" title="${escapeAttr(goalState.label)}">✓</span>${escapeHtml(row.activity || "Activity")}</h3>
-            ${renderScheduleGoalControl(row, kind, index)}
+            <div class="schedule-card-time-controls">
+              ${renderScheduleTimePicker(row, index, locked)}
+              <input class="schedule-duration-input" data-schedule-edit data-schedule-index="${index}" data-schedule-field="plannedDuration" aria-label="Slot duration" value="${escapeAttr(formatScheduleDurationValue(row.plannedDuration || ""))}" ${locked ? "disabled" : ""}>
+            </div>
+            ${timeConflict ? `<p class="schedule-time-conflict">${escapeHtml(timeConflict)}</p>` : ""}
+            ${renderScheduleGoalControl(row, kind, index, locked)}
           </div>
         </div>
         <div class="schedule-actual">
@@ -1199,6 +1206,80 @@ function renderScheduleSlot(row, index) {
       </div>
     </article>
   `;
+}
+
+function renderScheduleTimePicker(row, index, locked = false) {
+  const parts = scheduleTimePickerParts(row.timeOfDay);
+  return `
+    <div class="schedule-time-picker" data-schedule-time-picker data-schedule-index="${index}" aria-label="Slot time">
+      ${renderScheduleTimeInput(index, "start", "Start time", parts.startValue, locked)}
+      <span class="schedule-time-separator" aria-hidden="true">-</span>
+      ${renderScheduleTimeInput(index, "end", "End time", parts.endValue, locked)}
+    </div>
+  `;
+}
+
+function renderScheduleTimeInput(index, part, label, value, locked = false) {
+  return `
+    <input class="schedule-time-input" type="time" data-schedule-edit data-schedule-index="${index}" data-schedule-field="timeOfDay" data-schedule-time-part="${escapeAttr(part)}" aria-label="${escapeAttr(label)}" value="${escapeAttr(value)}" ${locked ? "disabled" : ""}>
+  `;
+}
+
+function scheduleTimePickerParts(value) {
+  const range = scheduleTimeRange(value) || { start: 7 * 60, end: 7 * 60 + 30 };
+  const start = scheduleTimePartsFromMinutes(range.start);
+  const end = scheduleTimePartsFromMinutes(range.end);
+  return {
+    startValue: start.value,
+    endValue: end.value
+  };
+}
+
+function scheduleTimePartsFromMinutes(totalMinutes) {
+  const normalized = ((Math.round(totalMinutes) % (24 * 60)) + (24 * 60)) % (24 * 60);
+  const hour24 = Math.floor(normalized / 60);
+  const minute = String(normalized % 60).padStart(2, "0");
+  const hour = String(hour24).padStart(2, "0");
+  return { value: `${hour}:${minute}` };
+}
+
+function scheduleTimePickerValue(container) {
+  const start = formatScheduleTimeInputValue(container.querySelector('[data-schedule-time-part="start"]')?.value);
+  const end = formatScheduleTimeInputValue(container.querySelector('[data-schedule-time-part="end"]')?.value);
+  return `${start}-${end}`;
+}
+
+function formatScheduleTimeInputValue(value) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return "";
+  const hour24 = Number(match[1]);
+  const minute = match[2];
+  const meridiem = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 || 12;
+  return `${hour12}:${minute} ${meridiem}`;
+}
+
+function scheduleTimeConflictMessage(rows, changedIndex) {
+  const index = Number(changedIndex);
+  const current = scheduleTimeRange(rows[index]?.timeOfDay);
+  if (!current) return "Choose a valid time range.";
+  if (current.end <= current.start) return "End time must be after start time.";
+
+  const previous = index > 0 ? scheduleTimeRange(rows[index - 1]?.timeOfDay) : null;
+  if (previous && previous.end !== current.start) {
+    return previous.end > current.start
+      ? "This start time overlaps the previous slot."
+      : "This start time leaves a gap after the previous slot.";
+  }
+
+  const next = index < rows.length - 1 ? scheduleTimeRange(rows[index + 1]?.timeOfDay) : null;
+  if (next && current.end !== next.start) {
+    return current.end > next.start
+      ? "This end time overlaps the next slot."
+      : "This end time leaves a gap before the next slot.";
+  }
+
+  return "";
 }
 
 function isScheduleAfterFivePm(row) {
@@ -1340,7 +1421,8 @@ function checkScheduleNotifications() {
     const range = scheduleTimeRange(row.timeOfDay);
     if (!range) return;
     const start = scheduleMinutesToMs(range.start, notificationDate);
-    const ageMs = now - start;
+    const reminderAt = start - 60 * 1000;
+    const ageMs = now - reminderAt;
     if (ageMs < 0 || ageMs > 75 * 1000) return;
     const key = `${notificationDate}-${index}-${row.timeOfDay}-${row.activity}`;
     if (state.sentScheduleNotifications.has(key)) return;
@@ -1359,32 +1441,40 @@ function saveSentScheduleNotifications() {
 function sendScheduleNotification(row) {
   const activity = row.activity || "Schedule";
   const title = `Schedule: ${activity}`;
+  const goal = scheduleNotificationGoal(row);
   const bodyParts = [
-    row.timeOfDay || "",
-    scheduleActivityKind(row) === "feeding" ? `Goal ${scheduleFeedGoalOz(row)} oz` : "",
-    scheduleActivityKind(row) === "sleep" ? `Goal ${formatScheduleDurationValue(row.sleepGoal || row.plannedDuration || "")}` : "",
-    scheduleActivityKind(row) === "play" ? (row.playGoal || "Play time") : ""
+    row.timeOfDay ? `Time ${row.timeOfDay}` : "",
+    `Activity ${activity}`,
+    goal ? `Goal ${goal}` : ""
   ].filter(Boolean);
   try {
     new Notification(title, {
-      body: bodyParts.join(" · "),
+      body: bodyParts.join(" | "),
       icon: scheduleActivityIcon(row),
       tag: `tiny-newborn-schedule-${todayString()}-${row.timeOfDay}`,
       renotify: true
     });
   } catch {
-    showToast(`${title}: ${bodyParts.join(" · ")}`);
+    showToast(`${title}: ${bodyParts.join(" | ")}`);
   }
   showToast(`${activity} time`);
 }
 
-function renderScheduleGoalControl(row, kind, index) {
+function scheduleNotificationGoal(row) {
+  const kind = scheduleActivityKind(row);
+  if (kind === "feeding") return `${scheduleFeedGoalOz(row)} oz`;
+  if (kind === "sleep") return formatScheduleDurationValue(row.sleepGoal || row.plannedDuration || "");
+  if (kind === "play") return row.playGoal || row.plannedDuration || "Play time";
+  return row.plannedDuration || "";
+}
+
+function renderScheduleGoalControl(row, kind, index, locked = false) {
   if (kind === "feeding") {
     const value = scheduleFeedGoalOz(row);
     return `
       <label class="schedule-goal-control">
         <span>Goal</span>
-        <select data-schedule-edit data-schedule-index="${index}" data-schedule-field="feedGoalOz" aria-label="Feeding ounces goal">
+        <select data-schedule-edit data-schedule-index="${index}" data-schedule-field="feedGoalOz" aria-label="Feeding ounces goal" ${locked ? "disabled" : ""}>
           ${[1, 2, 3, 4, 5, 6, 7, 8].map((amount) => `<option value="${amount}" ${amount === value ? "selected" : ""}>${amount} oz</option>`).join("")}
         </select>
       </label>
@@ -1394,7 +1484,7 @@ function renderScheduleGoalControl(row, kind, index) {
     return `
       <label class="schedule-goal-control">
         <span>Sleep goal</span>
-        <input data-schedule-edit data-schedule-index="${index}" data-schedule-field="sleepGoal" aria-label="Sleep goal" value="${escapeAttr(formatScheduleDurationValue(row.sleepGoal || row.plannedDuration || ""))}">
+        <input data-schedule-edit data-schedule-index="${index}" data-schedule-field="sleepGoal" aria-label="Sleep goal" value="${escapeAttr(formatScheduleDurationValue(row.sleepGoal || row.plannedDuration || ""))}" ${locked ? "disabled" : ""}>
       </label>
     `;
   }
@@ -1402,7 +1492,7 @@ function renderScheduleGoalControl(row, kind, index) {
     return `
       <label class="schedule-goal-control">
         <span>Activity</span>
-        <select data-schedule-edit data-schedule-index="${index}" data-schedule-field="playGoal" aria-label="Playtime activity goal">
+        <select data-schedule-edit data-schedule-index="${index}" data-schedule-field="playGoal" aria-label="Playtime activity goal" ${locked ? "disabled" : ""}>
           ${["Tummy time", "Baby gym", "Reading", "Outdoor time", "Free play"].map((option) => `<option ${option === (row.playGoal || "Free play") ? "selected" : ""}>${option}</option>`).join("")}
         </select>
       </label>
@@ -2965,6 +3055,8 @@ function setupSettingsPanel() {
   document.getElementById("settings-height-unit").addEventListener("change", saveSettingsHeightUnit);
   document.getElementById("test-reminder-voice").addEventListener("click", testReminderVoice);
   document.getElementById("schedule-notifications-settings-toggle").addEventListener("change", toggleScheduleNotifications);
+  document.getElementById("settings-schedule-template-apply").addEventListener("click", applySettingsScheduleTemplate);
+  document.getElementById("settings-schedule-template-reset").addEventListener("click", resetTodayScheduleTemplate);
   document.getElementById("generate-analytics-button").addEventListener("click", generateAnalyticsJson);
   document.getElementById("generate-trends-button").addEventListener("click", generateTrendJson);
   document.getElementById("clear-data-button").addEventListener("click", clearData);
@@ -3486,6 +3578,7 @@ function renderSettings() {
   syncOverviewSettingsInputs();
   renderVoiceOptions();
   renderScheduleNotificationSettings();
+  renderSettingsScheduleTemplate();
 
   const container = document.getElementById("category-settings");
   if (!container) return;
@@ -3520,6 +3613,47 @@ function renderScheduleNotificationSettings() {
   toggle.disabled = isBlocked || !("Notification" in window);
   toggle.closest(".settings-switch")?.classList.toggle("blocked", isBlocked || !("Notification" in window));
   if (label) label.textContent = scheduleNotificationsButtonText();
+}
+
+function renderSettingsScheduleTemplate() {
+  const select = document.getElementById("settings-schedule-template-select");
+  if (!select) return;
+  const templates = state.scheduleTemplates || [];
+  const selectedId = selectedScheduleTemplate(state.selectedScheduleTemplateId).id;
+  select.disabled = !templates.length;
+  select.innerHTML = templates.length
+    ? templates.map((template) => `
+        <option value="${escapeAttr(template.id)}" ${template.id === selectedId ? "selected" : ""}>${escapeHtml(template.ageRange?.label || template.name || template.id)}</option>
+      `).join("")
+    : `<option value="">No schedule templates</option>`;
+}
+
+async function applySettingsScheduleTemplate() {
+  const select = document.getElementById("settings-schedule-template-select");
+  if (!select?.value) return;
+  await applyScheduleTemplateToToday(select.value);
+  renderSettings();
+  showToast("Schedule template applied to today.");
+}
+
+async function resetTodayScheduleTemplate() {
+  const templateId = state.selectedScheduleTemplateId || document.getElementById("settings-schedule-template-select")?.value;
+  if (!templateId) return;
+  const ok = window.confirm("Reset today's schedule back to the doctor template? This will replace today's edited times and goals.");
+  if (!ok) return;
+  try {
+    const result = await fetchJson(`/api/schedule-templates/${encodeURIComponent(templateId)}/reset`, { method: "POST" });
+    if (Array.isArray(result.templates)) state.scheduleTemplates = result.templates;
+    const template = result.template || selectedScheduleTemplate(templateId);
+    state.selectedScheduleTemplateId = template.id;
+    localStorage.setItem("tinyNewborn.schedule.selectedTemplateId", state.selectedScheduleTemplateId);
+    await persistScheduleLog(buildScheduleLog(todayString(), template.id, (template.rows || []).map((row) => ({ ...row }))));
+    renderSettings();
+    renderSchedule();
+    showToast("Today was reset to the doctor template.");
+  } catch (error) {
+    showToast(`Reset failed: ${error.message}`);
+  }
 }
 
 function cleanOverviewSettings(value = {}) {

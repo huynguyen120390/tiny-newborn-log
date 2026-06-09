@@ -617,6 +617,7 @@ main {
 .schedule-template-picker input,
 .schedule-goal-control select,
 .schedule-goal-control input,
+.schedule-time-select,
 .schedule-time-input,
 .schedule-duration-input {
   min-height: 38px;
@@ -634,7 +635,7 @@ main {
 
 .schedule-slot {
   display: grid;
-  grid-template-columns: minmax(154px, 190px) minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr);
   gap: 14px;
   min-height: 112px;
 }
@@ -642,7 +643,7 @@ main {
 .schedule-time-node {
   position: relative;
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
+  grid-template-columns: 18px;
   grid-template-rows: 1fr auto auto 1fr;
   column-gap: 10px;
   align-items: center;
@@ -682,22 +683,48 @@ main {
   box-shadow: 0 0 0 5px rgba(36, 117, 111, 0.12);
 }
 
-.schedule-time-input {
+.schedule-time-picker {
   grid-column: 2;
   grid-row: 2;
+  display: grid;
+  grid-template-columns: minmax(124px, 1fr) 18px minmax(124px, 1fr);
+  gap: 6px;
   width: 100%;
+  align-items: center;
+}
+
+.schedule-time-select {
+  min-width: 0;
+  padding: 0 4px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.schedule-time-separator {
+  display: inline-grid;
+  min-width: 18px;
+  place-items: center;
+  color: var(--muted);
+  font-weight: 950;
+  text-align: center;
+}
+
+.schedule-time-input {
+  min-width: 0;
+  width: 100%;
+  padding: 0 7px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 .schedule-duration-input {
-  grid-column: 2;
-  grid-row: 3;
   width: 112px;
-  margin-top: 7px;
   color: #6f7772;
   font-weight: 950;
 }
 
-.schedule-after-5pm .schedule-time-input {
+.schedule-after-5pm .schedule-time-picker .schedule-time-select,
+.schedule-after-5pm .schedule-time-picker .schedule-time-input {
   border-color: rgba(134, 104, 188, 0.32);
   background: #f3efff;
   color: #5f4a8b;
@@ -761,6 +788,41 @@ main {
   animation: schedule-dot-pulse 1.8s ease-in-out infinite;
 }
 
+.schedule-slot-conflict .schedule-card {
+  border-color: rgba(199, 62, 62, 0.58);
+  background:
+    linear-gradient(90deg, rgba(255, 241, 241, 0.98), rgba(255, 253, 248, 0.9)),
+    rgba(255, 255, 255, 0.94);
+}
+
+.schedule-slot-conflict .schedule-dot {
+  border-color: #c73e3e;
+  box-shadow: 0 0 0 5px rgba(199, 62, 62, 0.13);
+}
+
+.schedule-slot-conflict .schedule-time-input {
+  border-color: rgba(199, 62, 62, 0.5);
+  background: #fff7f7;
+}
+
+.schedule-slot-locked .schedule-card {
+  border-style: dashed;
+}
+
+.schedule-slot-locked input,
+.schedule-slot-locked select {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.schedule-time-conflict {
+  margin: -2px 0 10px;
+  color: #a83232;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.3;
+}
+
 @keyframes schedule-current-glow {
   0%,
   100% {
@@ -810,6 +872,20 @@ main {
   margin-bottom: 8px;
   color: var(--primary-dark);
   font-size: 20px;
+}
+
+.schedule-card-time-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.schedule-card-time-controls .schedule-time-picker {
+  grid-column: auto;
+  grid-row: auto;
+  width: min(100%, 300px);
 }
 
 .schedule-goal-check {
@@ -4148,6 +4224,13 @@ main {
   font-weight: 800;
 }
 
+.settings-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
 .settings-switch {
   display: inline-grid;
   grid-template-columns: 50px auto;
@@ -5483,7 +5566,7 @@ input[type="range"] {
   }
 
   .schedule-slot {
-    grid-template-columns: 148px minmax(0, 1fr);
+    grid-template-columns: 22px minmax(0, 1fr);
     gap: 10px;
   }
 
@@ -5505,15 +5588,26 @@ input[type="range"] {
   }
 
   .schedule-time-node {
-    grid-template-columns: 14px 128px;
+    grid-template-columns: 14px;
     column-gap: 6px;
   }
 
+  .schedule-card-time-controls .schedule-time-picker {
+    flex: 1 0 100%;
+    width: 100%;
+    grid-template-columns: minmax(122px, 1fr) 16px minmax(122px, 1fr);
+    gap: 5px;
+  }
+
+  .schedule-time-separator {
+    min-width: 16px;
+    font-size: 12px;
+  }
+
   .schedule-time-input {
-    width: 128px;
     min-height: 34px;
-    padding: 0 7px;
-    font-size: 11px;
+    padding: 0 5px;
+    font-size: 12px;
   }
 
   .schedule-duration-input {

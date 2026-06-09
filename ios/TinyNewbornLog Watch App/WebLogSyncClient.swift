@@ -52,6 +52,16 @@ struct WatchScheduleLogResponse: Decodable {
 
 struct WatchScheduleLog: Decodable {
     let date: String
+    let templateId: String?
+    let rows: [WatchScheduleRow]
+}
+
+struct WatchScheduleTemplateResponse: Decodable {
+    let templates: [WatchScheduleTemplate]
+}
+
+struct WatchScheduleTemplate: Decodable {
+    let id: String
     let rows: [WatchScheduleRow]
 }
 
@@ -222,6 +232,19 @@ actor WebLogSyncClient {
         }
     }
 
+    func fetchScheduleTemplates() async throws -> [WatchScheduleTemplate] {
+        do {
+            let baseURL = try await reachableBaseURL()
+            return try await fetchScheduleTemplates(from: baseURL)
+        } catch {
+            selectedBaseURL = nil
+            UserDefaults.standard.removeObject(forKey: selectedBaseURLKey)
+
+            let baseURL = try await reachableBaseURL()
+            return try await fetchScheduleTemplates(from: baseURL)
+        }
+    }
+
     func updateLog(remoteID: String, body: Data) async throws {
         do {
             let baseURL = try await reachableBaseURL()
@@ -334,6 +357,20 @@ actor WebLogSyncClient {
         }
 
         return try JSONDecoder().decode(WatchScheduleLogResponse.self, from: data).scheduleLogs
+    }
+
+    private func fetchScheduleTemplates(from baseURL: URL) async throws -> [WatchScheduleTemplate] {
+        let url = baseURL.appending(path: "api/schedule-templates")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 5
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+
+        return try JSONDecoder().decode(WatchScheduleTemplateResponse.self, from: data).templates
     }
 
     private func reachableBaseURL() async throws -> URL {

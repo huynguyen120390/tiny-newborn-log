@@ -32,6 +32,7 @@ const DATA_ROOT = process.env.DATA_ROOT ? path.resolve(process.env.DATA_ROOT) : 
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(DATA_ROOT, "prod");
 const SHARED_DATA_DIR = process.env.SHARED_DATA_DIR ? path.resolve(process.env.SHARED_DATA_DIR) : path.join(DATA_ROOT, "shared");
 const SCHEDULE_LOGS_PATH = path.join(DATA_DIR, "schedule_logs.json");
+const SCHEDULE_TEMPLATE_COPIES_PATH = path.join(DATA_DIR, "schedule_templates.json");
 const APP_DATA_MODE = process.env.APP_DATA_MODE || (process.env.DATA_DIR ? path.basename(DATA_DIR) : "prod");
 const PUBLIC_DIR = path.join(__dirname, "..", "frontend");
 const POOP_COLORS_PATH = path.join(SHARED_DATA_DIR, "poop-colors.json");
@@ -141,7 +142,7 @@ function readText(filePath, fallback = "") {
   return fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, "");
 }
 
-function loadScheduleTemplates() {
+function loadKnowledgeScheduleTemplates() {
   if (!fs.existsSync(SLEEP_SCHEDULE_TEMPLATE_DIR)) return [];
   return fs.readdirSync(SLEEP_SCHEDULE_TEMPLATE_DIR)
     .filter((file) => file.toLowerCase().endsWith(".json"))
@@ -154,6 +155,38 @@ function loadScheduleTemplates() {
     });
 }
 
+function loadScheduleTemplates() {
+  const saved = readJson(SCHEDULE_TEMPLATE_COPIES_PATH, null);
+  const templates = saved && !Array.isArray(saved) ? arrayValue(saved.schedule_templates) : arrayValue(saved);
+  if (templates.length) return templates;
+
+  const knowledgeTemplates = loadKnowledgeScheduleTemplates().map((template) => ({
+    ...template,
+    sourceTemplateId: template.id,
+    copiedFrom: template.source || "shared_knowledge",
+    copiedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }));
+  const latestLogByTemplateId = new Map();
+  loadScheduleLogs().forEach((log) => {
+    if (!latestLogByTemplateId.has(log.templateId) && Array.isArray(log.rows) && log.rows.length) {
+      latestLogByTemplateId.set(log.templateId, log);
+    }
+  });
+  const copiedTemplates = knowledgeTemplates.map((template) => {
+    const latestLog = latestLogByTemplateId.get(template.id);
+    return latestLog
+      ? { ...template, rows: latestLog.rows.map((row) => ({ ...objectMap(row) })), updatedAt: latestLog.updatedAt || template.updatedAt }
+      : template;
+  });
+  saveScheduleTemplates(copiedTemplates);
+  return copiedTemplates;
+}
+
+function saveScheduleTemplates(templates) {
+  writeJson(SCHEDULE_TEMPLATE_COPIES_PATH, { schedule_templates: arrayValue(templates) });
+}
+
 function loadScheduleLogs() {
   const data = readJson(SCHEDULE_LOGS_PATH, { schedule_logs: [] });
   const logs = Array.isArray(data) ? data : arrayValue(data.schedule_logs);
@@ -164,6 +197,43 @@ function loadScheduleLogs() {
 
 function saveScheduleLogs(logs) {
   writeJson(SCHEDULE_LOGS_PATH, { schedule_logs: arrayValue(logs) });
+}
+
+function updateScheduleTemplateRows(templateId, rows) {
+  if (!templateId || !Array.isArray(rows) || !rows.length) return;
+  const templates = loadScheduleTemplates();
+  const index = templates.findIndex((template) => template.id === templateId);
+  if (index === -1) return;
+  templates[index] = {
+    ...templates[index],
+    rows: rows.map((row) => ({ ...objectMap(row) })),
+    updatedAt: new Date().toISOString()
+  };
+  saveScheduleTemplates(templates);
+}
+
+function resetScheduleTemplateRows(templateId) {
+  if (!templateId) return null;
+  const doctorTemplate = loadKnowledgeScheduleTemplates().find((template) => template.id === templateId || template.sourceTemplateId === templateId);
+  if (!doctorTemplate) return null;
+  const templates = loadScheduleTemplates();
+  const index = templates.findIndex((template) => template.id === templateId);
+  if (index === -1) return null;
+  templates[index] = {
+    ...templates[index],
+    rows: arrayValue(doctorTemplate.rows).map((row) => ({ ...objectMap(row) })),
+    resetAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  saveScheduleTemplates(templates);
+  return templates[index];
+}
+
+function todayDateString() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
 }
 
 function objectMap(value) {
@@ -2574,6 +2644,7 @@ async function handleUpdateScheduleLog(req, res, date) {
   const nextLogs = logs.filter((log) => log.date !== cleanDate);
   nextLogs.push(nextLog);
   saveScheduleLogs(nextLogs);
+  if (cleanDate >= todayDateString()) updateScheduleTemplateRows(nextLog.templateId, nextLog.rows);
   sendJson(res, 200, { schedule_log: nextLog, schedule_logs: loadScheduleLogs() });
 }
 
@@ -2930,6 +3001,16 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/schedule-templates") {
       sendJson(res, 200, { templates: loadScheduleTemplates() });
+      return;
+    }
+    const scheduleTemplateResetMatch = url.pathname.match(/^\/api\/schedule-templates\/([^/]+)\/reset\/?$/);
+    if (req.method === "POST" && scheduleTemplateResetMatch) {
+      const template = resetScheduleTemplateRows(decodeURIComponent(scheduleTemplateResetMatch[1]));
+      if (!template) {
+        sendJson(res, 404, { error: "Doctor schedule template not found." });
+        return;
+      }
+      sendJson(res, 200, { template, templates: loadScheduleTemplates() });
       return;
     }
 

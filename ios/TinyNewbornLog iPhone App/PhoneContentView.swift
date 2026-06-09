@@ -348,6 +348,16 @@ private struct PhoneScheduleLogResponse: Decodable {
 
 private struct PhoneScheduleLog: Decodable {
     let date: String
+    let templateId: String?
+    let rows: [PhoneScheduleRow]
+}
+
+private struct PhoneScheduleTemplateResponse: Decodable {
+    let templates: [PhoneScheduleTemplate]
+}
+
+private struct PhoneScheduleTemplate: Decodable {
+    let id: String
     let rows: [PhoneScheduleRow]
 }
 
@@ -2312,7 +2322,13 @@ final class PhoneLogStore: ObservableObject {
         }
 
         let today = PhoneScheduleReminderPlanner.todayString()
-        let rows = scheduleLogs.first(where: { $0.date == today })?.rows ?? []
+        let latestLog = scheduleLogs.sorted { $0.date > $1.date }.first
+        let copiedTemplates = (try? await PhoneLogSyncClient.shared.fetchScheduleTemplates()) ?? []
+        let rows = scheduleLogs.first(where: { $0.date == today })?.rows
+            ?? copiedTemplates.first(where: { $0.id == latestLog?.templateId })?.rows
+            ?? copiedTemplates.first?.rows
+            ?? latestLog?.rows
+            ?? []
         await PhoneScheduleReminderPlanner.reschedule(
             rows: rows,
             date: today,
@@ -2491,6 +2507,30 @@ actor PhoneLogSyncClient {
                 selectedBaseURL = baseURL
                 UserDefaults.standard.set(baseURL.absoluteString, forKey: selectedBaseURLKey)
                 return logs
+            } catch {
+                failures.append("\(serverLabel(for: baseURL)): \(shortMessage(for: error))")
+                if mode != .automatic { break }
+            }
+        }
+
+        selectedBaseURL = nil
+        UserDefaults.standard.removeObject(forKey: selectedBaseURLKey)
+        throw PhoneSyncFailure(message: failures.joined(separator: "; "))
+    }
+
+    fileprivate func fetchScheduleTemplates() async throws -> [PhoneScheduleTemplate] {
+        let mode = PhoneServerMode(rawValue: UserDefaults.standard.string(forKey: PhoneServerMode.storageKey) ?? "") ?? .automatic
+        guard mode != .none else {
+            throw PhoneSyncFailure(message: "Server mode is None")
+        }
+
+        var failures: [String] = []
+        for baseURL in await reachableCandidates(mode: mode) {
+            do {
+                let templates = try await fetchScheduleTemplates(from: baseURL)
+                selectedBaseURL = baseURL
+                UserDefaults.standard.set(baseURL.absoluteString, forKey: selectedBaseURLKey)
+                return templates
             } catch {
                 failures.append("\(serverLabel(for: baseURL)): \(shortMessage(for: error))")
                 if mode != .automatic { break }
@@ -2702,6 +2742,18 @@ actor PhoneLogSyncClient {
             throw URLError(.badServerResponse)
         }
         return try JSONDecoder().decode(PhoneScheduleLogResponse.self, from: data).scheduleLogs
+    }
+
+    private func fetchScheduleTemplates(from baseURL: URL) async throws -> [PhoneScheduleTemplate] {
+        let url = baseURL.appendingPathComponent("api/schedule-templates")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 5
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(PhoneScheduleTemplateResponse.self, from: data).templates
     }
 
     private func orderedCandidates(mode: PhoneServerMode) -> [URL] {
@@ -2923,18 +2975,25 @@ private enum PhoneScheduleReminderPlanner {
 
         let now = Date()
         for (index, row) in rows.enumerated() {
-            guard let startDate = startDate(for: row, date: date), startDate > now else {
+            guard let startDate = startDate(for: row, date: date) else {
                 continue
             }
+            let secondsUntilStart = startDate.timeIntervalSince(now)
+            guard secondsUntilStart > 0 || secondsUntilStart >= -120 else { continue }
 
             let content = UNMutableNotificationContent()
             let activity = clean(row.activity, fallback: "Scheduled activity")
             content.title = "Schedule: \(activity)"
-            content.body = reminderBody(for: row)
+            content.body = reminderBody(for: row, startDate: startDate)
             content.sound = .default
 
-            let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: startDate)
-            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+            let trigger: UNNotificationTrigger
+            if secondsUntilStart <= 0 {
+                trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+            } else {
+                let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: startDate)
+                trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+            }
             let request = UNNotificationRequest(
                 identifier: "\(identifierPrefix)\(date)-\(index)",
                 content: content,
@@ -2944,22 +3003,27 @@ private enum PhoneScheduleReminderPlanner {
         }
     }
 
-    private static func reminderBody(for row: PhoneScheduleRow) -> String {
+    private static func reminderBody(for row: PhoneScheduleRow, startDate: Date) -> String {
         let activity = clean(row.activity, fallback: "Activity")
+        let time = startDate.formatted(date: .omitted, time: .shortened)
         let lower = activity.lowercased()
+        let goal: String
         if lower.contains("feed") {
             if let goal = row.feedGoalOz {
-                return "\(activity) now. Goal \(formatOunces(goal))."
+                return "Time \(time). Activity \(activity). Goal \(formatOunces(goal))."
             }
-            return "\(activity) now."
+            return "Time \(time). Activity \(activity)."
         }
         if lower.contains("nap") || lower.contains("sleep") {
-            return "\(activity) now. Sleep goal \(clean(row.sleepGoal ?? row.plannedDuration, fallback: "scheduled"))."
+            goal = clean(row.sleepGoal ?? row.plannedDuration, fallback: "scheduled")
+            return "Time \(time). Activity \(activity). Goal \(goal)."
         }
         if lower.contains("play") {
-            return "\(activity) now. \(clean(row.playGoal, fallback: "Follow today's plan"))."
+            goal = clean(row.playGoal, fallback: "Follow today's plan")
+            return "Time \(time). Activity \(activity). Goal \(goal)."
         }
-        return "\(activity) now. Goal \(clean(row.plannedDuration, fallback: "scheduled"))."
+        goal = clean(row.plannedDuration, fallback: "scheduled")
+        return "Time \(time). Activity \(activity). Goal \(goal)."
     }
 
     private static func startDate(for row: PhoneScheduleRow, date: String) -> Date? {
