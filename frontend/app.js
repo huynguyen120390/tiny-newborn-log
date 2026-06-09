@@ -2964,7 +2964,7 @@ function setupSettingsPanel() {
   document.getElementById("settings-weight-unit").addEventListener("change", saveSettingsWeightUnit);
   document.getElementById("settings-height-unit").addEventListener("change", saveSettingsHeightUnit);
   document.getElementById("test-reminder-voice").addEventListener("click", testReminderVoice);
-  document.getElementById("schedule-notifications-settings-button").addEventListener("click", toggleScheduleNotifications);
+  document.getElementById("schedule-notifications-settings-toggle").addEventListener("change", toggleScheduleNotifications);
   document.getElementById("generate-analytics-button").addEventListener("click", generateAnalyticsJson);
   document.getElementById("generate-trends-button").addEventListener("click", generateTrendJson);
   document.getElementById("clear-data-button").addEventListener("click", clearData);
@@ -3512,10 +3512,14 @@ function renderSettings() {
 }
 
 function renderScheduleNotificationSettings() {
-  const button = document.getElementById("schedule-notifications-settings-button");
-  if (!button) return;
-  button.textContent = scheduleNotificationsButtonText();
-  button.classList.toggle("blocked", ("Notification" in window) && Notification.permission === "denied");
+  const toggle = document.getElementById("schedule-notifications-settings-toggle");
+  const label = document.getElementById("schedule-notifications-settings-label");
+  if (!toggle) return;
+  const isBlocked = ("Notification" in window) && Notification.permission === "denied";
+  toggle.checked = Boolean(state.scheduleNotificationsEnabled);
+  toggle.disabled = isBlocked || !("Notification" in window);
+  toggle.closest(".settings-switch")?.classList.toggle("blocked", isBlocked || !("Notification" in window));
+  if (label) label.textContent = scheduleNotificationsButtonText();
 }
 
 function cleanOverviewSettings(value = {}) {
