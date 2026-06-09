@@ -37,6 +37,34 @@ enum SyncServerMode: String, CaseIterable, Identifiable {
     }
 }
 
+enum WatchScheduleNotifications {
+    static let storageKey = "TinyNewbornLog.watchScheduleNotificationsEnabled"
+    static let identifierPrefix = "watch-schedule-slot-"
+}
+
+struct WatchScheduleLogResponse: Decodable {
+    let scheduleLogs: [WatchScheduleLog]
+
+    enum CodingKeys: String, CodingKey {
+        case scheduleLogs = "schedule_logs"
+    }
+}
+
+struct WatchScheduleLog: Decodable {
+    let date: String
+    let rows: [WatchScheduleRow]
+}
+
+struct WatchScheduleRow: Decodable {
+    let timeOfDay: String?
+    let activity: String?
+    let plannedDuration: String?
+    let feedGoalOz: Double?
+    let feedGoal: String?
+    let sleepGoal: String?
+    let playGoal: String?
+}
+
 actor WebLogSyncClient {
     static let shared = WebLogSyncClient()
 
@@ -181,6 +209,19 @@ actor WebLogSyncClient {
         }
     }
 
+    func fetchScheduleLogs() async throws -> [WatchScheduleLog] {
+        do {
+            let baseURL = try await reachableBaseURL()
+            return try await fetchScheduleLogs(from: baseURL)
+        } catch {
+            selectedBaseURL = nil
+            UserDefaults.standard.removeObject(forKey: selectedBaseURLKey)
+
+            let baseURL = try await reachableBaseURL()
+            return try await fetchScheduleLogs(from: baseURL)
+        }
+    }
+
     func updateLog(remoteID: String, body: Data) async throws {
         do {
             let baseURL = try await reachableBaseURL()
@@ -279,6 +320,20 @@ actor WebLogSyncClient {
         }
 
         return try JSONDecoder().decode(UnitSettingsResponse.self, from: data).unitSettings
+    }
+
+    private func fetchScheduleLogs(from baseURL: URL) async throws -> [WatchScheduleLog] {
+        let url = baseURL.appending(path: "api/schedule-logs")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 5
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+
+        return try JSONDecoder().decode(WatchScheduleLogResponse.self, from: data).scheduleLogs
     }
 
     private func reachableBaseURL() async throws -> URL {

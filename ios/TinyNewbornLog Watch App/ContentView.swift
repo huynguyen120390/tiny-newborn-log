@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import WatchKit
+import UserNotifications
 
 private func formatElapsed(_ elapsed: TimeInterval) -> String {
     let totalSeconds = max(Int(elapsed.rounded()), 0)
@@ -732,6 +733,7 @@ private enum LoggerSheet: Identifiable {
 
 private struct SyncSettingsSheet: View {
     @Binding var mode: SyncServerMode
+    @AppStorage(WatchScheduleNotifications.storageKey) private var scheduleNotificationsEnabled = true
     var onModeChanged: () -> Void
 
     var body: some View {
@@ -761,11 +763,24 @@ private struct SyncSettingsSheet: View {
                     Text("Sync server")
                 }
 
+                Section {
+                    Toggle("Schedule reminders", isOn: $scheduleNotificationsEnabled)
+                    Text("Uses the latest web schedule when the Watch syncs.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text("Notifications")
+                }
+
                 Text("Use None to mimic lost connection. Logs stay local and become pending until you switch back.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
             .navigationTitle("Settings")
+            .onChange(of: scheduleNotificationsEnabled) { _, enabled in
+                guard !enabled else { return }
+                WatchScheduleReminderPlanner.cancel(identifierPrefix: WatchScheduleNotifications.identifierPrefix)
+            }
         }
     }
 }
