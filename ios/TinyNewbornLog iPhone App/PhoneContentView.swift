@@ -104,6 +104,11 @@ enum PhoneAppearance: String, CaseIterable, Identifiable {
     }
 }
 
+enum PhoneScheduleNotifications {
+    static let storageKey = "TinyNewbornLog.phoneScheduleNotificationsEnabled"
+    static let identifierPrefix = "schedule-slot-"
+}
+
 enum PhoneLogKind: String, Codable, CaseIterable {
     case sleep
     case nursing
@@ -331,6 +336,29 @@ struct PhonePendingSyncItem: Identifiable, Codable, Hashable {
         self.createdAt = createdAt
         self.body = body
     }
+}
+
+private struct PhoneScheduleLogResponse: Decodable {
+    let scheduleLogs: [PhoneScheduleLog]
+
+    enum CodingKeys: String, CodingKey {
+        case scheduleLogs = "schedule_logs"
+    }
+}
+
+private struct PhoneScheduleLog: Decodable {
+    let date: String
+    let rows: [PhoneScheduleRow]
+}
+
+private struct PhoneScheduleRow: Decodable {
+    let timeOfDay: String?
+    let activity: String?
+    let plannedDuration: String?
+    let feedGoalOz: Double?
+    let feedGoal: String?
+    let sleepGoal: String?
+    let playGoal: String?
 }
 
 struct PhoneContentView: View {
@@ -1349,6 +1377,7 @@ private struct PhoneStatsSheet: View {
 private struct PhoneSettingsSheet: View {
     @AppStorage(PhoneServerMode.storageKey) private var serverModeRaw = PhoneServerMode.automatic.rawValue
     @AppStorage(PhoneAppearance.storageKey) private var appearance = PhoneAppearance.system
+    @AppStorage(PhoneScheduleNotifications.storageKey) private var scheduleNotificationsEnabled = true
 
     var body: some View {
         NavigationStack {
@@ -1370,6 +1399,13 @@ private struct PhoneSettingsSheet: View {
                     .pickerStyle(.segmented)
                 }
 
+                Section("Schedule notifications") {
+                    Toggle("Notify at scheduled times", isOn: $scheduleNotificationsEnabled)
+                    Text("Uses the latest schedule from the web app when this iPhone syncs.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section {
                     Text("Use None to test offline behavior. Logs stay local and sync later.")
                         .font(.caption)
@@ -1377,6 +1413,10 @@ private struct PhoneSettingsSheet: View {
                 }
             }
             .navigationTitle("Settings")
+            .onChange(of: scheduleNotificationsEnabled) { _, enabled in
+                guard !enabled else { return }
+                PhoneScheduleReminderPlanner.cancel(identifierPrefix: PhoneScheduleNotifications.identifierPrefix)
+            }
         }
     }
 
@@ -1411,6 +1451,7 @@ final class PhoneLogStore: ObservableObject {
 
     init() {
         PhoneServerMode.applyDefaultIfNeeded()
+        UserDefaults.standard.register(defaults: [PhoneScheduleNotifications.storageKey: true])
         decoder.dateDecodingStrategy = .iso8601
         encoder.dateEncodingStrategy = .iso8601
         loadEntries()
@@ -1575,6 +1616,7 @@ final class PhoneLogStore: ObservableObject {
     func start() async {
         _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
         await retryPendingSyncs()
+        await refreshScheduleNotifications()
     }
 
     func todaysCount(for kind: PhoneLogKind) -> Int {
@@ -1942,6 +1984,7 @@ final class PhoneLogStore: ObservableObject {
             let remoteLogs = try await PhoneLogSyncClient.shared.fetchLogs()
             mergeRemoteLogs(remoteLogs)
             lastSyncError = ""
+            await refreshScheduleNotifications()
         } catch {
             if pendingItems.isEmpty {
                 lastSyncError = error.localizedDescription
@@ -2259,6 +2302,24 @@ final class PhoneLogStore: ObservableObject {
         try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "phone-boobie-\(UUID().uuidString)", content: content, trigger: nil))
     }
 
+    private func refreshScheduleNotifications() async {
+        guard UserDefaults.standard.bool(forKey: PhoneScheduleNotifications.storageKey) else {
+            PhoneScheduleReminderPlanner.cancel(identifierPrefix: PhoneScheduleNotifications.identifierPrefix)
+            return
+        }
+        guard let scheduleLogs = try? await PhoneLogSyncClient.shared.fetchScheduleLogs() else {
+            return
+        }
+
+        let today = PhoneScheduleReminderPlanner.todayString()
+        let rows = scheduleLogs.first(where: { $0.date == today })?.rows ?? []
+        await PhoneScheduleReminderPlanner.reschedule(
+            rows: rows,
+            date: today,
+            identifierPrefix: PhoneScheduleNotifications.identifierPrefix
+        )
+    }
+
     private func updatePendingStatus() {
         pendingSyncCount = pendingItems.count
         if isSyncing {
@@ -2406,6 +2467,30 @@ actor PhoneLogSyncClient {
                 selectedBaseURL = baseURL
                 UserDefaults.standard.set(baseURL.absoluteString, forKey: selectedBaseURLKey)
                 return settings
+            } catch {
+                failures.append("\(serverLabel(for: baseURL)): \(shortMessage(for: error))")
+                if mode != .automatic { break }
+            }
+        }
+
+        selectedBaseURL = nil
+        UserDefaults.standard.removeObject(forKey: selectedBaseURLKey)
+        throw PhoneSyncFailure(message: failures.joined(separator: "; "))
+    }
+
+    fileprivate func fetchScheduleLogs() async throws -> [PhoneScheduleLog] {
+        let mode = PhoneServerMode(rawValue: UserDefaults.standard.string(forKey: PhoneServerMode.storageKey) ?? "") ?? .automatic
+        guard mode != .none else {
+            throw PhoneSyncFailure(message: "Server mode is None")
+        }
+
+        var failures: [String] = []
+        for baseURL in await reachableCandidates(mode: mode) {
+            do {
+                let logs = try await fetchScheduleLogs(from: baseURL)
+                selectedBaseURL = baseURL
+                UserDefaults.standard.set(baseURL.absoluteString, forKey: selectedBaseURLKey)
+                return logs
             } catch {
                 failures.append("\(serverLabel(for: baseURL)): \(shortMessage(for: error))")
                 if mode != .automatic { break }
@@ -2607,6 +2692,18 @@ actor PhoneLogSyncClient {
         return try JSONDecoder().decode(PhoneUnitSettingsResponse.self, from: data).unitSettings
     }
 
+    private func fetchScheduleLogs(from baseURL: URL) async throws -> [PhoneScheduleLog] {
+        let url = baseURL.appendingPathComponent("api/schedule-logs")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 5
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(PhoneScheduleLogResponse.self, from: data).scheduleLogs
+    }
+
     private func orderedCandidates(mode: PhoneServerMode) -> [URL] {
         switch mode {
         case .homeLAN:
@@ -2796,6 +2893,137 @@ private struct PhoneUnitSettingsResponse: Decodable {
 
     private enum CodingKeys: String, CodingKey {
         case unitSettings = "unit_settings"
+    }
+}
+
+private enum PhoneScheduleReminderPlanner {
+    static func cancel(identifierPrefix: String) {
+        UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
+            let identifiers = requests
+                .filter { $0.identifier.hasPrefix(identifierPrefix) }
+                .map(\.identifier)
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
+        }
+    }
+
+    static func todayString(now: Date = Date()) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar.current
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: now)
+    }
+
+    static func reschedule(rows: [PhoneScheduleRow], date: String, identifierPrefix: String) async {
+        let center = UNUserNotificationCenter.current()
+        let pending = await center.pendingNotificationRequests()
+            .filter { $0.identifier.hasPrefix(identifierPrefix) }
+            .map(\.identifier)
+        center.removePendingNotificationRequests(withIdentifiers: pending)
+
+        let now = Date()
+        for (index, row) in rows.enumerated() {
+            guard let startDate = startDate(for: row, date: date), startDate > now else {
+                continue
+            }
+
+            let content = UNMutableNotificationContent()
+            let activity = clean(row.activity, fallback: "Scheduled activity")
+            content.title = "Schedule: \(activity)"
+            content.body = reminderBody(for: row)
+            content.sound = .default
+
+            let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: startDate)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+            let request = UNNotificationRequest(
+                identifier: "\(identifierPrefix)\(date)-\(index)",
+                content: content,
+                trigger: trigger
+            )
+            try? await center.add(request)
+        }
+    }
+
+    private static func reminderBody(for row: PhoneScheduleRow) -> String {
+        let activity = clean(row.activity, fallback: "Activity")
+        let lower = activity.lowercased()
+        if lower.contains("feed") {
+            if let goal = row.feedGoalOz {
+                return "\(activity) now. Goal \(formatOunces(goal))."
+            }
+            return "\(activity) now."
+        }
+        if lower.contains("nap") || lower.contains("sleep") {
+            return "\(activity) now. Sleep goal \(clean(row.sleepGoal ?? row.plannedDuration, fallback: "scheduled"))."
+        }
+        if lower.contains("play") {
+            return "\(activity) now. \(clean(row.playGoal, fallback: "Follow today's plan"))."
+        }
+        return "\(activity) now. Goal \(clean(row.plannedDuration, fallback: "scheduled"))."
+    }
+
+    private static func startDate(for row: PhoneScheduleRow, date: String) -> Date? {
+        guard let timeOfDay = row.timeOfDay,
+              let range = scheduleTimeRange(timeOfDay),
+              let base = dayStart(date) else {
+            return nil
+        }
+        return Calendar.current.date(byAdding: .minute, value: range.start, to: base)
+    }
+
+    private static func scheduleTimeRange(_ value: String) -> (start: Int, end: Int)? {
+        let parts = value.split(separator: "-", maxSplits: 1).map { String($0) }
+        guard let first = parts.first else { return nil }
+        let fallback = parts.dropFirst().first.flatMap(meridiem) ?? meridiem(first)
+        guard let start = timeToMinutes(first, fallbackMeridiem: fallback) else { return nil }
+        let end = parts.dropFirst().first.flatMap { timeToMinutes($0, fallbackMeridiem: fallback) } ?? start + 30
+        return (start, end < start ? end + 24 * 60 : end)
+    }
+
+    private static func meridiem(_ value: String) -> String? {
+        let upper = value.uppercased()
+        if upper.contains("AM") { return "AM" }
+        if upper.contains("PM") { return "PM" }
+        return nil
+    }
+
+    private static func timeToMinutes(_ value: String, fallbackMeridiem: String?) -> Int? {
+        let cleanValue = value
+            .uppercased()
+            .replacingOccurrences(of: "AM", with: "")
+            .replacingOccurrences(of: "PM", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let pieces = cleanValue.split(separator: ":").map { String($0) }
+        guard let hourText = pieces.first,
+              var hour = Int(hourText) else {
+            return nil
+        }
+        let minute = pieces.dropFirst().first.flatMap(Int.init) ?? 0
+        let marker = meridiem(value) ?? fallbackMeridiem
+        if marker == "PM", hour < 12 { hour += 12 }
+        if marker == "AM", hour == 12 { hour = 0 }
+        return hour * 60 + minute
+    }
+
+    private static func dayStart(_ date: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar.current
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: date)
+    }
+
+    private static func formatOunces(_ value: Double) -> String {
+        let rounded = (value * 10).rounded() / 10
+        if rounded == rounded.rounded() {
+            return "\(Int(rounded)) oz"
+        }
+        return "\(rounded) oz"
+    }
+
+    private static func clean(_ value: String?, fallback: String) -> String {
+        let text = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? fallback : text
     }
 }
 
