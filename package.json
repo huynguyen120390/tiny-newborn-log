@@ -10,6 +10,7 @@
     "start:stage": "node scripts/start-mode.js staging 3004",
     "start:prod": "node scripts/start-mode.js prod 3002",
     "start:real": "node scripts/start-mode.js prod 3002",
+    "start:ops": "node scripts/ops-server.js 3010",
     "data:stage": "node scripts/data-mode.js use staging",
     "data:refresh-stage": "node scripts/create-staging-data.js",
     "data:list": "node scripts/data-mode.js list",

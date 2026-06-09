@@ -2,6 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { execFile, spawn } = require("child_process");
 const {
   makeReport,
   resolveRange,
@@ -68,6 +69,13 @@ const DEFAULT_UNIT_SETTINGS = {
   weightUnit: "lb",
   heightUnit: "in"
 };
+
+const SERVER_CONTROL_TARGETS = [
+  { id: "dev", label: "dev", mode: "dev", port: 3003 },
+  { id: "staging", label: "staging", mode: "staging", port: 3004 },
+  { id: "main", label: "main", mode: "staging", port: 3001 },
+  { id: "prod", label: "prod", mode: "prod", port: 3002 }
+];
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -224,6 +232,79 @@ function sendFile(res, filePath, download = false) {
   }
   res.writeHead(200, headers);
   fs.createReadStream(filePath).pipe(res);
+}
+
+function runCommand(file, args) {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, { windowsHide: true }, (error, stdout, stderr) => {
+      if (error) {
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+        return;
+      }
+      resolve({ stdout, stderr });
+    });
+  });
+}
+
+function findServerTarget(id) {
+  return SERVER_CONTROL_TARGETS.find((target) => target.id === id);
+}
+
+function isLocalRequest(req) {
+  const address = req.socket.remoteAddress || "";
+  return address === "::1" || address === "127.0.0.1" || address === "::ffff:127.0.0.1";
+}
+
+async function serverStatusForPort(port) {
+  const { stdout } = await runCommand("netstat.exe", ["-ano", "-p", "tcp"]);
+  const match = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.match(/^TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)$/i))
+    .find((parts) => parts && Number(parts[1]) === Number(port));
+
+  return {
+    running: Boolean(match),
+    pid: match ? Number(match[2]) : null
+  };
+}
+
+async function getServerStatuses() {
+  const statuses = [];
+  for (const target of SERVER_CONTROL_TARGETS) {
+    const status = await serverStatusForPort(target.port);
+    statuses.push({ ...target, ...status });
+  }
+  return statuses;
+}
+
+function startServerTarget(target) {
+  const dataDir = path.join(DATA_ROOT, target.mode);
+  const child = spawn(process.execPath, [path.join(ROOT_DIR, "backend", "server.js"), String(target.port)], {
+    cwd: ROOT_DIR,
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true,
+    env: {
+      ...process.env,
+      APP_DATA_MODE: target.mode,
+      DATA_ROOT,
+      DATA_DIR: dataDir,
+      SHARED_DATA_DIR,
+      PORT: String(target.port)
+    }
+  });
+  child.unref();
+  return child.pid;
+}
+
+async function stopServerPid(pid) {
+  if (Number(pid) === process.pid) return "self";
+  await runCommand("taskkill.exe", ["/PID", String(pid), "/T", "/F"]);
+  return "stopped";
 }
 
 function readBody(req) {
@@ -2578,6 +2659,61 @@ function handleExport(req, res, endpoint) {
   sendJson(res, 404, { error: "Unknown export endpoint" });
 }
 
+async function handleServerControl(req, res, url) {
+  if (!isLocalRequest(req)) {
+    sendJson(res, 403, { error: "Server control is only available from localhost." });
+    return;
+  }
+
+  const targetMatch = url.pathname.match(/^\/api\/server-control\/([^/]+)\/(start|stop)$/);
+  if (req.method === "GET" && url.pathname === "/api/server-control/status") {
+    sendJson(res, 200, { servers: await getServerStatuses() });
+    return;
+  }
+
+  if (!targetMatch || req.method !== "POST") {
+    sendJson(res, 404, { error: "Unknown server-control endpoint" });
+    return;
+  }
+
+  const target = findServerTarget(targetMatch[1]);
+  const action = targetMatch[2];
+  if (!target) {
+    sendJson(res, 404, { error: "Unknown server target" });
+    return;
+  }
+
+  const before = await serverStatusForPort(target.port);
+  if (action === "start") {
+    if (before.running) {
+      sendJson(res, 200, { server: { ...target, ...before }, message: "Already running." });
+      return;
+    }
+
+    const pid = startServerTarget(target);
+    await new Promise((resolve) => setTimeout(resolve, 650));
+    const after = await serverStatusForPort(target.port);
+    sendJson(res, 200, { server: { ...target, ...after }, startedPid: pid });
+    return;
+  }
+
+  if (!before.running || !before.pid) {
+    sendJson(res, 200, { server: { ...target, ...before }, message: "Already stopped." });
+    return;
+  }
+
+  const result = await stopServerPid(before.pid);
+  if (result === "self") {
+    sendJson(res, 200, { server: { ...target, running: false, pid: null }, message: "Stopping current server." });
+    setTimeout(() => process.exit(0), 150);
+    return;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 650));
+  const after = await serverStatusForPort(target.port);
+  sendJson(res, 200, { server: { ...target, ...after } });
+}
+
 function serveStatic(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const requested = url.pathname === "/" ? "/index.html" : url.pathname;
@@ -2759,6 +2895,11 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const match = url.pathname.match(/^\/api\/export\/(json|csv|xlsx|pdf|pediatrician-report)$/);
+
+    if (url.pathname.startsWith("/api/server-control")) {
+      await handleServerControl(req, res, url);
+      return;
+    }
 
     if (req.method === "GET" && match) {
       handleExport(req, res, match[1]);

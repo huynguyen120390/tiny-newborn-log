@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Server Control</title>
+    <link rel="stylesheet" href="/ops.css">
+  </head>
+  <body>
+    <main class="ops-shell">
+      <header class="ops-header">
+        <div>
+          <h1>Server Control</h1>
+          <p id="last-updated">Checking servers...</p>
+        </div>
+        <button type="button" id="refresh-button" class="icon-button" aria-label="Refresh server status" title="Refresh">
+          <span aria-hidden="true">R</span>
+        </button>
+      </header>
+
+      <section class="server-grid" id="server-grid" aria-label="Server environments"></section>
+    </main>
+
+    <template id="server-card-template">
+      <article class="server-card">
+        <div class="server-topline">
+          <span class="status-dot" aria-hidden="true"></span>
+          <div>
+            <h2></h2>
+            <p class="server-meta"></p>
+          </div>
+        </div>
+        <dl class="server-facts">
+          <div>
+            <dt>Status</dt>
+            <dd class="server-state"></dd>
+          </div>
+          <div>
+            <dt>PID</dt>
+            <dd class="server-pid"></dd>
+          </div>
+        </dl>
+        <div class="server-actions">
+          <button type="button" class="start-button">Start</button>
+          <button type="button" class="stop-button">Stop</button>
+          <button type="button" class="launch-button">Launch</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="/ops.js"></script>
+  </body>
+</html>
