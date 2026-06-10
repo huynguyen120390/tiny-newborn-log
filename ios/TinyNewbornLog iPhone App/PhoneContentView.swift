@@ -2978,8 +2978,9 @@ private enum PhoneScheduleReminderPlanner {
             guard let startDate = startDate(for: row, date: date) else {
                 continue
             }
-            let secondsUntilStart = startDate.timeIntervalSince(now)
-            guard secondsUntilStart > 0 || secondsUntilStart >= -120 else { continue }
+            let reminderDate = startDate.addingTimeInterval(-60)
+            let secondsUntilReminder = reminderDate.timeIntervalSince(now)
+            guard secondsUntilReminder > 0 || secondsUntilReminder >= -120 else { continue }
 
             let content = UNMutableNotificationContent()
             let activity = clean(row.activity, fallback: "Scheduled activity")
@@ -2988,10 +2989,10 @@ private enum PhoneScheduleReminderPlanner {
             content.sound = .default
 
             let trigger: UNNotificationTrigger
-            if secondsUntilStart <= 0 {
+            if secondsUntilReminder <= 0 {
                 trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
             } else {
-                let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: startDate)
+                let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: reminderDate)
                 trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
             }
             let request = UNNotificationRequest(
