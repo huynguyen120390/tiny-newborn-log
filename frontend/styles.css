@@ -622,6 +622,42 @@ body[data-design-style="glassy"] .baby-cries-step {
   opacity: 1;
 }
 
+body[data-design-style="glassy"] .baby-cries-inspections {
+  border-color: rgba(151, 174, 170, 0.68);
+  background: rgba(255, 255, 255, 0.92);
+  color: #344140;
+}
+
+body[data-design-style="glassy"] .baby-cries-inspections > strong,
+body[data-design-style="glassy"] .baby-cries-inspections li {
+  color: #344140;
+}
+
+body[data-design-style="glassy"] .baby-cries-inspections p {
+  color: #526160;
+}
+
+body[data-design-style="glassy"] .baby-cries-inspections small {
+  background: #dfe9e7;
+  color: #334442;
+}
+
+body[data-design-style="glassy"] .baby-cries-prompt {
+  border-color: rgba(151, 174, 170, 0.68);
+  background: rgba(255, 255, 255, 0.93);
+  color: #344140;
+}
+
+body[data-design-style="glassy"] .baby-cries-prompt summary {
+  color: #344140;
+}
+
+body[data-design-style="glassy"] .baby-cries-prompt pre {
+  border: 1px solid rgba(151, 174, 170, 0.44);
+  background: #f7faf8;
+  color: #344140;
+}
+
 body[data-design-style="glassy"] .baby-cries-icon {
   color: var(--glass-bright-ink);
 }
@@ -648,9 +684,9 @@ body[data-design-style="glassy"] .care-issue-tabs button,
 body[data-design-style="glassy"] .care-issue-tabs button.active,
 body[data-design-style="glassy"] .care-issue-tabs button:hover,
 body[data-design-style="glassy"] .care-issue-tabs button:focus-visible,
-body[data-design-style="glassy"] .baby-cries-llama-button,
-body[data-design-style="glassy"] .baby-cries-llama-button:hover,
-body[data-design-style="glassy"] .baby-cries-llama-button:focus-visible,
+body[data-design-style="glassy"] .baby-cries-gpt-button,
+body[data-design-style="glassy"] .baby-cries-gpt-button:hover,
+body[data-design-style="glassy"] .baby-cries-gpt-button:focus-visible,
 body[data-design-style="glassy"] .baby-cries-assistant-actions button,
 body[data-design-style="glassy"] .icon-close,
 body[data-design-style="glassy"] .primary,
@@ -2256,13 +2292,13 @@ main {
   font-weight: 700;
 }
 
-.baby-cries-llama-row {
+.baby-cries-gpt-row {
   display: flex;
   justify-content: center;
   margin: 0 14px 14px;
 }
 
-.baby-cries-llama-button {
+.baby-cries-gpt-button {
   display: inline-flex;
   min-height: 46px;
   align-items: center;
@@ -2278,14 +2314,14 @@ main {
   transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
 }
 
-.baby-cries-llama-button img {
+.baby-cries-gpt-button img {
   width: 34px;
   height: 34px;
   object-fit: contain;
 }
 
-.baby-cries-llama-button:hover,
-.baby-cries-llama-button:focus-visible {
+.baby-cries-gpt-button:hover,
+.baby-cries-gpt-button:focus-visible {
   border-color: rgba(36, 117, 111, 0.36);
   box-shadow: 0 12px 28px rgba(31, 41, 38, 0.14);
   transform: translateY(-1px);
@@ -2400,15 +2436,16 @@ main {
 
 .baby-cries-inspections {
   padding: 11px;
-  border: 1px solid rgba(221, 228, 220, 0.72);
+  border: 1px solid rgba(151, 174, 170, 0.62);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
 .baby-cries-inspections > strong {
   display: block;
   margin-bottom: 8px;
-  color: var(--primary-dark);
+  color: #344140;
   font-size: 12px;
   font-weight: 900;
 }
@@ -2421,7 +2458,7 @@ main {
 }
 
 .baby-cries-inspections li {
-  color: var(--primary-dark);
+  color: #344140;
   font-size: 12px;
   font-weight: 850;
 }
@@ -2432,10 +2469,11 @@ main {
 }
 
 .baby-cries-inspections small {
+  display: inline-block;
   border-radius: 999px;
   padding: 2px 6px;
-  background: #eef2f2;
-  color: var(--muted);
+  background: #dfe9e7;
+  color: #334442;
   font-size: 10px;
   font-weight: 850;
   text-transform: uppercase;
@@ -2443,21 +2481,21 @@ main {
 
 .baby-cries-inspections p {
   margin-top: 4px;
-  color: var(--ink);
+  color: #526160;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 750;
   line-height: 1.35;
 }
 
 .baby-cries-prompt {
   padding: 11px;
-  border: 1px solid rgba(221, 228, 220, 0.72);
+  border: 1px solid rgba(151, 174, 170, 0.62);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.68);
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .baby-cries-prompt summary {
-  color: var(--primary-dark);
+  color: #344140;
   cursor: pointer;
   font-size: 12px;
   font-weight: 900;
@@ -2468,11 +2506,12 @@ main {
   overflow: auto;
   margin: 9px 0 0;
   padding: 10px;
+  border: 1px solid rgba(151, 174, 170, 0.44);
   border-radius: 8px;
   background: #f7faf8;
-  color: var(--ink);
+  color: #344140;
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 750;
   line-height: 1.38;
   white-space: pre-wrap;
   word-break: break-word;

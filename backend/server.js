@@ -1060,23 +1060,16 @@ async function handleBabyCriesTroubleshoot(req, res) {
   const fallback = fallbackBabyCriesRecommendation(context);
   let recommendation = fallback;
   let source = "fallback";
-  let llamaError = "";
+  let gptError = "";
+  const model = input.model || OPENAI_MODEL;
 
   try {
-    const response = await postJson(LLAMA_ENDPOINT, {
-      model: input.model || LLAMA_MODEL,
-      prompt,
-      stream: false,
-      format: "json",
-      options: { temperature: 0.2 }
-    }, LLAMA_TIMEOUT_MS);
-    const parsed = extractJsonObject(response.response || response.message?.content || "");
-    if (!parsed) throw new Error("Llama did not return JSON recommendation");
+    const parsed = await runGptBabyCriesRecommendation(prompt, { model });
     recommendation = validateBabyCriesRecommendation(parsed);
     recommendation.inspections = fallback.inspections;
-    source = "llama";
+    source = "gpt";
   } catch (error) {
-    llamaError = error.message;
+    gptError = error.message;
     recommendation = validateBabyCriesRecommendation(fallback);
   }
 
@@ -1084,11 +1077,11 @@ async function handleBabyCriesTroubleshoot(req, res) {
     recommendation,
     source,
     prompt,
-    llama: {
-      endpoint: LLAMA_ENDPOINT,
-      model: input.model || LLAMA_MODEL,
-      available: source === "llama",
-      error: source === "llama" ? "" : (llamaError || "Llama unavailable; fallback used.")
+    gpt: {
+      endpoint: OPENAI_ENDPOINT,
+      model,
+      available: source === "gpt",
+      error: source === "gpt" ? "" : (gptError || "GPT unavailable; fallback used.")
     },
     contextSummary: {
       reviewWindow: context.reviewWindow,
@@ -2031,6 +2024,23 @@ function extractOpenAIText(response) {
     }
   }
   return "";
+}
+
+async function runGptBabyCriesRecommendation(prompt, input = {}) {
+  if (!OPENAI_API_KEY) throw new Error("OpenAI API key is not configured.");
+  const model = input.model || OPENAI_MODEL;
+  const response = await postJson(OPENAI_ENDPOINT, {
+    model,
+    input: prompt,
+    text: {
+      format: { type: "json_object" }
+    }
+  }, OPENAI_OVERVIEW_TIMEOUT_MS, {
+    Authorization: `Bearer ${OPENAI_API_KEY}`
+  });
+  const parsed = extractJsonObject(extractOpenAIText(response));
+  if (!parsed) throw new Error("GPT did not return JSON recommendation");
+  return parsed;
 }
 
 async function runGptOverviewReview(llamaInput, input = {}) {

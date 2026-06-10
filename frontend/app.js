@@ -919,7 +919,7 @@ function renderCare() {
         renderCare();
       });
     });
-    panel.querySelector("[data-baby-cries-llama]")?.addEventListener("click", () => {
+    panel.querySelector("[data-baby-cries-gpt]")?.addEventListener("click", () => {
       state.babyCriesAssistant.open = true;
       updateBabyCriesAssistantPanel();
       maybeRefreshBabyCriesAssistant(true);
@@ -1994,10 +1994,10 @@ function renderTroubleshootCareView(issue) {
       </div>
       <div class="care-image-viewer">
         ${renderBabyCriesCardClean()}
-        <div class="baby-cries-llama-row">
-          <button class="baby-cries-llama-button" type="button" data-baby-cries-llama aria-expanded="${state.babyCriesAssistant.open ? "true" : "false"}">
-            <img src="/assets/care/llama.png" alt="">
-            <span>Ask Llama</span>
+        <div class="baby-cries-gpt-row">
+          <button class="baby-cries-gpt-button" type="button" data-baby-cries-gpt aria-expanded="${state.babyCriesAssistant.open ? "true" : "false"}">
+            <img src="/assets/chatgpt-icon.png" alt="">
+            <span>Ask GPT</span>
           </button>
         </div>
         <div id="baby-cries-assistant-slot">
@@ -2011,9 +2011,9 @@ function renderTroubleshootCareView(issue) {
 function renderBabyCriesAssistantPanel() {
   const assistant = state.babyCriesAssistant;
   const result = assistant.result;
-  const status = assistant.inFlight ? "Checking logs..." : assistant.error ? "Fallback guidance" : result ? "Llama's Thoughts" : "Waiting to review logs";
+  const status = assistant.inFlight ? "Checking logs..." : assistant.error ? "Fallback guidance" : result ? "GPT Review" : "Waiting to review logs";
   const updated = assistant.updatedAt ? formatAssistantUpdatedAt(assistant.updatedAt) : "--";
-  const source = assistant.source === "llama" ? "Llama" : assistant.source === "fallback" ? "Fallback" : "Local review";
+  const source = assistant.source === "gpt" ? "GPT" : assistant.source === "fallback" ? "Fallback" : "Local review";
   const inspections = result?.inspections || [];
 
   return `
@@ -2025,7 +2025,7 @@ function renderBabyCriesAssistantPanel() {
         </div>
         <div class="baby-cries-assistant-actions">
           <span class="baby-cries-confidence confidence-${escapeAttr((result?.confidence || "low").toLowerCase())}">${escapeHtml(result?.confidence || "Low")}</span>
-          <button type="button" data-baby-cries-close aria-label="Close Llama recommendation">x</button>
+          <button type="button" data-baby-cries-close aria-label="Close GPT recommendation">x</button>
         </div>
       </div>
       <div class="baby-cries-assistant-grid">
@@ -2054,7 +2054,7 @@ function renderBabyCriesAssistantPanel() {
       ` : ""}
       ${assistant.prompt ? `
         <details class="baby-cries-prompt" open>
-          <summary>User default prompt to Llama</summary>
+          <summary>User default prompt to GPT</summary>
           <pre>${escapeHtml(assistant.prompt)}</pre>
         </details>
       ` : ""}
@@ -2133,9 +2133,9 @@ async function maybeRefreshBabyCriesAssistant(force = false) {
     assistant.result = payload.recommendation || null;
     assistant.source = payload.source || "fallback";
     assistant.updatedAt = payload.updatedAt || new Date().toISOString();
-    assistant.prompt = payload.prompt || payload.llamaPrompt || "";
+    assistant.prompt = payload.prompt || payload.gptPrompt || "";
     assistant.lastSignature = signature;
-    assistant.error = payload.llama?.available === false && payload.llama?.error ? "Llama unavailable; using fallback." : "";
+    assistant.error = payload.gpt?.available === false && payload.gpt?.error ? "GPT unavailable; using fallback." : "";
   } catch (error) {
     assistant.error = `Could not review logs: ${error.message}`;
     assistant.source = "fallback";
@@ -2155,7 +2155,7 @@ function updateBabyCriesAssistantPanel() {
     state.babyCriesAssistant.open = false;
     updateBabyCriesAssistantPanel();
   });
-  const button = document.querySelector("[data-baby-cries-llama]");
+  const button = document.querySelector("[data-baby-cries-gpt]");
   if (button) button.setAttribute("aria-expanded", state.babyCriesAssistant.open ? "true" : "false");
 }
 
