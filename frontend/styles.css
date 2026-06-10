@@ -20,6 +20,49 @@
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+:root[data-design-style="calm"] {
+  --bg: #f7f8f6;
+  --paper: #ffffff;
+  --ink: #202724;
+  --muted: #64706b;
+  --line: #dce4df;
+  --primary: #376d64;
+  --primary-dark: #244f49;
+  --peach: #eab589;
+  --coral: #d86f76;
+  --mint: #b8d9c8;
+  --lotus: #c66b7a;
+  --sun: #c9943a;
+  --sky: #547ea8;
+  --grass: #758b5a;
+  --star: #a94848;
+  --radius: 8px;
+  --display-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+:root[data-design-style="glassy"] {
+  color-scheme: dark;
+  --bg: #060708;
+  --paper: rgba(255, 255, 255, 0.1);
+  --ink: #f7fbf8;
+  --muted: rgba(235, 244, 239, 0.72);
+  --line: rgba(255, 255, 255, 0.18);
+  --primary: #86e0d1;
+  --primary-dark: #f8fffc;
+  --peach: #ffb987;
+  --coral: #ff7e8f;
+  --mint: #8fe7c4;
+  --lotus: #d890c5;
+  --sun: #f2b552;
+  --sky: #74c3df;
+  --grass: #b3d679;
+  --star: #ff8d8d;
+  --radius: 28px;
+  --glass-bright-ink: #4f5a5c;
+  --glass-bright-muted: #697477;
+  --display-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -33,6 +76,630 @@ body {
     radial-gradient(circle at 12% 3%, rgba(217, 154, 43, 0.16), transparent 26rem),
     linear-gradient(180deg, #f8fbf6 0%, var(--bg) 100%);
   color: var(--ink);
+}
+
+body[data-design-style="calm"] {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(247, 248, 246, 0.97)),
+    linear-gradient(180deg, #fbfcfa 0%, var(--bg) 100%);
+}
+
+body[data-design-style="glassy"] {
+  background:
+    radial-gradient(circle at 15% 8%, rgba(216, 144, 197, 0.34), transparent 25rem),
+    radial-gradient(circle at 78% 12%, rgba(116, 195, 223, 0.34), transparent 28rem),
+    radial-gradient(circle at 50% 86%, rgba(242, 181, 82, 0.22), transparent 30rem),
+    linear-gradient(180deg, #030405 0%, #0c0f12 52%, #050607 100%);
+  color: var(--ink);
+}
+
+body[data-design-style="glassy"] .app-shell::before,
+body[data-design-style="glassy"] .app-shell::after {
+  opacity: 0;
+}
+
+body[data-design-style="glassy"] .topbar,
+body[data-design-style="glassy"] .tabs,
+body[data-design-style="glassy"] .activity-card,
+body[data-design-style="glassy"] .metric,
+body[data-design-style="glassy"] .recent-panel,
+body[data-design-style="glassy"] .export-panel,
+body[data-design-style="glassy"] .settings-panel,
+body[data-design-style="glassy"] .settings-card,
+body[data-design-style="glassy"] .schedule-info,
+body[data-design-style="glassy"] .schedule-card,
+body[data-design-style="glassy"] .list-item,
+body[data-design-style="glassy"] .dashboard-overview-card,
+body[data-design-style="glassy"] .care-card {
+  border-color: rgba(255, 255, 255, 0.2);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08)),
+    rgba(15, 18, 22, 0.58);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(24px) saturate(1.25);
+}
+
+body[data-design-style="glassy"] .activity-card,
+body[data-design-style="glassy"] .schedule-card,
+body[data-design-style="glassy"] .settings-card,
+body[data-design-style="glassy"] .care-card {
+  border-radius: 28px;
+  overflow: hidden;
+}
+
+body[data-design-style="glassy"] .card-header {
+  background:
+    linear-gradient(135deg, rgba(216, 144, 197, 0.38), rgba(116, 195, 223, 0.28)),
+    rgba(255, 255, 255, 0.08);
+}
+
+body[data-design-style="glassy"] .card-info,
+body[data-design-style="glassy"] .schedule-actual,
+body[data-design-style="glassy"] input,
+body[data-design-style="glassy"] select,
+body[data-design-style="glassy"] textarea,
+body[data-design-style="glassy"] .current-clock,
+body[data-design-style="glassy"] .topbar-baby-age,
+body[data-design-style="glassy"] .topbar-baby-stats,
+body[data-design-style="glassy"] .pending-log-sync-status {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--ink);
+  backdrop-filter: blur(18px);
+}
+
+body[data-design-style="glassy"] .tab.active,
+body[data-design-style="glassy"] .tab:hover,
+body[data-design-style="glassy"] .primary,
+body[data-design-style="glassy"] .schedule-notification-button {
+  border-color: rgba(134, 224, 209, 0.44);
+  background: rgba(134, 224, 209, 0.18);
+  color: var(--ink);
+}
+
+body[data-design-style="glassy"] .tab {
+  border-color: rgba(255, 255, 255, 0.24);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05)),
+    rgba(18, 22, 26, 0.82);
+  color: rgba(218, 224, 221, 0.96);
+  font-weight: 950;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 10px 28px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(20px) saturate(1.15);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.88), 0 0 14px rgba(0, 0, 0, 0.5);
+}
+
+body[data-design-style="glassy"] .tab.active,
+body[data-design-style="glassy"] .tab:hover {
+  border-color: rgba(134, 224, 209, 0.58);
+  background:
+    linear-gradient(180deg, rgba(134, 224, 209, 0.28), rgba(134, 224, 209, 0.12)),
+    rgba(16, 32, 36, 0.88);
+  color: rgba(230, 236, 233, 0.98);
+}
+
+body[data-design-style="glassy"] .tabs {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+body[data-design-style="glassy"] .home-tab {
+  color: var(--glass-bright-ink);
+}
+
+body[data-design-style="glassy"] .activity-grid {
+  gap: 18px;
+}
+
+body[data-design-style="glassy"] .activity-card {
+  min-height: 470px;
+  justify-content: flex-start;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: #050607;
+  box-shadow: 0 24px 74px rgba(0, 0, 0, 0.54);
+}
+
+body[data-design-style="glassy"] .activity-card::after {
+  display: none;
+}
+
+body[data-design-style="glassy"] .activity-card > div:last-child {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 14px;
+  position: relative;
+  z-index: 2;
+  flex: 1 1 auto;
+  align-content: start;
+  margin: -26px 0 0;
+  padding: 28px 18px 18px;
+  border-radius: 24px 24px 28px 28px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(239, 242, 242, 0.88)),
+    rgba(255, 255, 255, 0.9);
+  color: var(--glass-bright-ink);
+  box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(24px) saturate(1.2);
+}
+
+body[data-design-style="glassy"] .activity-card > div:last-child .button-row {
+  align-self: end;
+  background: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+body[data-design-style="glassy"] .card-header {
+  min-height: 266px;
+  margin-bottom: -1px;
+  padding: 24px 22px 56px;
+  align-items: end;
+  border-radius: 28px 28px 0 0;
+  background:
+    linear-gradient(180deg, rgba(2, 5, 10, 0.1), rgba(2, 5, 10, 0.22) 52%, rgba(2, 5, 10, 0.74)),
+    var(--card-image) center / cover no-repeat,
+    linear-gradient(135deg, #15233c, #0b0f16);
+}
+
+body[data-design-style="glassy"] .card-header::before,
+body[data-design-style="glassy"] .card-header::after {
+  opacity: 0.48;
+}
+
+body[data-design-style="glassy"] .card-header h3 {
+  font-family: var(--display-font);
+  font-size: 25px;
+  line-height: 1.02;
+  color: #fff;
+  text-shadow: 0 7px 22px rgba(0, 0, 0, 0.52);
+}
+
+body[data-design-style="glassy"] .card-header p {
+  color: rgba(255, 255, 255, 0.88);
+  text-shadow: 0 5px 16px rgba(0, 0, 0, 0.42);
+}
+
+body[data-design-style="glassy"] .card-more,
+body[data-design-style="glassy"] .card-care-link,
+body[data-design-style="glassy"] .sound-toggle {
+  border-color: rgba(255, 255, 255, 0.36);
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+}
+
+body[data-design-style="glassy"] .card-more span {
+  background: #fff;
+}
+
+body[data-design-style="glassy"] .card-info {
+  min-height: 112px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--glass-bright-ink);
+  box-shadow: none;
+  place-items: center;
+  text-align: center;
+}
+
+body[data-design-style="glassy"] .card-info span,
+body[data-design-style="glassy"] .card-info small {
+  color: var(--glass-bright-muted);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.28;
+}
+
+body[data-design-style="glassy"] .card-info {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.28;
+}
+
+body[data-design-style="glassy"] .card-info strong {
+  color: var(--glass-bright-ink);
+  font-size: 34px;
+  font-weight: 600;
+}
+
+body[data-design-style="glassy"] .card-info .hygiene-list {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 7px 16px;
+}
+
+body[data-design-style="glassy"] .card-info .hygiene-list span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--glass-bright-muted);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.28;
+  text-align: center;
+}
+
+body[data-design-style="glassy"] .card-info .hygiene-list span:last-child {
+  flex-basis: 100%;
+}
+
+body[data-design-style="glassy"] .card-info .hygiene-list img {
+  width: 22px;
+  height: 22px;
+}
+
+body[data-design-style="glassy"] .care-card-info,
+body[data-design-style="glassy"] .care-card-info .care-card-bullets,
+body[data-design-style="glassy"] .care-card-info .care-card-bullets li {
+  color: var(--glass-bright-muted);
+}
+
+body[data-design-style="glassy"] .action-button {
+  min-height: 94px;
+  border: 0;
+  background: transparent;
+  color: var(--glass-bright-ink);
+  box-shadow: none;
+}
+
+body[data-design-style="glassy"] .action-button img {
+  width: 58px;
+  height: 58px;
+  padding: 7px;
+  border: 2px solid rgba(42, 213, 190, 0.78);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(241, 244, 244, 0.92)) padding-box;
+  box-shadow: 0 12px 28px rgba(35, 180, 160, 0.2);
+}
+
+body[data-design-style="glassy"] .action-button span {
+  color: var(--glass-bright-ink);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+body[data-design-style="glassy"] .action-button.active {
+  background: transparent;
+  color: var(--glass-bright-ink);
+}
+
+body[data-design-style="glassy"] .action-button.active img {
+  border-color: rgba(39, 209, 185, 0.94);
+  box-shadow: 0 0 0 5px rgba(39, 209, 185, 0.16), 0 12px 28px rgba(35, 180, 160, 0.22);
+}
+
+body[data-design-style="glassy"] .activity-card > div:last-child,
+body[data-design-style="glassy"] .next-milestone-card,
+body[data-design-style="glassy"] .milestone-section,
+body[data-design-style="glassy"] .next-milestone-button,
+body[data-design-style="glassy"] .milestone-card,
+body[data-design-style="glassy"] .exercise-card,
+body[data-design-style="glassy"] .poop-color-card,
+body[data-design-style="glassy"] .reaction-card,
+body[data-design-style="glassy"] .baby-cries-card,
+body[data-design-style="glassy"] .baby-cries-step,
+body[data-design-style="glassy"] .baby-cries-soothe,
+body[data-design-style="glassy"] .baby-cries-note,
+body[data-design-style="glassy"] .baby-cries-assistant,
+body[data-design-style="glassy"] .baby-cries-assistant-grid div,
+body[data-design-style="glassy"] .baby-cries-inspections,
+body[data-design-style="glassy"] .baby-cries-prompt,
+body[data-design-style="glassy"] .baby-cries-assistant-meta span,
+body[data-design-style="glassy"] .achieved-note {
+  color: var(--glass-bright-ink);
+}
+
+body[data-design-style="glassy"] .activity-card > div:last-child strong,
+body[data-design-style="glassy"] .activity-card > div:last-child h3,
+body[data-design-style="glassy"] .next-milestone-card h3,
+body[data-design-style="glassy"] .next-milestone-button strong,
+body[data-design-style="glassy"] .milestone-card-copy strong,
+body[data-design-style="glassy"] .exercise-card h4,
+body[data-design-style="glassy"] .exercise-card strong,
+body[data-design-style="glassy"] .milestone-dialog-body strong,
+body[data-design-style="glassy"] .milestone-dialog-hero h3,
+body[data-design-style="glassy"] .poop-color-card strong,
+body[data-design-style="glassy"] .reaction-card strong,
+body[data-design-style="glassy"] .baby-cries-step strong,
+body[data-design-style="glassy"] .baby-cries-soothe h4,
+body[data-design-style="glassy"] .baby-cries-note strong,
+body[data-design-style="glassy"] .baby-cries-assistant h4,
+body[data-design-style="glassy"] .baby-cries-assistant-grid strong,
+body[data-design-style="glassy"] .baby-cries-inspections > strong,
+body[data-design-style="glassy"] .baby-cries-inspections li,
+body[data-design-style="glassy"] .baby-cries-prompt summary {
+  color: var(--glass-bright-ink);
+}
+
+body[data-design-style="glassy"] .activity-card > div:last-child small,
+body[data-design-style="glassy"] .activity-card > div:last-child p,
+body[data-design-style="glassy"] .next-milestone-button small,
+body[data-design-style="glassy"] .next-milestone-button em,
+body[data-design-style="glassy"] .milestone-card-copy small,
+body[data-design-style="glassy"] .exercise-card ul,
+body[data-design-style="glassy"] .milestone-dialog-body ul,
+body[data-design-style="glassy"] .poop-color-card > span:last-child,
+body[data-design-style="glassy"] .baby-cries-step p,
+body[data-design-style="glassy"] .baby-cries-soothe p,
+body[data-design-style="glassy"] .baby-cries-soothe li,
+body[data-design-style="glassy"] .baby-cries-soothe small,
+body[data-design-style="glassy"] .baby-cries-note,
+body[data-design-style="glassy"] .baby-cries-assistant-grid p {
+  color: var(--glass-bright-muted);
+}
+
+body[data-design-style="glassy"] .baby-cries-step {
+  opacity: 1;
+}
+
+body[data-design-style="glassy"] .baby-cries-icon {
+  color: var(--glass-bright-ink);
+}
+
+body[data-design-style="glassy"] button,
+body[data-design-style="glassy"] button:hover,
+body[data-design-style="glassy"] button:focus-visible,
+body[data-design-style="glassy"] button span,
+body[data-design-style="glassy"] .action-button span,
+body[data-design-style="glassy"] .home-tab,
+body[data-design-style="glassy"] .home-tab.active,
+body[data-design-style="glassy"] .home-tab:hover,
+body[data-design-style="glassy"] .tab,
+body[data-design-style="glassy"] .tab.active,
+body[data-design-style="glassy"] .tab:hover,
+body[data-design-style="glassy"] .settings-tool-button,
+body[data-design-style="glassy"] .settings-tool-button.active,
+body[data-design-style="glassy"] .settings-tool-button:hover,
+body[data-design-style="glassy"] .weather-shortcut,
+body[data-design-style="glassy"] .weather-shortcut:hover,
+body[data-design-style="glassy"] .weather-shortcut:focus-visible,
+body[data-design-style="glassy"] .care-back-button,
+body[data-design-style="glassy"] .care-issue-tabs button,
+body[data-design-style="glassy"] .care-issue-tabs button.active,
+body[data-design-style="glassy"] .care-issue-tabs button:hover,
+body[data-design-style="glassy"] .care-issue-tabs button:focus-visible,
+body[data-design-style="glassy"] .baby-cries-llama-button,
+body[data-design-style="glassy"] .baby-cries-llama-button:hover,
+body[data-design-style="glassy"] .baby-cries-llama-button:focus-visible,
+body[data-design-style="glassy"] .baby-cries-assistant-actions button,
+body[data-design-style="glassy"] .icon-close,
+body[data-design-style="glassy"] .primary,
+body[data-design-style="glassy"] .ghost,
+body[data-design-style="glassy"] .schedule-notification-button,
+body[data-design-style="glassy"] .milestone-actions button,
+body[data-design-style="glassy"] .exercise-link-list button {
+  color: var(--glass-bright-ink);
+  text-shadow: none;
+}
+
+body[data-design-style="glassy"] .dashboard-filters,
+body[data-design-style="glassy"] .dashboard-filters input[type="date"],
+body[data-design-style="glassy"] .dashboard-filters select,
+body[data-design-style="glassy"] .event-type-dropdown summary,
+body[data-design-style="glassy"] .event-type-menu,
+body[data-design-style="glassy"] .event-type-menu label,
+body[data-design-style="glassy"] .dashboard-overview,
+body[data-design-style="glassy"] .overview-history-picker select,
+body[data-design-style="glassy"] .dashboard-overview-summary-panel,
+body[data-design-style="glassy"] .dashboard-overview-next,
+body[data-design-style="glassy"] .dashboard-overview-trace,
+body[data-design-style="glassy"] .overview-flags span,
+body[data-design-style="glassy"] .dashboard-overview-meta span,
+body[data-design-style="glassy"] .dashboard-stat,
+body[data-design-style="glassy"] .dashboard-chart-shell,
+body[data-design-style="glassy"] .dashboard-event-detail,
+body[data-design-style="glassy"] .analytics-section,
+body[data-design-style="glassy"] .analytics-card,
+body[data-design-style="glassy"] .plot-card,
+body[data-design-style="glassy"] .plot-detail {
+  color: var(--glass-bright-ink);
+}
+
+body[data-design-style="glassy"] .dashboard-filters label,
+body[data-design-style="glassy"] .dashboard-filters legend,
+body[data-design-style="glassy"] .dashboard-overview-top span,
+body[data-design-style="glassy"] .dashboard-overview-top p,
+body[data-design-style="glassy"] .overview-history-picker,
+body[data-design-style="glassy"] .dashboard-overview-updated,
+body[data-design-style="glassy"] .dashboard-overview-bullets,
+body[data-design-style="glassy"] .dashboard-overview-summary-panel p,
+body[data-design-style="glassy"] .dashboard-overview-summary-panel ul,
+body[data-design-style="glassy"] .dashboard-overview-summary-panel ol,
+body[data-design-style="glassy"] .dashboard-overview-next p,
+body[data-design-style="glassy"] .dashboard-overview-next li,
+body[data-design-style="glassy"] .overview-trace-row,
+body[data-design-style="glassy"] .dashboard-stat span,
+body[data-design-style="glassy"] .dashboard-event-detail span,
+body[data-design-style="glassy"] .dashboard-touch-hint,
+body[data-design-style="glassy"] .analytics-card span,
+body[data-design-style="glassy"] .analytics-card small,
+body[data-design-style="glassy"] .plot-card p,
+body[data-design-style="glassy"] .plot-card text,
+body[data-design-style="glassy"] .plot-legend span {
+  color: var(--glass-bright-muted);
+}
+
+body[data-design-style="glassy"] .dashboard-overview-top::before,
+body[data-design-style="glassy"] .dashboard-overview-top h3,
+body[data-design-style="glassy"] .dashboard-overview-summary-panel > span,
+body[data-design-style="glassy"] .dashboard-overview-section-title,
+body[data-design-style="glassy"] .dashboard-overview-next strong,
+body[data-design-style="glassy"] .dashboard-overview-trace summary,
+body[data-design-style="glassy"] .overview-trace-row-head,
+body[data-design-style="glassy"] .dashboard-stat strong,
+body[data-design-style="glassy"] .dashboard-chart-toolbar span,
+body[data-design-style="glassy"] .analytics-card h4,
+body[data-design-style="glassy"] .analytics-card strong,
+body[data-design-style="glassy"] .plot-card h4,
+body[data-design-style="glassy"] .plot-detail strong,
+body[data-design-style="glassy"] .plot-detail span,
+body[data-design-style="glassy"] .help-icon {
+  color: var(--glass-bright-ink);
+}
+
+body[data-design-style="glassy"] .dashboard-axis-label,
+body[data-design-style="glassy"] .dashboard-time-label {
+  fill: var(--glass-bright-muted);
+}
+
+body[data-design-style="glassy"] .plot-card text {
+  fill: var(--glass-bright-muted);
+}
+
+body[data-design-style="glassy"] .metric,
+body[data-design-style="glassy"] .metric strong,
+body[data-design-style="glassy"] .dashboard-overview-card,
+body[data-design-style="glassy"] .dashboard-overview-card h4,
+body[data-design-style="glassy"] .dashboard-overview-card dt,
+body[data-design-style="glassy"] .dashboard-overview-card dd,
+body[data-design-style="glassy"] .dashboard-overview-card p,
+body[data-design-style="glassy"] .dashboard-overview-card .overview-card-headline,
+body[data-design-style="glassy"] .dashboard-overview-card .overview-sources a,
+body[data-design-style="glassy"] .overview-category-expander[open] .overview-learn-more {
+  color: var(--ink);
+}
+
+body[data-design-style="glassy"] .dashboard-overview-card .overview-learn-more,
+body[data-design-style="glassy"] .dashboard-overview-card .overview-card-details ul {
+  color: var(--muted);
+}
+
+body[data-design-style="glassy"] .dashboard-overview-card .overview-status,
+body[data-design-style="glassy"] .dashboard-overview-card .overview-confidence {
+  background: rgba(255, 255, 255, 0.92);
+  color: #4f5a5c;
+  text-shadow: none;
+}
+
+body[data-design-style="glassy"] .dashboard-overview-card .overview-confidence.confidence-high {
+  background: #dff2dc;
+  color: #28672c;
+}
+
+body[data-design-style="glassy"] .dashboard-overview-card .overview-confidence.confidence-medium {
+  background: #fff1d7;
+  color: #9a5a10;
+}
+
+body[data-design-style="glassy"] .dashboard-overview-card .overview-confidence.confidence-low {
+  background: #eef2f2;
+  color: #4f5a5c;
+}
+
+body[data-design-style="glassy"] .dashboard-overview-card .overview-status.status-looks-okay,
+body[data-design-style="glassy"] .dashboard-overview-card .overview-status.status-ok {
+  background: #dff2dc;
+  color: #28672c;
+}
+
+body[data-design-style="glassy"] .dashboard-overview-card .overview-status.status-watch-closely,
+body[data-design-style="glassy"] .dashboard-overview-card .overview-status.status-watch {
+  background: #fff1d7;
+  color: #9a5a10;
+}
+
+body[data-design-style="glassy"] .dashboard-overview-card .overview-status.status-call-doctor,
+body[data-design-style="glassy"] .dashboard-overview-card .overview-status.status-urgent {
+  background: #ffe1dc;
+  color: #9d3324;
+}
+
+body[data-design-style="glassy"] .schedule-info,
+body[data-design-style="glassy"] .schedule-card {
+  border: 1px solid rgba(221, 228, 220, 0.84);
+  background: rgba(255, 253, 248, 0.92);
+  color: var(--glass-bright-ink);
+  box-shadow: 0 14px 30px rgba(31, 41, 38, 0.08);
+}
+
+body[data-design-style="glassy"] .schedule-slot-past .schedule-card {
+  border-color: rgba(150, 158, 154, 0.28);
+  background: rgba(238, 240, 238, 0.86);
+  box-shadow: none;
+  filter: none;
+  opacity: 1;
+}
+
+body[data-design-style="glassy"] .schedule-slot-current .schedule-card {
+  border-color: rgba(36, 117, 111, 0.34);
+  background: linear-gradient(180deg, #ffffff, #eef9f4);
+  box-shadow: 0 14px 30px rgba(31, 41, 38, 0.1);
+}
+
+body[data-design-style="glassy"] .schedule-slot-conflict .schedule-card {
+  border-color: rgba(199, 62, 62, 0.42);
+  background: linear-gradient(180deg, #ffffff, #fff0f0);
+}
+
+body[data-design-style="glassy"] .schedule-actual,
+body[data-design-style="glassy"] .schedule-template-picker select,
+body[data-design-style="glassy"] .schedule-template-picker input,
+body[data-design-style="glassy"] .schedule-goal-control select,
+body[data-design-style="glassy"] .schedule-goal-control input,
+body[data-design-style="glassy"] .schedule-time-select,
+body[data-design-style="glassy"] .schedule-time-input,
+body[data-design-style="glassy"] .schedule-duration-input {
+  border-color: rgba(221, 228, 220, 0.84);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--glass-bright-ink);
+}
+
+body[data-design-style="glassy"] .schedule-info h3,
+body[data-design-style="glassy"] .schedule-card-main h3,
+body[data-design-style="glassy"] .schedule-actual strong {
+  color: var(--glass-bright-ink);
+}
+
+body[data-design-style="glassy"] .schedule-template-picker,
+body[data-design-style="glassy"] .schedule-goal-control,
+body[data-design-style="glassy"] .schedule-goal-note,
+body[data-design-style="glassy"] .schedule-actual p,
+body[data-design-style="glassy"] .schedule-actual li small,
+body[data-design-style="glassy"] .schedule-time-separator {
+  color: var(--glass-bright-muted);
+}
+
+body[data-design-style="glassy"] .schedule-actual li {
+  color: var(--glass-bright-ink);
+}
+
+body[data-design-style="glassy"] .schedule-card-main img {
+  opacity: 1;
+  filter: none;
+}
+
+body[data-design-style="glassy"] .schedule-slot-past .schedule-card-main img {
+  opacity: 1;
+  filter: saturate(1.12) contrast(1.06);
+}
+
+body[data-design-style="glassy"] #milestones .section-heading h3 {
+  color: var(--glass-bright-ink);
+}
+
+body[data-design-style="glassy"] .milestone-modal {
+  background: rgba(250, 252, 250, 0.96);
+  color: var(--glass-bright-ink);
+  backdrop-filter: blur(20px) saturate(1.12);
+}
+
+body[data-design-style="glassy"] .milestone-modal::backdrop {
+  background: rgba(3, 4, 5, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+body[data-design-style="glassy"] .milestone-dialog-shell {
+  background: rgba(250, 252, 250, 0.98);
+  color: var(--glass-bright-ink);
 }
 
 button,
@@ -5526,6 +6193,15 @@ input[type="range"] {
   .care-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  body[data-design-style="glassy"] .activity-card {
+    min-height: 430px;
+  }
+
+  body[data-design-style="glassy"] .card-header {
+    min-height: 238px;
+    padding: 22px 18px 52px;
+  }
 }
 
 @media (max-width: 620px) {
@@ -5563,6 +6239,11 @@ input[type="range"] {
   .quiz-stat-grid,
   .dense .list-item {
     grid-template-columns: 1fr;
+  }
+
+  body[data-design-style="glassy"] .activity-card > div:last-child {
+    margin-top: -22px;
+    padding: 26px 16px 16px;
   }
 
   .schedule-slot {
