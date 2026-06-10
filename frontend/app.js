@@ -3,9 +3,11 @@ const state = {
   recent: {},
   summary: {},
   profile: {},
+  designStyle: localStorage.getItem("tinyNewborn.designStyle") || "kiddo",
   activeTab: "home",
   activeHomeTab: "log",
   activeSettingsView: "settings",
+  activeSettingsGroup: "profile",
   visibleCards: [],
   poopColors: [],
   historyFilters: {
@@ -407,6 +409,10 @@ document.querySelectorAll("[data-settings-view]").forEach((button) => {
   button.addEventListener("click", () => activateTab(button.dataset.settingsView));
 });
 
+document.querySelectorAll("[data-settings-group]").forEach((button) => {
+  button.addEventListener("click", () => activateSettingsGroup(button.dataset.settingsGroup));
+});
+
 document.getElementById("chatgpt-shortcut")?.addEventListener("click", openChatGptShortcut);
 document.getElementById("weather-shortcut")?.addEventListener("click", openWeatherShortcut);
 
@@ -481,6 +487,7 @@ init().catch((error) => {
 });
 
 async function init() {
+  applyDesignStyle();
   updatePendingLogSyncStatus();
   window.addEventListener("online", () => retryPendingLogSyncs());
   window.addEventListener("focus", () => retryPendingLogSyncs());
@@ -759,6 +766,20 @@ function activateTab(tab) {
   });
 
   if (state.activeTab === "home" && state.activeHomeTab === "dashboard") renderDashboard();
+  if (state.activeTab === "settings" && state.activeSettingsView === "settings") activateSettingsGroup(state.activeSettingsGroup);
+}
+
+function activateSettingsGroup(group = "profile") {
+  const validGroups = ["profile", "schedule", "overview", "cards", "tools"];
+  state.activeSettingsGroup = validGroups.includes(group) ? group : "profile";
+  document.querySelectorAll("[data-settings-group]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.settingsGroup === state.activeSettingsGroup);
+  });
+  document.querySelectorAll("[data-settings-group-panel]").forEach((panel) => {
+    const isActive = panel.dataset.settingsGroupPanel === state.activeSettingsGroup;
+    panel.classList.toggle("active", isActive);
+    panel.hidden = !isActive;
+  });
 }
 
 function renderAll() {
@@ -1103,6 +1124,8 @@ function saveScheduleEdit(event) {
   const rows = currentScheduleRows(scheduleLog, template).map((row) => ({ ...row }));
   const value = field === "timeOfDay" && input.dataset.scheduleTimePart
     ? scheduleTimePickerValue(input.closest("[data-schedule-time-picker]"))
+    : field === "sleepGoal" && input.dataset.scheduleSleepGoalPart
+      ? scheduleSleepGoalPickerValue(input.closest("[data-schedule-sleep-goal-picker]"))
     : input.value;
   rows[Number(index)] = { ...objectGuideValue(rows[Number(index)]), [field]: value };
   persistScheduleLog(buildScheduleLog(state.selectedScheduleDate, template.id, rows));
@@ -1164,6 +1187,16 @@ function formatScheduleDurationValue(value) {
   return formatCompactDurationParts(hours, minutes);
 }
 
+function scheduleSlotDurationMinutes(row) {
+  const range = scheduleTimeRange(row.timeOfDay);
+  return range ? Math.max(0, range.end - range.start) : 0;
+}
+
+function scheduleSlotDurationLabel(row) {
+  const minutes = scheduleSlotDurationMinutes(row);
+  return minutes ? formatCompactDurationParts(Math.floor(minutes / 60), minutes % 60) : "--";
+}
+
 function renderScheduleSlot(row, index, rows = [], locked = false) {
   const kind = scheduleActivityKind(row);
   const actualItems = scheduleActualItemsForSlot(row);
@@ -1184,7 +1217,7 @@ function renderScheduleSlot(row, index, rows = [], locked = false) {
             <h3><span class="schedule-goal-check ${escapeAttr(goalState.state)}" title="${escapeAttr(goalState.label)}">✓</span>${escapeHtml(row.activity || "Activity")}</h3>
             <div class="schedule-card-time-controls">
               ${renderScheduleTimePicker(row, index, locked)}
-              <input class="schedule-duration-input" data-schedule-edit data-schedule-index="${index}" data-schedule-field="plannedDuration" aria-label="Slot duration" value="${escapeAttr(formatScheduleDurationValue(row.plannedDuration || ""))}" ${locked ? "disabled" : ""}>
+              <span class="schedule-duration-display" aria-label="Calculated slot duration">${escapeHtml(scheduleSlotDurationLabel(row))}</span>
             </div>
             ${timeConflict ? `<p class="schedule-time-conflict">${escapeHtml(timeConflict)}</p>` : ""}
             ${renderScheduleGoalControl(row, kind, index, locked)}
@@ -1380,7 +1413,11 @@ function scheduleLogsInGoalWindow(row, predicate) {
 }
 
 function scheduleDurationGoalMinutes(row) {
-  const text = String(row.sleepGoal || row.plannedDuration || "").trim();
+  return scheduleDurationTextToMinutes(row.sleepGoal || row.plannedDuration || "");
+}
+
+function scheduleDurationTextToMinutes(value) {
+  const text = String(value || "").trim();
   const colon = text.match(/^(\d{1,2}):(\d{2})$/);
   if (colon) return Number(colon[1]) * 60 + Number(colon[2]);
   const compact = text.match(/^(?:(\d+)\s*hrs?)?\s*(?:(\d+)\s*min)?$/i);
@@ -1462,10 +1499,10 @@ function sendScheduleNotification(row) {
 
 function scheduleNotificationGoal(row) {
   const kind = scheduleActivityKind(row);
-  if (kind === "feeding") return `${scheduleFeedGoalOz(row)} oz`;
+  if (kind === "feeding") return formatOunces(scheduleFeedGoalOz(row));
   if (kind === "sleep") return formatScheduleDurationValue(row.sleepGoal || row.plannedDuration || "");
-  if (kind === "play") return row.playGoal || row.plannedDuration || "Play time";
-  return row.plannedDuration || "";
+  if (kind === "play") return row.playGoal || scheduleSlotDurationLabel(row) || "Play time";
+  return scheduleSlotDurationLabel(row);
 }
 
 function renderScheduleGoalControl(row, kind, index, locked = false) {
@@ -1475,18 +1512,13 @@ function renderScheduleGoalControl(row, kind, index, locked = false) {
       <label class="schedule-goal-control">
         <span>Goal</span>
         <select data-schedule-edit data-schedule-index="${index}" data-schedule-field="feedGoalOz" aria-label="Feeding ounces goal" ${locked ? "disabled" : ""}>
-          ${[1, 2, 3, 4, 5, 6, 7, 8].map((amount) => `<option value="${amount}" ${amount === value ? "selected" : ""}>${amount} oz</option>`).join("")}
+          ${feedingGoalOptions().map((amount) => `<option value="${amount}" ${amount === value ? "selected" : ""}>${formatOunces(amount)}</option>`).join("")}
         </select>
       </label>
     `;
   }
   if (kind === "sleep") {
-    return `
-      <label class="schedule-goal-control">
-        <span>Sleep goal</span>
-        <input data-schedule-edit data-schedule-index="${index}" data-schedule-field="sleepGoal" aria-label="Sleep goal" value="${escapeAttr(formatScheduleDurationValue(row.sleepGoal || row.plannedDuration || ""))}" ${locked ? "disabled" : ""}>
-      </label>
-    `;
+    return renderScheduleSleepGoalControl(row, index, locked);
   }
   if (kind === "play") {
     return `
@@ -1499,6 +1531,50 @@ function renderScheduleGoalControl(row, kind, index, locked = false) {
     `;
   }
   return `<p class="schedule-goal-note">${escapeHtml(row.notes || "Use this slot as a guide, then compare with logs.")}</p>`;
+}
+
+function renderScheduleSleepGoalControl(row, index, locked = false) {
+  const parts = scheduleDurationPickerParts(row.sleepGoal || row.plannedDuration || "", scheduleSlotDurationMinutes(row) || 30);
+  const hourOptions = Array.from({ length: 13 }, (_, hour) => (
+    `<option value="${hour}" ${hour === parts.hours ? "selected" : ""}>${hour} hr</option>`
+  )).join("");
+  const minuteOptions = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((minute) => (
+    `<option value="${minute}" ${minute === parts.minutes ? "selected" : ""}>${String(minute).padStart(2, "0")} min</option>`
+  )).join("");
+  return `
+    <label class="schedule-goal-control">
+      <span>Sleep goal</span>
+      <span class="schedule-sleep-goal-picker" data-schedule-sleep-goal-picker>
+        <select class="schedule-sleep-goal-select" data-schedule-edit data-schedule-index="${index}" data-schedule-field="sleepGoal" data-schedule-sleep-goal-part="hours" aria-label="Sleep goal hours" ${locked ? "disabled" : ""}>
+          ${hourOptions}
+        </select>
+        <select class="schedule-sleep-goal-select" data-schedule-edit data-schedule-index="${index}" data-schedule-field="sleepGoal" data-schedule-sleep-goal-part="minutes" aria-label="Sleep goal minutes" ${locked ? "disabled" : ""}>
+          ${minuteOptions}
+        </select>
+      </span>
+    </label>
+  `;
+}
+
+function scheduleDurationPickerParts(value, fallbackMinutes = 30) {
+  const parsed = scheduleDurationTextToMinutes(value);
+  const total = Math.max(0, parsed || fallbackMinutes || 0);
+  let hours = Math.floor(total / 60);
+  let minutes = Math.round((total % 60) / 5) * 5;
+  if (minutes === 60) {
+    hours += 1;
+    minutes = 0;
+  }
+  return {
+    hours: Math.max(0, Math.min(12, hours)),
+    minutes
+  };
+}
+
+function scheduleSleepGoalPickerValue(container) {
+  const hours = Number(container?.querySelector("[data-schedule-sleep-goal-part='hours']")?.value || 0);
+  const minutes = Number(container?.querySelector("[data-schedule-sleep-goal-part='minutes']")?.value || 0);
+  return formatCompactDurationParts(Math.max(0, hours), Math.max(0, minutes));
 }
 
 function scheduleActivityKind(row) {
@@ -1523,7 +1599,15 @@ function scheduleActivityIcon(row) {
 
 function scheduleFeedGoalOz(row) {
   const raw = Number(row.feedGoalOz || row.feedGoal);
-  return Number.isFinite(raw) ? Math.max(1, Math.min(8, Math.round(raw))) : 3;
+  return Number.isFinite(raw) ? Math.max(0.5, Math.min(8, Math.round(raw * 4) / 4)) : 3;
+}
+
+function feedingGoalOptions() {
+  const options = [];
+  for (let amount = 0.5; amount <= 8.001; amount += 0.25) {
+    options.push(Math.round(amount * 4) / 4);
+  }
+  return options;
 }
 
 function scheduleTimeRange(value) {
@@ -1688,7 +1772,8 @@ function scheduleActualLogLabel(log) {
 function formatOunces(value) {
   const amount = numberValue(value, 0);
   if (!amount) return "-- oz";
-  return `${Number.isInteger(amount) ? amount : amount.toFixed(1)} oz`;
+  const label = Number.isInteger(amount) ? String(amount) : amount.toFixed(2).replace(/0$/, "").replace(/\.0$/, "");
+  return `${label} oz`;
 }
 
 function numberValue(value, fallback = 0) {
@@ -3050,6 +3135,7 @@ function setupSettingsPanel() {
   document.getElementById("bath-reminder-form").addEventListener("submit", saveBathReminder);
   document.getElementById("tummy-reminder-form").addEventListener("submit", saveTummyReminder);
   document.getElementById("reminder-voice-select").addEventListener("change", saveReminderVoice);
+  document.getElementById("settings-design-style").addEventListener("change", saveDesignStyle);
   document.getElementById("settings-milk-unit").addEventListener("change", saveSettingsMilkUnit);
   document.getElementById("settings-weight-unit").addEventListener("change", saveSettingsWeightUnit);
   document.getElementById("settings-height-unit").addEventListener("change", saveSettingsHeightUnit);
@@ -3575,10 +3661,14 @@ function renderSettings() {
   const heightUnitSelect = document.getElementById("settings-height-unit");
   if (heightUnitSelect && document.activeElement !== heightUnitSelect) heightUnitSelect.value = state.heightUnit;
 
+  const designStyleSelect = document.getElementById("settings-design-style");
+  if (designStyleSelect && document.activeElement !== designStyleSelect) designStyleSelect.value = state.designStyle;
+
   syncOverviewSettingsInputs();
   renderVoiceOptions();
   renderScheduleNotificationSettings();
   renderSettingsScheduleTemplate();
+  activateSettingsGroup(state.activeSettingsGroup);
 
   const container = document.getElementById("category-settings");
   if (!container) return;
@@ -3602,6 +3692,21 @@ function renderSettings() {
       showSettingsStatus("Category cards updated.");
     });
   });
+}
+
+function applyDesignStyle() {
+  const style = ["kiddo", "calm", "glassy"].includes(state.designStyle) ? state.designStyle : "kiddo";
+  state.designStyle = style;
+  document.documentElement.dataset.designStyle = style;
+  document.body?.setAttribute("data-design-style", style);
+}
+
+function saveDesignStyle(event) {
+  state.designStyle = event.target.value || "kiddo";
+  localStorage.setItem("tinyNewborn.designStyle", state.designStyle);
+  applyDesignStyle();
+  const label = { kiddo: "Kiddo", calm: "Calm", glassy: "Glassy" }[state.designStyle] || "Kiddo";
+  showSettingsStatus(`Design style set to ${label}.`);
 }
 
 function renderScheduleNotificationSettings() {
@@ -4551,7 +4656,7 @@ function getActivityStats() {
       value: todaySummary.breastFeeds,
       helper: `<small>${lastLogSummary("feeding")}</small>
               <br>
-              <small>➡️ Next side with good latch (breast should not be too full): ${state.recent.nextBreastSide || "left"}</small>
+              <small>Next time ${String(state.recent.nextBreastSide || "left").replace(/^./, (letter) => letter.toUpperCase())}</small>
               <br>
               <small> 
                <small>🌙 Empty breasts before sleep</small>`
@@ -5942,32 +6047,15 @@ function renderDashboardAnalytics(rangeLogs) {
   if (!container) return;
 
   const analytics = buildDashboardAnalytics(rangeLogs);
+  const summaryRows = renderAnalyticsSummaryRows(analytics);
   container.innerHTML = `
     <section class="analytics-section">
       <div class="section-heading">
-        <h3>Duration Events</h3>
-        <p>Period-based activities in this date range.</p>
+        <h3>Activity Summary</h3>
+        <p>Duration, quick counts, and feeding rhythm in one view.</p>
       </div>
-      <div class="analytics-grid">
-        ${analytics.durationStats.length ? analytics.durationStats.map(renderDurationStatCard).join("") : `<p class="empty-state">No completed duration events in this range.</p>`}
-      </div>
-    </section>
-    <section class="analytics-section">
-      <div class="section-heading">
-        <h3>Quick Events</h3>
-        <p>Counts and amounts for instant logs.</p>
-      </div>
-      <div class="analytics-grid">
-        ${analytics.quickStats.length ? analytics.quickStats.map(renderQuickStatCard).join("") : `<p class="empty-state">No quick events in this range.</p>`}
-      </div>
-    </section>
-    <section class="analytics-section">
-      <div class="section-heading">
-        <h3>Feeding Rhythm</h3>
-        <p>Time from the previous feed to care events.</p>
-      </div>
-      <div class="analytics-grid">
-        ${analytics.intervalStats.length ? analytics.intervalStats.map(renderIntervalStatCard).join("") : `<p class="empty-state">Not enough feeding rhythm data yet.</p>`}
+      <div class="analytics-summary-card">
+        ${summaryRows.length ? summaryRows.join("") : `<p class="empty-state">No summary data in this range yet.</p>`}
       </div>
     </section>
     <section class="analytics-section">
@@ -5981,6 +6069,14 @@ function renderDashboardAnalytics(rangeLogs) {
     </section>
   `;
   setupHelpTooltips(container);
+}
+
+function renderAnalyticsSummaryRows(analytics) {
+  return [
+    ...analytics.durationStats.map(renderDurationSummaryRow),
+    ...analytics.quickStats.map(renderQuickSummaryRow),
+    ...analytics.intervalStats.map(renderIntervalSummaryRow)
+  ];
 }
 
 function buildDashboardAnalytics(rangeLogs) {
@@ -6037,6 +6133,16 @@ function renderDurationStatCard(stat) {
   `;
 }
 
+function renderDurationSummaryRow(stat) {
+  return `
+    <div class="analytics-summary-row">
+      <span>${escapeHtml(stat.label)} ${helpIcon("Total duration, count, average length, and longest period.")}</span>
+      <strong>${escapeHtml(formatCompactDuration(stat.total))}</strong>
+      <small>${stat.count} times, avg ${escapeHtml(formatCompactDuration(stat.average))}, longest ${escapeHtml(formatCompactDuration(stat.longest.duration))}</small>
+    </div>
+  `;
+}
+
 function renderQuickStatCard(stat) {
   const growth = stat.latestWeightGrams == null && stat.latestHeightMm == null
     ? ""
@@ -6053,6 +6159,22 @@ function renderQuickStatCard(stat) {
   `;
 }
 
+function renderQuickSummaryRow(stat) {
+  const details = [];
+  details.push(`${stat.count} times`);
+  if (stat.averageAmount != null) details.push(`avg ${Number(stat.averageAmount.toFixed(2))} oz, total ${Number(stat.totalAmount.toFixed(2))} oz`);
+  if (stat.latestWeightGrams != null || stat.latestHeightMm != null) {
+    details.push(`latest ${stat.latestWeightGrams ? formatMeasurement(Number(formatUnitValue(stat.latestWeightGrams, state.weightUnit, "weight")), state.weightUnit) : "--"} / ${stat.latestHeightMm ? formatMeasurement(Number(formatUnitValue(stat.latestHeightMm, state.heightUnit, "height")), state.heightUnit) : "--"}`);
+  }
+  return `
+    <div class="analytics-summary-row">
+      <span>${escapeHtml(stat.label)} ${helpIcon("Count for this quick event. Bottle also shows average and total amount.")}</span>
+      <strong>${stat.count}</strong>
+      <small>${escapeHtml(details.join(", "))}</small>
+    </div>
+  `;
+}
+
 function renderIntervalStatCard(stat) {
   return `
     <article class="analytics-card">
@@ -6061,6 +6183,16 @@ function renderIntervalStatCard(stat) {
       <span>${stat.count} matched events</span>
       <small>Range: ${escapeHtml(formatCompactDuration(stat.min))} to ${escapeHtml(formatCompactDuration(stat.max))}</small>
     </article>
+  `;
+}
+
+function renderIntervalSummaryRow(stat) {
+  return `
+    <div class="analytics-summary-row">
+      <span>${escapeHtml(stat.label)} ${helpIcon("Average elapsed time from the previous feeding or bottle to this event.")}</span>
+      <strong>${escapeHtml(formatCompactDuration(stat.average))}</strong>
+      <small>${stat.count} matched, range ${escapeHtml(formatCompactDuration(stat.min))} to ${escapeHtml(formatCompactDuration(stat.max))}</small>
+    </div>
   `;
 }
 
