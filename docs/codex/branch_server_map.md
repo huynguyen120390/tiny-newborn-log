@@ -122,6 +122,36 @@ prod branch -> prod server -> port 3002
 
 If `3002` shows uncommitted dev changes, production is running from the wrong folder.
 
+## Full Deployment From Dev
+
+When Huy says "full deployment from dev", do this exact promotion flow:
+
+```text
+dev -> staging -> main -> prod
+```
+
+Required sequence:
+
+1. Start in `C:\Users\Huy\Documents\TinyNewbornLog` and confirm the working tree is clean.
+2. Fetch from `origin`.
+3. Merge `dev` into `staging`, then push `staging`.
+4. Merge `staging` into `main`, then push `main`.
+5. Merge `main` into `prod`, then push `prod`.
+6. Return to `dev`.
+7. Pull each dedicated runtime checkout from its matching branch:
+
+```text
+C:\codelab\apps\TinyNewbornLogServers\dev      <- origin/dev
+C:\codelab\apps\TinyNewbornLogServers\staging  <- origin/staging
+C:\codelab\apps\TinyNewbornLogServers\main     <- origin/main
+C:\codelab\apps\TinyNewbornLogServers\prod     <- origin/prod
+```
+
+8. Restart all app servers and Server Control from their dedicated runtime folders.
+9. Verify ports `3001`, `3002`, `3003`, `3004`, and `3010` are listening.
+
+Do not use the active Documents repo as a runtime server root during deployment.
+
 ## Verification Commands
 
 Check live ports:
