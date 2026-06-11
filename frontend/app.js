@@ -25,7 +25,7 @@ const state = {
   },
   dashboardSelection: null,
   activeLogsCard: null,
-  selectedCareIssue: null,
+  selectedCareIssue: "troubleshoot",
   selectedCareSubtab: {},
   careInfo: {},
   lastCareGuidanceNotificationKey: localStorage.getItem("tinyNewborn.care.lastGuidanceNotificationKey") || "",
@@ -909,18 +909,19 @@ function renderCare() {
   const panel = document.getElementById("care-panel");
   if (!panel) return;
 
-  const selected = careIssues.find((issue) => issue.key === state.selectedCareIssue);
+  const selected = careIssues.find((issue) => issue.key === state.selectedCareIssue) || careIssues[0];
+  state.selectedCareIssue = selected.key;
   panel.innerHTML = `
     <div class="care-layout">
-      ${renderCareSideNavigator(selected?.key || "overview")}
+      ${renderCareSideNavigator(selected.key)}
       <div class="care-content">
-        ${selected ? renderCareIssueView(selected, { showBack: false }) : renderCareOverview()}
+        ${renderCareIssueView(selected, { showBack: false })}
       </div>
     </div>
   `;
 
   panel.querySelector("[data-care-back]")?.addEventListener("click", () => {
-    state.selectedCareIssue = null;
+    state.selectedCareIssue = "troubleshoot";
     renderCare();
   });
   panel.querySelectorAll("[data-care-issue]").forEach((button) => {
@@ -930,36 +931,21 @@ function renderCare() {
     });
   });
 
-  if (selected) {
-    panel.querySelectorAll("[data-care-subtab]").forEach((button) => {
-      button.addEventListener("click", () => {
-        state.selectedCareSubtab[selected.key] = button.dataset.careSubtab;
-        renderCare();
-      });
+  panel.querySelectorAll("[data-care-subtab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedCareSubtab[selected.key] = button.dataset.careSubtab;
+      renderCare();
     });
-    panel.querySelector("[data-baby-cries-gpt]")?.addEventListener("click", () => {
-      state.babyCriesAssistant.open = true;
-      updateBabyCriesAssistantPanel();
-      maybeRefreshBabyCriesAssistant(true);
-    });
-    panel.querySelector("[data-baby-cries-close]")?.addEventListener("click", () => {
-      state.babyCriesAssistant.open = false;
-      updateBabyCriesAssistantPanel();
-    });
-  }
-}
-
-function renderCareOverview() {
-  const columns = careIssueColumns();
-  return `
-    <div class="care-grid">
-      ${columns.map((column) => `
-        <div class="care-column">
-          ${column.map(renderCareIssueCard).join("")}
-        </div>
-      `).join("")}
-    </div>
-  `;
+  });
+  panel.querySelector("[data-baby-cries-gpt]")?.addEventListener("click", () => {
+    state.babyCriesAssistant.open = true;
+    updateBabyCriesAssistantPanel();
+    maybeRefreshBabyCriesAssistant(true);
+  });
+  panel.querySelector("[data-baby-cries-close]")?.addEventListener("click", () => {
+    state.babyCriesAssistant.open = false;
+    updateBabyCriesAssistantPanel();
+  });
 }
 
 function renderCareSideNavigator(activeKey = "overview") {
@@ -1900,29 +1886,6 @@ function formatScheduleWakeTime(value) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return "--";
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
-
-function careIssueColumns() {
-  const columnCount = 3;
-  return careIssues.reduce((columns, issue, index) => {
-    columns[index % columnCount].push(issue);
-    return columns;
-  }, Array.from({ length: columnCount }, () => []));
-}
-
-function renderCareIssueCard(issue) {
-  const info = renderCareIssueCardInfo(issue);
-  return `
-    <button class="activity-card care-card" type="button" data-care-issue="${escapeAttr(issue.key)}" style="--card-image: url('${careHeaderImage(issue.header)}')">
-      <div class="card-top card-header">
-        <div>
-          <h3>${escapeHtml(issue.title)}</h3>
-          <p>${escapeHtml(issue.helper)}</p>
-        </div>
-      </div>
-      ${info ? `<div class="card-info care-card-info">${info}</div>` : ""}
-    </button>
-  `;
 }
 
 function renderCareIssueCardInfo(issue) {
