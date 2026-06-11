@@ -8,12 +8,20 @@ const PUBLIC_DIR = path.join(ROOT_DIR, "frontend");
 const DATA_ROOT = process.env.DATA_ROOT ? path.resolve(process.env.DATA_ROOT) : path.join("C:", "codelab", "databases", "TinyNewbornLog");
 const SHARED_DATA_DIR = path.join(DATA_ROOT, "shared");
 const PORT = process.env.OPS_PORT || process.argv[2] || 3010;
+const APP_ROOT_BASE = process.env.APP_ROOT_BASE
+  ? path.resolve(process.env.APP_ROOT_BASE)
+  : path.join("C:", "Users", "Huy", "Documents", "TinyNewbornLogServers");
+
+function targetRoot(name) {
+  const envName = `APP_ROOT_${name.toUpperCase()}`;
+  return process.env[envName] ? path.resolve(process.env[envName]) : path.join(APP_ROOT_BASE, name);
+}
 
 const SERVER_TARGETS = [
-  { id: "dev", label: "dev", mode: "dev", port: 3003 },
-  { id: "staging", label: "staging", mode: "staging", port: 3004 },
-  { id: "main", label: "main", mode: "staging", port: 3001 },
-  { id: "prod", label: "prod", mode: "prod", port: 3002 }
+  { id: "dev", label: "dev", mode: "dev", port: 3003, root: targetRoot("dev") },
+  { id: "staging", label: "staging", mode: "staging", port: 3004, root: targetRoot("staging") },
+  { id: "main", label: "main", mode: "staging", port: 3001, root: targetRoot("main") },
+  { id: "prod", label: "prod", mode: "prod", port: 3002, root: targetRoot("prod") }
 ];
 
 const MIME_TYPES = {
@@ -84,11 +92,15 @@ async function allStatuses() {
 }
 
 function startTarget(target) {
-  const out = fs.openSync(path.join(ROOT_DIR, `${target.id}-server.out.log`), "a");
-  const err = fs.openSync(path.join(ROOT_DIR, `${target.id}-server.err.log`), "a");
+  const appRoot = target.root || ROOT_DIR;
+  if (!fs.existsSync(path.join(appRoot, "backend", "server.js"))) {
+    throw new Error(`Missing server checkout for ${target.id}: ${appRoot}`);
+  }
+  const out = fs.openSync(path.join(appRoot, `${target.id}-server.out.log`), "a");
+  const err = fs.openSync(path.join(appRoot, `${target.id}-server.err.log`), "a");
   const dataDir = path.join(DATA_ROOT, target.mode);
-  const child = spawn(process.execPath, [path.join(ROOT_DIR, "backend", "server.js"), String(target.port)], {
-    cwd: ROOT_DIR,
+  const child = spawn(process.execPath, [path.join(appRoot, "backend", "server.js"), String(target.port)], {
+    cwd: appRoot,
     detached: true,
     stdio: ["ignore", out, err],
     windowsHide: true,
