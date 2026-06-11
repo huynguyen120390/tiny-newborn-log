@@ -18,6 +18,10 @@ function pidText(server) {
   return server.pid ? String(server.pid) : "-";
 }
 
+function rootText(server) {
+  return server.root || "-";
+}
+
 function setBusy(isBusy) {
   refreshButton.disabled = isBusy;
   document.querySelectorAll(".server-actions button").forEach((button) => {
@@ -45,6 +49,8 @@ function renderServer(server) {
   card.querySelector(".status-dot").setAttribute("title", stateText(server));
   card.querySelector(".server-state").textContent = stateText(server);
   card.querySelector(".server-pid").textContent = pidText(server);
+  card.querySelector(".server-root").textContent = rootText(server);
+  card.querySelector(".server-root").setAttribute("title", rootText(server));
 
   const startButton = card.querySelector(".start-button");
   const stopButton = card.querySelector(".stop-button");

@@ -82,7 +82,7 @@ button {
 }
 
 .server-card {
-  min-height: 210px;
+  min-height: 250px;
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -147,6 +147,26 @@ button {
 .server-facts dd {
   margin: 0;
   font-weight: 700;
+}
+
+.server-facts .server-root-row {
+  display: grid;
+  gap: 5px;
+  align-items: start;
+}
+
+.server-root {
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f7f9fb;
+  color: #344150;
+  font-family: Consolas, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.28;
+  overflow-wrap: anywhere;
 }
 
 .server-actions {
