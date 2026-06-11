@@ -7433,16 +7433,31 @@ input[type="range"] {
 
   .care-side-nav {
     position: static;
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
-    overflow-x: auto;
+    overflow: visible;
     padding: 8px;
-    scroll-snap-type: x proximity;
   }
 
   .care-side-button {
-    min-width: 168px;
-    scroll-snap-align: start;
+    min-width: 0;
+    grid-template-columns: 34px minmax(0, 1fr);
+    min-height: 54px;
+    padding: 7px;
+  }
+
+  .care-side-button img {
+    width: 34px;
+    height: 34px;
+  }
+
+  .care-side-button strong {
+    font-size: 12px;
+  }
+
+  .care-side-button small {
+    font-size: 10px;
   }
 
   .settings-side-nav {
