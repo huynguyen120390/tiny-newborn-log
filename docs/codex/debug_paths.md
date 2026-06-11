@@ -35,7 +35,7 @@ Read this when a bug report arrives and you need the shortest useful inspection 
 - Verify the port is running from the correct checkout folder.
 - Compare `http://localhost:<port>/app.js` length or hash across ports.
 - If raw files match but UI differs by hostname, clear browser site data/cache.
-- If prod `3002` shows dev-only code, stop it and restart from `TinyNewbornLogServers\prod`.
+- If prod `3002` shows dev-only code, stop it and restart from `C:\codelab\apps\TinyNewbornLogServers\prod`.
 
 ## Quick Tap Does Not Save
 

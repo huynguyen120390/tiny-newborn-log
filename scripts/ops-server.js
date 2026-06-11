@@ -10,7 +10,7 @@ const SHARED_DATA_DIR = path.join(DATA_ROOT, "shared");
 const PORT = process.env.OPS_PORT || process.argv[2] || 3010;
 const APP_ROOT_BASE = process.env.APP_ROOT_BASE
   ? path.resolve(process.env.APP_ROOT_BASE)
-  : path.join("C:", "Users", "Huy", "Documents", "TinyNewbornLogServers");
+  : path.join("C:", "codelab", "apps", "TinyNewbornLogServers");
 
 function targetRoot(name) {
   const envName = `APP_ROOT_${name.toUpperCase()}`;

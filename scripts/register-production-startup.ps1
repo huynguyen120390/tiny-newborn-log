@@ -1,13 +1,15 @@
 param(
   [int]$ProdPort = 3002,
-  [int]$OpsPort = 3010
+  [int]$OpsPort = 3010,
+  [string]$AppRootBase = "C:\codelab\apps\TinyNewbornLogServers"
 )
 
 $ErrorActionPreference = "Stop"
 
-$Root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$ProdScript = Join-Path $Root "scripts\start-production-server.ps1"
-$OpsScript = Join-Path $Root "scripts\start-server-control.ps1"
+$ProdRoot = Resolve-Path (Join-Path $AppRootBase "prod")
+$OpsRoot = Resolve-Path (Join-Path $AppRootBase "dev")
+$ProdScript = Join-Path $ProdRoot "scripts\start-production-server.ps1"
+$OpsScript = Join-Path $OpsRoot "scripts\start-server-control.ps1"
 
 if (!(Test-Path $ProdScript)) {
   throw "Missing startup script: $ProdScript"
@@ -28,7 +30,8 @@ function Register-HiddenServerTask {
   )
 
   $ActionArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$ScriptPath`" -Port $Port"
-  $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $ActionArgs -WorkingDirectory $Root
+  $TaskRoot = Split-Path (Split-Path $ScriptPath -Parent) -Parent
+  $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $ActionArgs -WorkingDirectory $TaskRoot
   $Trigger = New-ScheduledTaskTrigger -AtLogOn -User $CurrentUser
   $Settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `

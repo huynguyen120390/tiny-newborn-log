@@ -25,3 +25,5 @@ Start here when you need a low-token guide to the Codex navigation maps.
 - Keep future exploration targeted with `rg`.
 - Prefer the existing no-dependency Node/static frontend style.
 - Do not refactor unrelated code while using these maps.
+- After a task, update `docs/codex` when the change affects architecture, branch/server behavior, data flow, debugging paths, commands, or future navigation.
+- Do not update `docs/codex` for every small isolated UI/content tweak unless it changes how future Codex sessions should work.

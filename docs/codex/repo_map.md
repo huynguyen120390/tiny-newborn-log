@@ -10,7 +10,7 @@ Read this before repo navigation, setup, entry-point changes, or command discove
 - `data/`: local JSON app data and recent-state cache.
 - `scripts/`: one-off maintenance utilities.
 - `docs/codex/`: lightweight maps for future Codex sessions.
-- `C:\Users\Huy\Documents\TinyNewbornLogServers\`: dedicated runtime checkouts for dev/staging/main/prod servers. See `branch_server_map.md`.
+- `C:\codelab\apps\TinyNewbornLogServers\`: dedicated runtime checkouts for dev/staging/main/prod servers. See `branch_server_map.md`.
 
 ## Entry Points
 
@@ -48,8 +48,9 @@ Read this before repo navigation, setup, entry-point changes, or command discove
 ## Branch/Server Warning
 
 - Do not assume the current editing checkout is the live production checkout.
-- `3002` must run from `C:\Users\Huy\Documents\TinyNewbornLogServers\prod`.
-- `3003` must run from `C:\Users\Huy\Documents\TinyNewbornLogServers\dev`.
+- `3002` must run from `C:\codelab\apps\TinyNewbornLogServers\prod`.
+- `3003` must run from `C:\codelab\apps\TinyNewbornLogServers\dev`.
+- Code edited in `C:\Users\Huy\Documents\TinyNewbornLog` should be committed/pushed, then synced into the matching runtime checkout before server verification.
 - Read `branch_server_map.md` before changing branch/server behavior.
 
 ## Generated/Do-Not-Scan
