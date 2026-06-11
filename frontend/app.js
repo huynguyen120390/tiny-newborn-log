@@ -28,6 +28,7 @@ const state = {
   selectedCareIssue: null,
   selectedCareSubtab: {},
   careInfo: {},
+  lastCareGuidanceNotificationKey: localStorage.getItem("tinyNewborn.care.lastGuidanceNotificationKey") || "",
   scheduleTemplates: [],
   selectedScheduleTemplateId: localStorage.getItem("tinyNewborn.schedule.selectedTemplateId") || "",
   scheduleLogs: [],
@@ -264,6 +265,7 @@ const careIssues = [
   { key: "troubleshoot", title: "Troubleshoot", helper: "Fix it with care.", header: "troubleshoot" },
   { key: "eat", title: "Eat", helper: "Feeding and appetite concerns.", header: "eat" },
   { key: "sleep", title: "Sleep", helper: "Rest, naps, and bedtime concerns.", header: "sleep" },
+  { key: "routines", title: "Routines", helper: "Morning, nap, and bedtime rhythm.", header: "sleep-routine-guide" },
   { key: "hygiene", title: "Hygiene", helper: "Diaper, bath, and clean-up concerns.", header: "hygiene" },
   { key: "exercise", title: "Exercise", helper: "Movement and body practice concerns.", header: "exercise" },
   { key: "play", title: "Play", helper: "Engagement and stimulation concerns.", header: "play" },
@@ -800,6 +802,7 @@ function renderAll() {
   renderActivityStats();
   updateActivityButtons();
   updateBottleDefaults();
+  checkCareGuidanceNotification();
   startTicker();
 }
 
@@ -907,12 +910,27 @@ function renderCare() {
   if (!panel) return;
 
   const selected = careIssues.find((issue) => issue.key === state.selectedCareIssue);
-  if (selected) {
-    panel.innerHTML = renderCareIssueView(selected);
-    panel.querySelector("[data-care-back]")?.addEventListener("click", () => {
-      state.selectedCareIssue = null;
+  panel.innerHTML = `
+    <div class="care-layout">
+      ${renderCareSideNavigator(selected?.key || "overview")}
+      <div class="care-content">
+        ${selected ? renderCareIssueView(selected, { showBack: false }) : renderCareOverview()}
+      </div>
+    </div>
+  `;
+
+  panel.querySelector("[data-care-back]")?.addEventListener("click", () => {
+    state.selectedCareIssue = null;
+    renderCare();
+  });
+  panel.querySelectorAll("[data-care-issue]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedCareIssue = button.dataset.careIssue;
       renderCare();
     });
+  });
+
+  if (selected) {
     panel.querySelectorAll("[data-care-subtab]").forEach((button) => {
       button.addEventListener("click", () => {
         state.selectedCareSubtab[selected.key] = button.dataset.careSubtab;
@@ -928,11 +946,12 @@ function renderCare() {
       state.babyCriesAssistant.open = false;
       updateBabyCriesAssistantPanel();
     });
-    return;
   }
+}
 
+function renderCareOverview() {
   const columns = careIssueColumns();
-  panel.innerHTML = `
+  return `
     <div class="care-grid">
       ${columns.map((column) => `
         <div class="care-column">
@@ -941,13 +960,22 @@ function renderCare() {
       `).join("")}
     </div>
   `;
+}
 
-  panel.querySelectorAll("[data-care-issue]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.selectedCareIssue = button.dataset.careIssue;
-      renderCare();
-    });
-  });
+function renderCareSideNavigator(activeKey = "overview") {
+  return `
+    <nav class="care-side-nav" aria-label="Care subjects">
+      ${careIssues.map((issue) => `
+        <button class="care-side-button ${activeKey === issue.key ? "active" : ""}" type="button" data-care-issue="${escapeAttr(issue.key)}" aria-current="${activeKey === issue.key ? "page" : "false"}">
+          <img src="${escapeAttr(careHeaderImage(issue.header))}" alt="">
+          <span>
+            <strong>${escapeHtml(issue.title)}</strong>
+            <small>${escapeHtml(issue.helper)}</small>
+          </span>
+        </button>
+      `).join("")}
+    </nav>
+  `;
 }
 
 function renderSchedule() {
@@ -1497,6 +1525,80 @@ function sendScheduleNotification(row) {
   showToast(`${activity} time`);
 }
 
+function currentEatGuidanceNotification() {
+  const data = state.careInfo.eat;
+  const row = data ? relevantFeedingRow(data) : null;
+  if (!state.profile.birthday || !row) return null;
+  const key = `eat:${row.age || "unknown"}:${row.howOften || ""}:${row.amountPerFeed || ""}:${row.bottleNipple || ""}`;
+  const title = "Eat guidance updated";
+  const body = `${row.age}: ${row.howOften}; ${row.amountPerFeed}; nipple ${row.bottleNipple || "age-based"}. Review the Eat card.`;
+  return { key, title, body, issueKey: "eat", icon: "/assets/care/eat.png" };
+}
+
+function currentSleepGuidanceNotification() {
+  const data = state.careInfo.sleep;
+  const row = data ? relevantSleepRow(data) : null;
+  if (!state.profile.birthday || !row) return null;
+  const key = `sleep:${row.age || "unknown"}:${row.sleepMilestone || ""}:${row.nap || ""}:${row.wakeWindow || ""}`;
+  const title = "Sleep guidance updated";
+  const body = `${row.age}: ${row.sleepMilestone}; wake ${row.wakeWindow}. Review the Sleep card.`;
+  return { key, title, body, issueKey: "sleep", icon: "/assets/care/sleep.png" };
+}
+
+function checkCareGuidanceNotification() {
+  const guidanceItems = [currentEatGuidanceNotification(), currentSleepGuidanceNotification()].filter(Boolean);
+  if (!guidanceItems.length) return;
+  const nextKey = guidanceItems.map((guidance) => guidance.key).join("|");
+  if (!state.lastCareGuidanceNotificationKey) {
+    saveCareGuidanceNotificationKey(nextKey);
+    return;
+  }
+  if (!state.lastCareGuidanceNotificationKey.includes("|")) {
+    saveCareGuidanceNotificationKey(nextKey);
+    return;
+  }
+  if (state.lastCareGuidanceNotificationKey === nextKey) return;
+  const changedGuidance = guidanceItems.find((guidance) => !state.lastCareGuidanceNotificationKey.includes(guidance.key)) || guidanceItems[0];
+  saveCareGuidanceNotificationKey(nextKey);
+  sendCareGuidanceNotification(changedGuidance);
+}
+
+function saveCareGuidanceNotificationKey(key) {
+  state.lastCareGuidanceNotificationKey = key;
+  localStorage.setItem("tinyNewborn.care.lastGuidanceNotificationKey", key);
+}
+
+function sendCareGuidanceNotification(guidance) {
+  const openCareGuidance = () => {
+    const issueKey = guidance.issueKey || "eat";
+    state.selectedCareIssue = issueKey;
+    state.selectedCareSubtab[issueKey] = issueKey === "sleep" ? "sleep-milestones-guide" : "overall";
+    activateTab("care");
+    renderCare();
+    document.getElementById("care")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  if ("Notification" in window && Notification.permission === "granted") {
+    try {
+      const notification = new Notification(guidance.title, {
+        body: guidance.body,
+        icon: guidance.icon || "/assets/care/eat.png",
+        tag: `tiny-newborn-care-${guidance.key}`,
+        renotify: true
+      });
+      notification.onclick = () => {
+        window.focus();
+        openCareGuidance();
+        notification.close();
+      };
+    } catch {
+      showToast(`${guidance.title}: ${guidance.body}`);
+    }
+  } else {
+    showToast(`${guidance.title}: ${guidance.body}`);
+  }
+}
+
 function scheduleNotificationGoal(row) {
   const kind = scheduleActivityKind(row);
   if (kind === "feeding") return formatOunces(scheduleFeedGoalOz(row));
@@ -1872,6 +1974,198 @@ function eatCardBullets() {
   ];
 }
 
+function eatInfoRows() {
+  const data = state.careInfo.eat;
+  if (!data) {
+    return [
+      { icon: "star", title: "Milestones", text: "Loading..." },
+      { icon: "heart", title: "Breastfeeding", text: "Loading..." },
+      { icon: "bottle", title: "Bottle Feeding", text: "Loading..." },
+      { icon: "cue", title: "Hunger Cues", text: "Loading..." },
+      { icon: "diaper", title: "Diaper / Red Flags", text: "Loading..." }
+    ];
+  }
+
+  const row = relevantFeedingRow(data);
+  const loggedWet = summarizeLogsToday().wetDiapers;
+  return [
+    {
+      icon: "star",
+      title: "Milestones",
+      text: row ? `${row.age}; ${row.howOften}; ${row.amountPerFeed}` : "Set birthday for age-based guidance",
+      details: [
+        "Typical bottle amounts: first week 1-2 oz, 0-1 month 2-3 oz, 1-3 months 3-5 oz, 3-6 months 4-6 oz.",
+        "Amount increases as baby grows. Use hunger and fullness cues with age guidance."
+      ],
+      tabs: [
+        { key: "feeding-milestones-guide", label: "Guide" }
+      ]
+    },
+    {
+      icon: "heart",
+      title: "Breastfeeding",
+      text: "8-12 feeds/day; feed by cues, not clock alone",
+      details: [
+        "Usually every 2-3 hours, with more frequent feeds during growth spurts.",
+        "Good latch: tummy-to-tummy, wide mouth, chin first, nipple toward roof of mouth, areola in mouth, nose clear.",
+        "Mostly breastfed babies usually need 400 IU Vitamin D daily shortly after birth unless pediatrician advises otherwise.",
+        "If nipple pain persists, contact a lactation consultant."
+      ],
+      tabs: [
+        { key: "breastfeeding-tips-guide", label: "Tips" },
+        { key: "boobie-positions", label: "Boobie Positions" }
+      ]
+    },
+    {
+      icon: "bottle",
+      title: "Bottle Feeding",
+      text: `${bottleReminder(data, row)} Formula 8-12 feeds/day.`,
+      details: [
+        "Formula feeding is usually 8-12 feeds/day; amount increases as baby grows.",
+        "Stop when baby turns away, closes mouth, or stops sucking.",
+        "Paced feeding: baby semi-upright, bottle mostly horizontal, pause frequently.",
+        milkPumpReminder(data).replace(/\.\s+/g, "; "),
+        "Morning often yields the most milk. Power pump: 20 pump, 10 rest, 20 pump, 10 rest, 10 pump.",
+        "Milk storage: room 4h, fridge 4d, cooler 24h, freezer 6 months best.",
+        "Never refreeze thawed milk. Label dates and use oldest first.",
+        "Burping can take 1-10 minutes.",
+        "Some babies do not burp much. No burp does not automatically mean something is wrong."
+      ],
+      tabs: [
+        { key: "bottle-feeding-guide", label: "Bottle" },
+        { key: "pumping-storage-guide", label: "Pumping / Storage" }
+      ]
+    },
+    {
+      icon: "cue",
+      title: "Hunger Cues",
+      text: "Feed before crying; crying makes feeding harder",
+      details: [
+        "Early cues: rooting, sucking fingers, lip smacking, opening mouth, stirring while asleep.",
+        "Crying is a late hunger cue."
+      ],
+      tabs: [
+        { key: "hunger-cues", label: "Guide" }
+      ]
+    },
+    {
+      icon: "diaper",
+      title: "Diaper / Red Flags",
+      text: `${loggedWet} wet logged today; ${wetDiaperReminder(data)}`,
+      details: [
+        "Expected wet diapers: Day 1: 1+, Day 2: 2+, Day 3: 3+, Day 4+: 6+ per day.",
+        "By Day 5, too few wet diapers with poor feeding or excess sleepiness means contact pediatrician or lactation support.",
+        "Call pediatrician for no wet diapers, very poor feeding, excessive lethargy, blood/red/white/gray stool.",
+        "Dehydration signs: dry mouth, no tears, or no urine for 8+ hours."
+      ],
+      tabs: [
+        { key: "wet-diapers-poop-guide", label: "Diaper / Poop" }
+      ]
+    }
+  ];
+}
+
+function sleepInfoRows() {
+  const data = state.careInfo.sleep;
+  if (!data) {
+    return [
+      { icon: "moon", title: "Milestones", text: "Loading..." },
+      { icon: "star", title: "Naps", text: "Loading..." },
+      { icon: "shield", title: "Safe Sleep", text: "Loading..." },
+      { icon: "clothes", title: "Clothing", text: "Loading..." },
+      { icon: "routine", title: "Routine", text: "Loading..." },
+      { icon: "eyes", title: "Sleep Cues", text: "Loading..." }
+    ];
+  }
+
+  const row = relevantSleepRow(data);
+  const ageGuidance = row ? `${row.age}; ${row.sleepMilestone}; wake ${row.wakeWindow}` : "Set birthday for age-based guidance";
+  const napGuidance = row ? `${row.nap}; ${row.recommendedNapTime || "30 min-2 hrs each"}` : "Set birthday for age-based guidance";
+  return [
+    {
+      icon: "moon",
+      title: "Milestones",
+      text: ageGuidance,
+      details: [
+        "Sleep needs change quickly by age; use the current row as a guide, not a strict rule.",
+        "Wake window means the time baby can usually stay awake between sleeps.",
+        "0-8 weeks: baby often cycles Eat -> Awake -> Sleep -> Repeat across 24 hours, so a 2 PM nap and 2 AM sleep can feel similar.",
+        "Newborns may sleep all day, stay awake at night, or show day/night confusion.",
+        "Around 6-12 weeks, babies start developing circadian rhythm, their body clock."
+      ],
+      tabs: [
+        { key: "sleep-milestones-guide", label: "Milestones" },
+        { key: "sleep-goals", label: "Goals" }
+      ]
+    },
+    {
+      icon: "star",
+      title: "Naps",
+      text: napGuidance,
+      details: [
+        "Keep naps in a dark, quiet room when possible.",
+        "Newborn naps vary. For older babies, many naps land around 30 minutes to 2 hours.",
+        "Limit long naps to 2-3 times per day unless pediatric guidance says otherwise."
+      ],
+      tabs: [
+        { key: "sleep-naps-guide", label: "Naps" }
+      ]
+    },
+    {
+      icon: "shield",
+      title: "Safe Sleep",
+      text: "Back to sleep; firm flat mattress; no loose items",
+      details: [
+        "Use a crib, bassinet, portable crib, or play yard that meets safety standards.",
+        "Keep pillows, blankets, bumpers, stuffed toys, and loose bedding out of the sleep area.",
+        "Stop swaddling once baby begins to roll."
+      ],
+      tabs: [
+        { key: "sleep-environment-guide", label: "Environment" }
+      ]
+    },
+    {
+      icon: "clothes",
+      title: "Clothing",
+      text: `${data.indoorClothing || "Keep room comfortable and avoid overheating"} ${outdoorClothingRecommendation(data)}`,
+      details: [
+        "Check baby chest or neck, not hands or feet, to judge warmth.",
+        "Signs of overheating can include sweating, hot red skin, rapid breathing, or restlessness.",
+        "Use safe sleep clothing such as pajamas, swaddle, or sleep sack based on age and rolling status."
+      ],
+      tabs: [
+        { key: "sleep-environment-guide", label: "Clothing" }
+      ]
+    },
+    {
+      icon: "routine",
+      title: "Routine",
+      text: "Start bedtime routine 30-60 min before bed",
+      details: [
+        "Example: bath, short massage, diaper and pajamas, quiet book, then bottle/bed if baby shows hunger cues.",
+        "Keep nighttime care dim and calm; white noise can help if baby settles with it.",
+        "Use morning light and bright daytime play to support day-night rhythm."
+      ],
+      tabs: [
+        { key: "sleep-routine-guide", label: "Routine" }
+      ]
+    },
+    {
+      icon: "eyes",
+      title: "Sleep Cues",
+      text: "Start routine at sleepy cues; overtired babies settle harder",
+      details: [
+        "Sleepy cues: rubbing eyes, yawning, glassy eyes, looking away, fussing but calming with cuddles.",
+        "Overtired cues: crying, arching back, fighting sleep, hyperactive, fussy or wired.",
+        "Follow sleepy cues, not the clock alone."
+      ],
+      tabs: [
+        { key: "sleep-cues-guide", label: "Cues" }
+      ]
+    }
+  ];
+}
+
 function relevantFeedingRow(data) {
   const ageMonths = babyAgeMonths();
   if (!Number.isFinite(ageMonths)) return null;
@@ -1967,31 +2261,421 @@ function outdoorClothingRecommendation(data) {
   return `${temperature}°F: ${rule?.text || "Dress in light layers and check baby often."}`;
 }
 
-function renderCareIssueView(issue) {
-  if (issue.key === "troubleshoot") return renderTroubleshootCareView(issue);
-  if (issue.key === "eat") return renderEatCareView(issue);
-  if (issue.key === "sleep") return renderSleepCheatsheetImage(issue);
+function renderCareBackButton(showBack = true) {
+  return showBack ? `<button class="ghost care-back-button" type="button" data-care-back>Back to Care</button>` : "";
+}
+
+function renderCareIssueInfoPanel(issue) {
+  if (issue.key === "eat") return renderEatCareInfoPanel(issue);
+  if (issue.key === "sleep") return renderSleepCareInfoPanel(issue);
+  const info = renderCareIssueCardInfo(issue);
+  return `
+    <section class="care-detail-info" aria-label="${escapeAttr(issue.title)} information">
+      ${info || `<p>${escapeHtml(issue.helper)}</p>`}
+    </section>
+  `;
+}
+
+function renderEatCareInfoPanel(issue) {
+  return `
+    <section class="care-detail-info eat-care-info" aria-label="${escapeAttr(issue.title)} information">
+      ${eatInfoRows().map(renderEatInfoRow).join("")}
+    </section>
+  `;
+}
+
+function renderSleepCareInfoPanel(issue) {
+  return `
+    <section class="care-detail-info eat-care-info sleep-care-info" aria-label="${escapeAttr(issue.title)} information">
+      ${sleepInfoRows().map(renderSleepInfoRow).join("")}
+    </section>
+  `;
+}
+
+function renderEatInfoRow(item) {
+  const activeKey = state.selectedCareSubtab.eat || "overall";
+  const activeSubviewKey = activeKey.startsWith("overall:") ? activeKey.slice("overall:".length) : activeKey;
+  const activeItemTab = (item.tabs || []).find((tab) => tab.key === activeSubviewKey) || null;
+  const defaultItemTab = (item.tabs || [])[0] || null;
+  const selectedItemTab = activeItemTab || defaultItemTab;
+  const isOpen = Boolean(activeItemTab);
+  const rowFace = `
+    <span class="eat-info-icon icon-${escapeAttr(item.icon)}" aria-hidden="true">${eatInfoIcon(item.icon)}</span>
+    <span class="eat-info-copy">
+      <strong>${escapeHtml(item.title)}</strong>
+      <small>${escapeHtml(item.text)}</small>
+    </span>
+    <span class="eat-info-chevron" aria-hidden="true">&#8250;</span>
+  `;
+
+  return `
+    <details class="eat-info-row" ${isOpen ? "open" : ""}>
+      <summary>${rowFace}</summary>
+      ${Array.isArray(item.details) && item.details.length ? `
+        <ul class="eat-info-details">
+          ${item.details.map((detail) => `<li>${escapeHtml(detail)}</li>`).join("")}
+        </ul>
+      ` : ""}
+      ${item.tabs?.length ? `
+        <div class="eat-info-tabs" role="tablist" aria-label="${escapeAttr(item.title)} references">
+          ${item.tabs.map((tab) => `
+            <button class="${selectedItemTab?.key === tab.key ? "active" : ""}" type="button" role="tab" aria-selected="${selectedItemTab?.key === tab.key ? "true" : "false"}" data-care-subtab="overall:${escapeAttr(tab.key)}">
+              ${escapeHtml(tab.label)}
+            </button>
+          `).join("")}
+        </div>
+        ${selectedItemTab ? renderEatInfoTabImage(selectedItemTab.key) : ""}
+      ` : ""}
+    </details>
+  `;
+}
+
+function renderSleepInfoRow(item) {
+  const activeKey = state.selectedCareSubtab.sleep || "overview";
+  const activeSubviewKey = activeKey.startsWith("sleep:") ? activeKey.slice("sleep:".length) : activeKey;
+  const activeItemTab = (item.tabs || []).find((tab) => tab.key === activeSubviewKey) || null;
+  const defaultItemTab = (item.tabs || [])[0] || null;
+  const selectedItemTab = activeItemTab || defaultItemTab;
+  const isOpen = Boolean(activeItemTab);
+  const rowFace = `
+    <span class="eat-info-icon icon-${escapeAttr(item.icon)}" aria-hidden="true">${eatInfoIcon(item.icon)}</span>
+    <span class="eat-info-copy">
+      <strong>${escapeHtml(item.title)}</strong>
+      <small>${escapeHtml(item.text)}</small>
+    </span>
+    <span class="eat-info-chevron" aria-hidden="true">&#8250;</span>
+  `;
+
+  return `
+    <details class="eat-info-row sleep-info-row" ${isOpen ? "open" : ""}>
+      <summary>${rowFace}</summary>
+      ${Array.isArray(item.details) && item.details.length ? `
+        <ul class="eat-info-details">
+          ${item.details.map((detail) => `<li>${escapeHtml(detail)}</li>`).join("")}
+        </ul>
+      ` : ""}
+      ${item.tabs?.length ? `
+        <div class="eat-info-tabs" role="tablist" aria-label="${escapeAttr(item.title)} references">
+          ${item.tabs.map((tab) => `
+            <button class="${selectedItemTab?.key === tab.key ? "active" : ""}" type="button" role="tab" aria-selected="${selectedItemTab?.key === tab.key ? "true" : "false"}" data-care-subtab="sleep:${escapeAttr(tab.key)}">
+              ${escapeHtml(tab.label)}
+            </button>
+          `).join("")}
+        </div>
+        ${selectedItemTab ? renderSleepInfoTabImage(selectedItemTab.key) : ""}
+      ` : ""}
+    </details>
+  `;
+}
+
+function renderEatInfoTabImage(tabKey) {
+  const tab = eatReferenceTabs().find((item) => item.key === tabKey);
+  if (!tab) return "";
+  return `
+    <div class="eat-info-image-frame">
+      ${tab.key === "hunger-cues" ? renderHungerCuesQuickCardClean() : ""}
+      <img src="${escapeAttr(tab.image)}" alt="${escapeAttr(tab.alt)}">
+    </div>
+  `;
+}
+
+function renderSleepInfoTabImage(tabKey) {
+  const tab = sleepReferenceTabs().find((item) => item.key === tabKey);
+  if (!tab) return "";
+  return `
+    <div class="eat-info-image-frame sleep-info-image-frame">
+      <img src="${escapeAttr(tab.image)}" alt="${escapeAttr(tab.alt)}">
+    </div>
+  `;
+}
+
+function eatInfoIcon(icon) {
+  const icons = {
+    star: "&#9733;",
+    heart: "&#9829;",
+    formula: "&#129371;",
+    cue: "&#128064;",
+    pump: "&#9878;",
+    bottle: "&#127868;",
+    burp: "&#128168;",
+    storage: "&#10052;",
+    sun: "&#9728;",
+    moon: "&#9789;",
+    shield: "&#128737;",
+    clothes: "&#128085;",
+    routine: "&#128214;",
+    eyes: "&#128064;",
+    diaper: "&#129514;",
+    water: "&#128167;",
+    warning: "!"
+  };
+  return icons[icon] || "&#8226;";
+}
+
+function renderCareIssueView(issue, options = {}) {
+  if (issue.key === "troubleshoot") return renderTroubleshootCareView(issue, options);
+  if (issue.key === "eat") return renderEatCareView(issue, options);
+  if (issue.key === "sleep") return renderSleepCareView(issue, options);
+  if (issue.key === "routines") return renderRoutinesCareView(issue, options);
+  if (issue.key === "hygiene") return renderHygieneCareView(issue, options);
+  const showBack = options.showBack !== false;
 
   return `
     <section class="care-detail">
-      <button class="ghost care-back-button" type="button" data-care-back>Back to Care</button>
+      ${renderCareBackButton(showBack)}
       <div class="care-detail-hero" style="--card-image: url('${careHeaderImage(issue.header)}')">
         <h3>${escapeHtml(issue.title)}</h3>
         <p>${escapeHtml(issue.helper)}</p>
       </div>
+      ${renderCareIssueInfoPanel(issue)}
       <div class="care-detail-body"></div>
     </section>
   `;
 }
 
-function renderTroubleshootCareView(issue) {
+function renderRoutinesCareView(issue, options = {}) {
+  const showBack = options.showBack !== false;
+
   return `
     <section class="care-detail">
-      <button class="ghost care-back-button" type="button" data-care-back>Back to Care</button>
+      ${renderCareBackButton(showBack)}
+      <article class="eat-overview-card routines-overview-card">
+        <div class="care-detail-hero" style="--card-image: url('${careHeaderImage(issue.header)}')">
+          <h3>${escapeHtml(issue.title)}</h3>
+          <p>${escapeHtml(issue.helper)}</p>
+        </div>
+        <section class="care-detail-info eat-care-info routines-care-info" aria-label="Routine guidance">
+          ${routineInfoRows().map(renderRoutineInfoRow).join("")}
+        </section>
+      </article>
+    </section>
+  `;
+}
+
+function routineInfoRows() {
+  return [
+    {
+      icon: "sun",
+      title: "Morning",
+      text: "Light, feed, diaper, and gentle awake time",
+      details: [
+        "Expose baby to natural morning light when practical.",
+        "Start with feed and diaper checks, then keep awake time age-appropriate.",
+        "Use logs to spot the first nap window instead of forcing a fixed clock time."
+      ]
+    },
+    {
+      icon: "moon",
+      title: "Naptime",
+      text: "Short repeatable cue sequence before naps",
+      details: [
+        "Use a simple pattern: diaper, sleep sack or swaddle if safe, dim room, white noise if helpful.",
+        "Begin when sleepy cues appear: yawning, glassy eyes, looking away, rubbing eyes, or fussing.",
+        "If a nap is short, give 10-15 minutes to resettle; if still awake, move on."
+      ]
+    },
+    {
+      icon: "routine",
+      title: "Bedtime",
+      text: "Simple 10-20 min wind-down",
+      details: [
+        "Keep lights dim and the sequence calm.",
+        "Bath or warm wipe-down is only needed 2-3 times per week.",
+        "Put baby down drowsy or asleep, using safe sleep rules."
+      ]
+    },
+    {
+      icon: "star",
+      title: "Daily Rhythm",
+      text: "Bright days, calm nights, flexible timing",
+      details: [
+        "Keep daytime bright and interactive; keep nighttime boring and quiet.",
+        "Track sleep, feeds, diapers, and notes to learn baby patterns.",
+        "Adjust routines during growth spurts, illness, travel, or big sleep changes."
+      ]
+    }
+  ];
+}
+
+function renderRoutineInfoRow(item) {
+  const rowFace = `
+    <span class="eat-info-icon icon-${escapeAttr(item.icon)}" aria-hidden="true">${eatInfoIcon(item.icon)}</span>
+    <span class="eat-info-copy">
+      <strong>${escapeHtml(item.title)}</strong>
+      <small>${escapeHtml(item.text)}</small>
+    </span>
+    <span class="eat-info-chevron" aria-hidden="true">&#8250;</span>
+  `;
+
+  return `
+    <details class="eat-info-row routine-info-row">
+      <summary>${rowFace}</summary>
+      <ul class="eat-info-details">
+        ${item.details.map((detail) => `<li>${escapeHtml(detail)}</li>`).join("")}
+      </ul>
+      ${item.title === "Morning" ? renderMorningRoutineFlow() : ""}
+      ${item.title === "Naptime" ? renderNapRoutineFlow() : ""}
+      ${item.title === "Bedtime" ? renderBedtimeRoutineFlows() : ""}
+    </details>
+  `;
+}
+
+function renderMorningRoutineFlow() {
+  const steps = [
+    { icon: "&#9728;", label: "Wake Up" },
+    { icon: "&#129695;", label: "Open Curtains" },
+    { icon: "&#128522;", label: "Good Morning Talk / Smiles" },
+    { icon: "&#129514;", label: "Diaper Change" },
+    { icon: "&#127868;", label: "Feed" },
+    { icon: "&#127774;", label: "Day Begins" }
+  ];
+
+  return `
+    <section class="bedtime-flow-card morning-flow-card" aria-label="Morning routine">
+      <div class="bedtime-flow-title">
+        <strong>Morning Routine</strong>
+        <span>5-10 min</span>
+      </div>
+      <div class="bedtime-flow-track nap-flow-track">
+        ${steps.map((step, index) => `
+          <div class="bedtime-flow-step" style="--step-index: ${index}">
+            <span aria-hidden="true">${step.icon}</span>
+            <small>${escapeHtml(step.label)}</small>
+          </div>
+        `).join("")}
+      </div>
+      <div class="routine-light-note">
+        <strong>Light matters most</strong>
+        <span>Within the first hour: open blinds, turn on lights, sit near a bright window, or take a short walk outside if practical. Daylight strongly supports circadian rhythm.</span>
+      </div>
+    </section>
+  `;
+}
+
+function renderNapRoutineFlow() {
+  const steps = [
+    { icon: "&#129514;", label: "Diaper check / change" },
+    { icon: "&#128085;", label: "Swaddle or sleep sack", note: "age appropriate" },
+    { icon: "&#128266;", label: "White noise" },
+    { icon: "&#127769;", label: "Dim lights / curtains" },
+    { icon: "&#129303;", label: "Quick cuddle / rocking" },
+    { icon: "&#9789;", label: "Put baby down" }
+  ];
+
+  return `
+    <section class="bedtime-flow-card nap-flow-card" aria-label="Newborn nap routine">
+      <div class="bedtime-flow-title">
+        <strong>Newborn Nap Routine</strong>
+        <span>2-5 min</span>
+      </div>
+      <div class="bedtime-flow-track nap-flow-track">
+        ${steps.map((step, index) => `
+          <div class="bedtime-flow-step" style="--step-index: ${index}">
+            <span aria-hidden="true">${step.icon}</span>
+            <small>${escapeHtml(step.label)}</small>
+            ${step.note ? `<em>${escapeHtml(step.note)}</em>` : ""}
+          </div>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderBedtimeRoutineFlows() {
+  const steps = [
+    { icon: "&#127769;", label: "Dim lights" },
+    { icon: "&#129514;", label: "Fresh diaper" },
+    { icon: "&#128705;", label: "Bath or warm wipe-down", note: "2-3x/week" },
+    { icon: "&#128134;", label: "Lotion / gentle massage", note: "optional" },
+    { icon: "&#128085;", label: "Pajamas + sleep sack / swaddle" },
+    { icon: "&#127868;", label: "Feed" },
+    { icon: "&#128168;", label: "Burp" },
+    { icon: "&#127925;", label: "Cuddle / lullaby / white noise" },
+    { icon: "&#9789;", label: "Down drowsy or asleep" }
+  ];
+
+  return `
+    <section class="bedtime-flow-card bedtime-flow-single" aria-label="Simple newborn bedtime routine">
+      <div class="bedtime-flow-title">
+        <strong>Simple Newborn Bedtime Routine</strong>
+        <span>10-20 min</span>
+      </div>
+      <div class="bedtime-flow-track bedtime-flow-track-long">
+        ${steps.map((step, index) => `
+          <div class="bedtime-flow-step" style="--step-index: ${index}">
+            <span aria-hidden="true">${step.icon}</span>
+            <small>${escapeHtml(step.label)}</small>
+            ${step.note ? `<em>${escapeHtml(step.note)}</em>` : ""}
+          </div>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderHygieneCareView(issue, options = {}) {
+  const showBack = options.showBack !== false;
+
+  return `
+    <section class="care-detail">
+      ${renderCareBackButton(showBack)}
+      <article class="eat-overview-card hygiene-overview-card">
+        <div class="care-detail-hero" style="--card-image: url('${careHeaderImage(issue.header)}')">
+          <h3>${escapeHtml(issue.title)}</h3>
+          <p>${escapeHtml(issue.helper)}</p>
+        </div>
+        ${renderCareIssueInfoPanel(issue)}
+        ${renderSpongeBathSection()}
+      </article>
+    </section>
+  `;
+}
+
+function renderSpongeBathSection() {
+  const steps = [
+    { icon: "&#128705;", title: "2-3x/week", text: "Sponge baths in the first weeks" },
+    { icon: "&#129532;", title: "Supplies", text: "Cloths, towel, diaper, mild unscented soap, 2 bowls warm water" },
+    { icon: "&#127777;", title: "Warm setup", text: "Warm room, towel, safe flat surface; strap changing table" },
+    { icon: "&#128400;", title: "One hand", text: "Keep one hand on baby at all times" },
+    { icon: "&#128167;", title: "Face first", text: "Plain warm water; eyes inner corner outward, then face and ears" },
+    { icon: "&#129533;", title: "Soapy wash", text: "Head and body; folds under arms, neck, ears, diaper area" },
+    { icon: "&#128166;", title: "Rinse", text: "Plain warm water removes soap residue" },
+    { icon: "&#129530;", title: "Dry + dress", text: "Pat dry, clean diaper, dress warmly" }
+  ];
+
+  return `
+    <section class="sponge-bath-card" aria-label="Sponge bath flow">
+      <div class="sponge-bath-header">
+        <span class="eat-info-icon icon-water" aria-hidden="true">&#128167;</span>
+        <div>
+          <h4>Sponge Bath</h4>
+          <p>Keep baby warm, supported, and gently clean skin folds.</p>
+        </div>
+      </div>
+      <div class="sponge-bath-flow" aria-label="How to give a newborn sponge bath">
+        ${steps.map((step, index) => `
+          <div class="sponge-bath-step" style="--step-index: ${index}">
+            <span class="sponge-bath-icon" aria-hidden="true">${step.icon}</span>
+            <strong>${escapeHtml(step.title)}</strong>
+            <small>${escapeHtml(step.text)}</small>
+          </div>
+        `).join("")}
+      </div>
+      <p class="sponge-bath-note">Newborns usually only need 2-3 baths per week. Keep baby warm, supported, and dry promptly.</p>
+    </section>
+  `;
+}
+
+function renderTroubleshootCareView(issue, options = {}) {
+  const showBack = options.showBack !== false;
+  return `
+    <section class="care-detail">
+      ${renderCareBackButton(showBack)}
       <div class="care-detail-hero" style="--card-image: url('${careHeaderImage(issue.header)}')">
         <h3>${escapeHtml(issue.title)}</h3>
         <p>${escapeHtml(issue.helper)}</p>
       </div>
+      ${renderCareIssueInfoPanel(issue)}
       <div class="care-image-viewer">
         ${renderBabyCriesCardClean()}
         <div class="baby-cries-gpt-row">
@@ -2165,33 +2849,62 @@ function formatAssistantUpdatedAt(value) {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
 }
 
-function renderEatCareView(issue) {
-  const tabs = [
+function eatReferenceTabs() {
+  return [
     { key: "cheatsheet", label: "Cheatsheet", image: "/assets/care/feeding-cheatsheet.png", alt: "Baby feeding cheatsheet" },
+    { key: "feeding-milestones-guide", label: "Milestones", image: "/assets/care/feeding-milestones-guide.png", alt: "Feeding milestones guide" },
+    { key: "breastfeeding-tips-guide", label: "Breastfeeding Tips", image: "/assets/care/breastfeeding-tips-guide.png", alt: "Breastfeeding tips guide" },
+    { key: "pumping-storage-guide", label: "Pumping & Storage", image: "/assets/care/pumping-storage-guide.png", alt: "Pumping and breast milk storage guide" },
+    { key: "bottle-feeding-guide", label: "Bottle Feeding", image: "/assets/care/bottle-feeding-guide.png", alt: "Bottle feeding guide" },
     { key: "hunger-cues", label: "Hunger Cues", image: "/assets/care/feeding-hunger-cues.png", alt: "Baby feeding hunger cues" },
+    { key: "wet-diapers-poop-guide", label: "Diaper & Poop", image: "/assets/care/wet-diapers-poop-guide.png", alt: "Wet diapers and poop guide" },
+    { key: "solid-foods-guide", label: "Solid Foods", image: "/assets/care/solid-foods-guide.png", alt: "Solid foods guide" },
     { key: "boobie-positions", label: "Boobie Positions", image: "/assets/care/boobie-positions.png", alt: "Boobie breastfeeding positions" }
   ];
-  const activeKey = state.selectedCareSubtab.eat || "cheatsheet";
-  const activeTab = tabs.find((tab) => tab.key === activeKey) || tabs[0];
+}
+
+function sleepReferenceTabs() {
+  return [
+    { key: "sleep-goals", label: "Goals", image: "/assets/care/sleep-goals.png", alt: "Baby sleep goals" },
+    { key: "sleep-milestones-guide", label: "Milestones", image: "/assets/care/sleep-milestones-guide.png", alt: "Baby sleep milestones guide" },
+    { key: "sleep-naps-guide", label: "Naps", image: "/assets/care/sleep-naps-guide.png", alt: "Baby naps quick guide" },
+    { key: "sleep-environment-guide", label: "Environment", image: "/assets/care/sleep-environment-guide.png", alt: "Baby safe sleep environment and clothing guide" },
+    { key: "sleep-routine-guide", label: "Routine", image: "/assets/care/sleep-routine-guide.png", alt: "Baby bedtime routine and daytime strategy guide" },
+    { key: "sleep-cues-guide", label: "Sleep Cues", image: "/assets/care/sleep-cues-guide.png", alt: "Baby sleepy cues and overtired cues guide" },
+    { key: "sleep-cheatsheet", label: "Cheatsheet", image: "/assets/care/sleep-cheatsheet.png", alt: "Baby sleep cheatsheet" }
+  ];
+}
+
+function renderEatCareView(issue, options = {}) {
+  const showBack = options.showBack !== false;
 
   return `
     <section class="care-detail">
-      <button class="ghost care-back-button" type="button" data-care-back>Back to Care</button>
-      <div class="care-detail-hero" style="--card-image: url('${careHeaderImage(issue.header)}')">
-        <h3>${escapeHtml(issue.title)}</h3>
-        <p>${escapeHtml(issue.helper)}</p>
-      </div>
-      <div class="care-issue-tabs" role="tablist" aria-label="Eat care views">
-        ${tabs.map((tab) => `
-          <button class="${tab.key === activeTab.key ? "active" : ""}" type="button" role="tab" aria-selected="${tab.key === activeTab.key ? "true" : "false"}" data-care-subtab="${escapeAttr(tab.key)}">
-            ${escapeHtml(tab.label)}
-          </button>
-        `).join("")}
-      </div>
-      <div class="care-image-viewer">
-        ${activeTab.key === "hunger-cues" ? renderHungerCuesQuickCardClean() : ""}
-        <img src="${escapeAttr(activeTab.image)}" alt="${escapeAttr(activeTab.alt)}">
-      </div>
+      ${renderCareBackButton(showBack)}
+      <article class="eat-overview-card">
+        <div class="care-detail-hero" style="--card-image: url('${careHeaderImage(issue.header)}')">
+          <h3>${escapeHtml(issue.title)}</h3>
+          <p>${escapeHtml(issue.helper)}</p>
+        </div>
+        ${renderCareIssueInfoPanel(issue)}
+      </article>
+    </section>
+  `;
+}
+
+function renderSleepCareView(issue, options = {}) {
+  const showBack = options.showBack !== false;
+
+  return `
+    <section class="care-detail">
+      ${renderCareBackButton(showBack)}
+      <article class="eat-overview-card sleep-overview-card">
+        <div class="care-detail-hero" style="--card-image: url('${careHeaderImage(issue.header)}')">
+          <h3>${escapeHtml(issue.title)}</h3>
+          <p>${escapeHtml(issue.helper)}</p>
+        </div>
+        ${renderCareIssueInfoPanel(issue)}
+      </article>
     </section>
   `;
 }
@@ -2259,10 +2972,6 @@ function renderBabyCriesCard() {
   `;
 }
 
-function renderSleepCheatsheetImage(issue) {
-  return renderCareCheatsheetImage(issue, "/assets/care/sleep-cheatsheet.png", "Baby sleep cheatsheet");
-}
-
 function renderHungerCuesQuickCardClean() {
   const cues = ["Lip smacking", "Hands to mouth", "Rooting (turning head)", "Fussiness", "Crying (late sign)"];
   return `
@@ -2325,14 +3034,16 @@ function renderBabyCriesCardClean() {
   `;
 }
 
-function renderCareCheatsheetImage(issue, imagePath, altText) {
+function renderCareCheatsheetImage(issue, imagePath, altText, options = {}) {
+  const showBack = options.showBack !== false;
   return `
     <section class="care-detail">
-      <button class="ghost care-back-button" type="button" data-care-back>Back to Care</button>
+      ${renderCareBackButton(showBack)}
       <div class="care-detail-hero" style="--card-image: url('${careHeaderImage(issue.header)}')">
         <h3>${escapeHtml(issue.title)}</h3>
         <p>${escapeHtml(issue.helper)}</p>
       </div>
+      ${renderCareIssueInfoPanel(issue)}
       <div class="care-image-viewer">
         <img src="${escapeAttr(imagePath)}" alt="${escapeAttr(altText)}">
       </div>

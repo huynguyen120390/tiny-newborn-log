@@ -106,6 +106,7 @@ body[data-design-style="glassy"] .recent-panel,
 body[data-design-style="glassy"] .export-panel,
 body[data-design-style="glassy"] .settings-panel,
 body[data-design-style="glassy"] .settings-card,
+body[data-design-style="glassy"] .care-side-nav,
 body[data-design-style="glassy"] .schedule-info,
 body[data-design-style="glassy"] .schedule-card,
 body[data-design-style="glassy"] .list-item,
@@ -122,6 +123,7 @@ body[data-design-style="glassy"] .care-card {
 body[data-design-style="glassy"] .activity-card,
 body[data-design-style="glassy"] .schedule-card,
 body[data-design-style="glassy"] .settings-card,
+body[data-design-style="glassy"] .care-side-nav,
 body[data-design-style="glassy"] .care-card {
   border-radius: 28px;
   overflow: hidden;
@@ -519,9 +521,115 @@ body[data-design-style="glassy"] .card-info .hygiene-list img {
 }
 
 body[data-design-style="glassy"] .care-card-info,
+body[data-design-style="glassy"] .care-detail-info,
+body[data-design-style="glassy"] .care-detail-info .care-card-bullets,
+body[data-design-style="glassy"] .care-detail-info .care-card-bullets li,
 body[data-design-style="glassy"] .care-card-info .care-card-bullets,
 body[data-design-style="glassy"] .care-card-info .care-card-bullets li {
   color: var(--glass-bright-muted);
+}
+
+body[data-design-style="glassy"] .care-detail-info {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+body[data-design-style="glassy"] .eat-info-row {
+  border-color: rgba(151, 174, 170, 0.46);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+body[data-design-style="glassy"] .eat-overview-card {
+  border-color: rgba(255, 255, 255, 0.2);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08)),
+    rgba(15, 18, 22, 0.58);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.38);
+}
+
+body[data-design-style="glassy"] .eat-info-copy strong {
+  color: #344140;
+}
+
+body[data-design-style="glassy"] .eat-info-copy small {
+  color: #526160;
+}
+
+body[data-design-style="glassy"] .eat-info-details {
+  color: #526160;
+}
+
+body[data-design-style="glassy"] .eat-info-tabs button {
+  background: rgba(255, 253, 248, 0.92);
+  color: #344140;
+}
+
+body[data-design-style="glassy"] .eat-info-tabs button:hover,
+body[data-design-style="glassy"] .eat-info-tabs button:focus-visible,
+body[data-design-style="glassy"] .eat-info-tabs button.active {
+  background: #d8f0e6;
+}
+
+body[data-design-style="glassy"] .eat-info-image-frame {
+  border-color: rgba(151, 174, 170, 0.58);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+body[data-design-style="glassy"] .hygiene-overview-card {
+  border-color: rgba(255, 255, 255, 0.2);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08)),
+    rgba(15, 18, 22, 0.58);
+}
+
+body[data-design-style="glassy"] .routines-overview-card {
+  border-color: rgba(255, 255, 255, 0.2);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08)),
+    rgba(15, 18, 22, 0.58);
+}
+
+body[data-design-style="glassy"] .sponge-bath-card {
+  border-color: rgba(151, 174, 170, 0.54);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+body[data-design-style="glassy"] .bedtime-flow-card {
+  border-color: rgba(151, 174, 170, 0.54);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+body[data-design-style="glassy"] .sponge-bath-header h4,
+body[data-design-style="glassy"] .routine-light-note strong,
+body[data-design-style="glassy"] .bedtime-flow-title strong,
+body[data-design-style="glassy"] .sponge-bath-step strong {
+  color: #344140;
+}
+
+body[data-design-style="glassy"] .sponge-bath-header p,
+body[data-design-style="glassy"] .routine-light-note span,
+body[data-design-style="glassy"] .bedtime-flow-title span,
+body[data-design-style="glassy"] .bedtime-flow-step small,
+body[data-design-style="glassy"] .bedtime-flow-step em,
+body[data-design-style="glassy"] .sponge-bath-step small,
+body[data-design-style="glassy"] .sponge-bath-note {
+  color: #526160;
+}
+
+body[data-design-style="glassy"] .care-side-button {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--glass-bright-ink);
+}
+
+body[data-design-style="glassy"] .care-side-button small {
+  color: var(--glass-bright-muted);
+}
+
+body[data-design-style="glassy"] .care-side-button:hover,
+body[data-design-style="glassy"] .care-side-button.active {
+  border-color: rgba(39, 209, 185, 0.48);
+  background: rgba(222, 249, 245, 0.18);
 }
 
 body[data-design-style="glassy"] .action-button {
@@ -655,6 +763,22 @@ body[data-design-style="glassy"] .baby-cries-prompt summary {
 body[data-design-style="glassy"] .baby-cries-prompt pre {
   border: 1px solid rgba(151, 174, 170, 0.44);
   background: #f7faf8;
+  color: #344140;
+}
+
+body[data-design-style="glassy"] .hunger-cues-quick {
+  border-color: rgba(151, 174, 170, 0.68);
+  background:
+    radial-gradient(circle at 88% 22%, rgba(245, 111, 117, 0.16), transparent 56px),
+    linear-gradient(135deg, rgba(255, 253, 248, 0.96) 0%, rgba(245, 251, 243, 0.96) 100%);
+}
+
+body[data-design-style="glassy"] .hunger-cues-copy h4 {
+  color: #21443b;
+}
+
+body[data-design-style="glassy"] .hunger-cues-copy p,
+body[data-design-style="glassy"] .hunger-cues-copy li {
   color: #344140;
 }
 
@@ -1328,6 +1452,81 @@ main {
   gap: 14px;
 }
 
+.care-layout {
+  display: grid;
+  grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.care-side-nav {
+  position: sticky;
+  top: 12px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(221, 228, 220, 0.84);
+  border-radius: var(--radius);
+  background: rgba(255, 253, 248, 0.92);
+  box-shadow: 0 14px 30px rgba(31, 41, 38, 0.08);
+}
+
+.care-side-button {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 58px;
+  border: 1px solid rgba(36, 117, 111, 0.14);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(246, 250, 247, 0.9);
+  color: var(--primary-dark);
+  cursor: pointer;
+  text-align: left;
+}
+
+.care-side-button img {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 7px 16px rgba(31, 41, 38, 0.12);
+}
+
+.care-side-button strong,
+.care-side-button small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.care-side-button strong {
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.16;
+}
+
+.care-side-button small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.care-side-button:hover,
+.care-side-button:focus-visible,
+.care-side-button.active {
+  border-color: rgba(36, 117, 111, 0.34);
+  background: #e9f7f0;
+}
+
+.care-content {
+  min-width: 0;
+}
+
 .care-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1358,6 +1557,563 @@ main {
 .care-card-info {
   min-height: 100px;
   margin: 0 12px 12px;
+}
+
+.care-detail-info {
+  padding: 14px 16px;
+  border: 1px solid rgba(151, 174, 170, 0.56);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #526160;
+}
+
+.care-detail-info p {
+  margin: 0;
+  color: #526160;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.care-detail-info .care-card-bullets {
+  padding-left: 18px;
+}
+
+.care-detail-info .care-card-bullets li {
+  color: #526160;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.eat-overview-card {
+  overflow: hidden;
+  border: 1px solid rgba(221, 228, 220, 0.84);
+  border-radius: var(--radius);
+  background: rgba(255, 253, 248, 0.94);
+  box-shadow: 0 14px 30px rgba(31, 41, 38, 0.08);
+}
+
+.eat-overview-card .care-detail-hero {
+  border-radius: 0;
+}
+
+.eat-overview-card .care-detail-info {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.eat-care-info {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.eat-info-row {
+  min-height: 58px;
+  border: 1px solid rgba(223, 211, 192, 0.86);
+  border-radius: 8px;
+  background: rgba(255, 253, 248, 0.94);
+  box-shadow: 0 7px 18px rgba(31, 41, 38, 0.06);
+  overflow: hidden;
+}
+
+.eat-info-row summary {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 18px;
+  gap: 10px;
+  align-items: center;
+  min-height: 58px;
+  padding: 8px 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.eat-info-row summary::-webkit-details-marker {
+  display: none;
+}
+
+.eat-info-chevron {
+  color: #7a8986;
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+  transition: transform 140ms ease;
+}
+
+.eat-info-row[open] .eat-info-chevron {
+  transform: rotate(90deg);
+}
+
+.eat-info-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 999px;
+  background: #fff7dc;
+  color: #df9f1f;
+  font-size: 18px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.eat-info-icon.icon-heart {
+  background: #ffecee;
+  color: #f05f6a;
+}
+
+.eat-info-icon.icon-formula {
+  background: #eef5ff;
+  color: #5f7caa;
+}
+
+.eat-info-icon.icon-cue {
+  background: #eef8f0;
+  color: #3f8e66;
+}
+
+.eat-info-icon.icon-pump {
+  background: #edf3ff;
+  color: #63799d;
+}
+
+.eat-info-icon.icon-bottle {
+  background: #fff3dc;
+  color: #d88a25;
+}
+
+.eat-info-icon.icon-diaper {
+  background: #e9f8f0;
+  color: #39946a;
+}
+
+.eat-info-icon.icon-burp {
+  background: #f2f5ff;
+  color: #6978a7;
+}
+
+.eat-info-icon.icon-storage {
+  background: #eefaff;
+  color: #4d88a0;
+}
+
+.eat-info-icon.icon-sun {
+  background: #fff8d8;
+  color: #d69b19;
+}
+
+.eat-info-icon.icon-moon {
+  background: #eef3ff;
+  color: #4f6fa8;
+}
+
+.eat-info-icon.icon-shield {
+  background: #eaf7f3;
+  color: #2f836c;
+}
+
+.eat-info-icon.icon-clothes {
+  background: #f2f5ff;
+  color: #6978a7;
+}
+
+.eat-info-icon.icon-routine {
+  background: #fff3dc;
+  color: #c27b21;
+}
+
+.eat-info-icon.icon-eyes {
+  background: #eef8f0;
+  color: #3f8e66;
+}
+
+.eat-info-icon.icon-water {
+  background: #eefaff;
+  color: #4078b9;
+}
+
+.eat-info-icon.icon-warning {
+  background: #ffecee;
+  color: #c23a45;
+}
+
+.eat-info-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.eat-info-copy strong {
+  color: #344140;
+  font-size: 14px;
+  font-weight: 950;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.eat-info-copy small {
+  color: #526160;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.28;
+  overflow-wrap: anywhere;
+}
+
+.eat-info-details {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0 14px 12px 62px;
+  color: #526160;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.eat-info-details li {
+  padding-left: 2px;
+}
+
+.eat-info-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 0 14px 10px 62px;
+}
+
+.eat-info-tabs button {
+  min-height: 32px;
+  border: 1px solid rgba(36, 117, 111, 0.18);
+  border-radius: 999px;
+  padding: 0 10px;
+  background: rgba(255, 253, 248, 0.96);
+  color: #344140;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.eat-info-tabs button:hover,
+.eat-info-tabs button:focus-visible,
+.eat-info-tabs button.active {
+  border-color: rgba(36, 117, 111, 0.36);
+  background: rgba(233, 247, 240, 0.9);
+}
+
+.eat-info-image-frame {
+  display: grid;
+  gap: 10px;
+  margin: 0 10px 10px;
+  overflow: auto;
+  border: 1px solid rgba(151, 174, 170, 0.5);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.eat-info-image-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.eat-info-image-frame .hunger-cues-quick {
+  margin: 10px;
+}
+
+.hygiene-overview-card {
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.96), rgba(243, 250, 248, 0.94));
+}
+
+.routines-overview-card {
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.96), rgba(246, 249, 255, 0.94));
+}
+
+.sponge-bath-card {
+  display: grid;
+  gap: 12px;
+  margin: 0 10px 12px;
+  padding: 12px;
+  border: 1px solid rgba(151, 174, 170, 0.42);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 10px 24px rgba(31, 41, 38, 0.07);
+}
+
+.sponge-bath-header {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.sponge-bath-header h4 {
+  margin: 0;
+  color: #344140;
+  font-size: 16px;
+  font-weight: 950;
+  line-height: 1.12;
+}
+
+.sponge-bath-header p,
+.sponge-bath-note {
+  margin: 2px 0 0;
+  color: #526160;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.32;
+}
+
+.sponge-bath-flow {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(8, minmax(118px, 1fr));
+  gap: 10px;
+  overflow-x: auto;
+  padding: 12px 2px 4px;
+}
+
+.bedtime-flow-card {
+  margin: 0 10px 12px 62px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(151, 174, 170, 0.42);
+  border-radius: 8px;
+  background: rgba(248, 253, 253, 0.94);
+}
+
+.bedtime-flow-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  justify-content: space-between;
+  color: #344140;
+}
+
+.bedtime-flow-title strong {
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.bedtime-flow-title span {
+  color: #526160;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.bedtime-flow-track {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(82px, 1fr));
+  gap: 8px;
+  overflow-x: auto;
+  padding-top: 8px;
+}
+
+.bedtime-flow-track-long {
+  grid-template-columns: repeat(9, minmax(88px, 1fr));
+}
+
+.nap-flow-track {
+  grid-template-columns: repeat(6, minmax(88px, 1fr));
+}
+
+.bedtime-flow-track::before,
+.bedtime-flow-track::after {
+  content: "";
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  top: 26px;
+  height: 3px;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.bedtime-flow-track::before {
+  background: rgba(151, 174, 170, 0.24);
+}
+
+.bedtime-flow-track::after {
+  background: linear-gradient(90deg, transparent, rgba(76, 135, 186, 0.82), transparent);
+  animation: spongeBathSweep 3.1s ease-in-out infinite;
+}
+
+.bedtime-flow-step {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 5px;
+  justify-items: center;
+  min-width: 82px;
+  text-align: center;
+  animation: spongeBathPulse 3.1s ease-in-out infinite;
+  animation-delay: calc(var(--step-index) * 0.16s);
+}
+
+.bedtime-flow-step span {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid rgba(64, 120, 185, 0.16);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffffff, #eefaff);
+  color: #4078b9;
+  font-size: 19px;
+  box-shadow: 0 8px 16px rgba(64, 120, 185, 0.1);
+}
+
+.bedtime-flow-step small {
+  color: #526160;
+  font-size: 10.5px;
+  font-weight: 850;
+  line-height: 1.16;
+  overflow-wrap: anywhere;
+}
+
+.bedtime-flow-step em {
+  margin-top: -2px;
+  color: #6f7d7a;
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 850;
+  line-height: 1.1;
+}
+
+.routine-light-note {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid rgba(214, 155, 25, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 248, 216, 0.72);
+}
+
+.routine-light-note strong {
+  color: #344140;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1.16;
+}
+
+.routine-light-note span {
+  color: #526160;
+  font-size: 11px;
+  font-weight: 820;
+  line-height: 1.28;
+}
+
+.sponge-bath-flow::before,
+.sponge-bath-flow::after {
+  content: "";
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  top: 42px;
+  height: 4px;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.sponge-bath-flow::before {
+  background: rgba(151, 174, 170, 0.28);
+}
+
+.sponge-bath-flow::after {
+  background: linear-gradient(90deg, transparent, rgba(64, 120, 185, 0.88), transparent);
+  animation: spongeBathSweep 3.4s ease-in-out infinite;
+}
+
+.sponge-bath-step {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: 44px auto auto;
+  gap: 5px;
+  min-width: 118px;
+  padding: 8px;
+  border: 1px solid rgba(64, 120, 185, 0.16);
+  border-radius: 8px;
+  background: rgba(248, 253, 253, 0.96);
+  color: #344140;
+  text-align: center;
+  box-shadow: 0 7px 16px rgba(31, 41, 38, 0.05);
+  animation: spongeBathPulse 3.4s ease-in-out infinite;
+  animation-delay: calc(var(--step-index) * 0.18s);
+}
+
+.sponge-bath-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  justify-self: center;
+  border: 1px solid rgba(64, 120, 185, 0.16);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffffff, #eefaff);
+  color: #4078b9;
+  font-size: 20px;
+  box-shadow: 0 8px 16px rgba(64, 120, 185, 0.12);
+}
+
+.sponge-bath-step strong {
+  color: #344140;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.sponge-bath-step small {
+  color: #526160;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1.24;
+  overflow-wrap: anywhere;
+}
+
+@keyframes spongeBathSweep {
+  0% {
+    clip-path: inset(0 100% 0 0);
+  }
+  52% {
+    clip-path: inset(0 0 0 0);
+  }
+  100% {
+    clip-path: inset(0 0 0 100%);
+  }
+}
+
+@keyframes spongeBathPulse {
+  0%,
+  100% {
+    transform: translateY(0);
+    border-color: rgba(64, 120, 185, 0.16);
+  }
+  18% {
+    transform: translateY(-2px);
+    border-color: rgba(64, 120, 185, 0.42);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sponge-bath-flow::after,
+  .bedtime-flow-track::after,
+  .bedtime-flow-step,
+  .sponge-bath-step {
+    animation: none;
+  }
+
+  .sponge-bath-flow::after,
+  .bedtime-flow-track::after {
+    clip-path: none;
+  }
 }
 
 .care-card-bullets {
@@ -2006,17 +2762,17 @@ main {
 
 .hunger-cues-copy h4 {
   margin: 0;
-  color: #176c3f;
+  color: #21443b;
   font-size: 17px;
-  font-weight: 900;
+  font-weight: 950;
   text-transform: uppercase;
 }
 
 .hunger-cues-copy p {
   margin: 2px 0 10px;
-  color: var(--ink);
+  color: #344140;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 850;
 }
 
 .hunger-cues-copy ul {
@@ -2031,9 +2787,9 @@ main {
   display: flex;
   align-items: center;
   gap: 7px;
-  color: var(--ink);
+  color: #344140;
   font-size: 13px;
-  font-weight: 750;
+  font-weight: 850;
 }
 
 .hunger-cues-copy li span {
@@ -6649,6 +7405,24 @@ input[type="range"] {
 
   .settings-panel {
     grid-template-columns: 1fr;
+  }
+
+  .care-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .care-side-nav {
+    position: static;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 8px;
+    scroll-snap-type: x proximity;
+  }
+
+  .care-side-button {
+    min-width: 168px;
+    scroll-snap-align: start;
   }
 
   .settings-side-nav {
