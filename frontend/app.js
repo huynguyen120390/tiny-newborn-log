@@ -2626,6 +2626,7 @@ function renderHygieneCareView(issue, options = {}) {
         </div>
         ${renderCareIssueInfoPanel(issue)}
         ${renderSpongeBathSection()}
+        ${renderDiaperChangingSection()}
       </article>
     </section>
   `;
@@ -2662,6 +2663,41 @@ function renderSpongeBathSection() {
         `).join("")}
       </div>
       <p class="sponge-bath-note">Newborns usually only need 2-3 baths per week. Keep baby warm, supported, and dry promptly.</p>
+    </section>
+  `;
+}
+
+function renderDiaperChangingSection() {
+  const steps = [
+    { icon: "&#129514;", title: "Open first", text: "Open clean diaper and set it within reach" },
+    { icon: "&#129532;", title: "Wipes ready", text: "Put wipes, cream, and trash bag nearby" },
+    { icon: "&#128070;", title: "Cover bottom", text: "Slide clean diaper or menu holder under bottom before opening dirty diaper" },
+    { icon: "&#128167;", title: "Cover penis", text: "Place a cloth or wipe over penis before opening diaper" },
+    { icon: "&#129533;", title: "Open dirty", text: "Open dirty diaper slowly and use it to catch extra mess" },
+    { icon: "&#129530;", title: "Front to back", text: "Wipe front to back and clean skin folds gently" },
+    { icon: "&#9989;", title: "Clean diaper", text: "Remove dirty diaper, fasten clean diaper snugly" },
+    { icon: "&#11015;", title: "Point down", text: "Point penis down to help prevent leaks up the back" }
+  ];
+
+  return `
+    <section class="sponge-bath-card diaper-changing-card" aria-label="Diaper changing flow">
+      <div class="sponge-bath-header">
+        <span class="eat-info-icon icon-diaper" aria-hidden="true">&#129514;</span>
+        <div>
+          <h4>Diaper Changing</h4>
+          <p>Set up first, cover before opening, then clean and close fast.</p>
+        </div>
+      </div>
+      <div class="sponge-bath-flow diaper-changing-flow" aria-label="How to change a newborn diaper">
+        ${steps.map((step, index) => `
+          <div class="sponge-bath-step" style="--step-index: ${index}">
+            <span class="sponge-bath-icon" aria-hidden="true">${step.icon}</span>
+            <strong>${escapeHtml(step.title)}</strong>
+            <small>${escapeHtml(step.text)}</small>
+          </div>
+        `).join("")}
+      </div>
+      <p class="sponge-bath-note">Cold air can trigger a pee reflex. Covering first and keeping supplies close reduces surprises.</p>
     </section>
   `;
 }
