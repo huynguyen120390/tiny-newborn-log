@@ -617,19 +617,30 @@ body[data-design-style="glassy"] .sponge-bath-note {
 }
 
 body[data-design-style="glassy"] .care-side-button {
-  border-color: rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--glass-bright-ink);
+  border-color: rgba(151, 174, 170, 0.5);
+  background: rgba(255, 255, 255, 0.88);
+  color: #344140;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+
+body[data-design-style="glassy"] .care-side-button strong {
+  color: #344140;
 }
 
 body[data-design-style="glassy"] .care-side-button small {
-  color: var(--glass-bright-muted);
+  color: #526160;
+}
+
+body[data-design-style="glassy"] .care-side-button img {
+  border: 2px solid rgba(42, 213, 190, 0.62);
+  background: rgba(255, 255, 255, 0.96);
 }
 
 body[data-design-style="glassy"] .care-side-button:hover,
 body[data-design-style="glassy"] .care-side-button.active {
-  border-color: rgba(39, 209, 185, 0.48);
-  background: rgba(222, 249, 245, 0.18);
+  border-color: rgba(24, 129, 116, 0.7);
+  background: #def7ef;
+  color: #213836;
 }
 
 body[data-design-style="glassy"] .action-button {
@@ -1477,13 +1488,14 @@ main {
   gap: 10px;
   align-items: center;
   min-height: 58px;
-  border: 1px solid rgba(36, 117, 111, 0.14);
+  border: 1px solid rgba(36, 117, 111, 0.24);
   border-radius: 8px;
   padding: 8px;
-  background: rgba(246, 250, 247, 0.9);
-  color: var(--primary-dark);
+  background: rgba(255, 255, 255, 0.96);
+  color: #344140;
   cursor: pointer;
   text-align: left;
+  box-shadow: 0 8px 18px rgba(31, 41, 38, 0.07);
 }
 
 .care-side-button img {
@@ -1503,24 +1515,26 @@ main {
 }
 
 .care-side-button strong {
+  color: #344140;
   font-size: 13px;
-  font-weight: 900;
+  font-weight: 950;
   line-height: 1.16;
 }
 
 .care-side-button small {
   margin-top: 2px;
-  color: var(--muted);
+  color: #526160;
   font-size: 11px;
-  font-weight: 750;
+  font-weight: 820;
   line-height: 1.2;
 }
 
 .care-side-button:hover,
 .care-side-button:focus-visible,
 .care-side-button.active {
-  border-color: rgba(36, 117, 111, 0.34);
-  background: #e9f7f0;
+  border-color: rgba(24, 129, 116, 0.52);
+  background: #e2f7ef;
+  box-shadow: 0 10px 22px rgba(31, 41, 38, 0.1);
 }
 
 .care-content {
