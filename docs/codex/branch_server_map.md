@@ -1,0 +1,144 @@
+When to read this file:
+Read this before changing branches, starting/stopping servers, debugging port differences, or promoting code between dev/staging/main/prod.
+
+# Branch And Server Map
+
+## Golden Rule
+
+Each public server port must run from its own checkout folder. Do not run production from the active development checkout.
+
+Code branch and data mode are separate:
+
+- Code branch decides which UI/backend files are served.
+- Data mode decides which JSON database folder is used.
+
+## Working Repo
+
+Primary development repo:
+
+```text
+C:\Users\Huy\Documents\TinyNewbornLog
+```
+
+Use this folder for normal Codex code edits, commits, and pushes. It is usually on `dev`.
+
+## Server Checkouts
+
+Dedicated runtime checkouts:
+
+```text
+C:\Users\Huy\Documents\TinyNewbornLogServers\dev
+C:\Users\Huy\Documents\TinyNewbornLogServers\staging
+C:\Users\Huy\Documents\TinyNewbornLogServers\main
+C:\Users\Huy\Documents\TinyNewbornLogServers\prod
+```
+
+These folders isolate running servers from the active editing repo.
+
+## Ports
+
+| Server | URL | Branch | Data mode | Database folder |
+| --- | --- | --- | --- | --- |
+| main | `http://localhost:3001` | `main` | `staging` | `C:\codelab\databases\TinyNewbornLog\staging` |
+| prod | `http://localhost:3002` | `prod` | `prod` | `C:\codelab\databases\TinyNewbornLog\prod` |
+| dev | `http://localhost:3003` | `dev` | `dev` | `C:\codelab\databases\TinyNewbornLog\dev` |
+| staging | `http://localhost:3004` | `staging` | `staging` | `C:\codelab\databases\TinyNewbornLog\staging` |
+| server control | `http://localhost:3010` | runs from dev checkout | n/a | n/a |
+
+LAN/Tailscale access uses the same ports with the host IP, for example:
+
+```text
+http://192.168.0.13:3002
+http://100.100.187.79:3002
+```
+
+## Database Root
+
+Runtime data lives outside the code repo:
+
+```text
+C:\codelab\databases\TinyNewbornLog
+```
+
+Common subfolders:
+
+```text
+C:\codelab\databases\TinyNewbornLog\dev
+C:\codelab\databases\TinyNewbornLog\staging
+C:\codelab\databases\TinyNewbornLog\prod
+C:\codelab\databases\TinyNewbornLog\shared
+C:\codelab\databases\TinyNewbornLog\backups
+```
+
+## Start Rules
+
+- Dev server `3003` must start from `TinyNewbornLogServers\dev`.
+- Staging server `3004` must start from `TinyNewbornLogServers\staging`.
+- Main server `3001` must start from `TinyNewbornLogServers\main`.
+- Production server `3002` must start from `TinyNewbornLogServers\prod`.
+- Server Control `3010` should start from `TinyNewbornLogServers\dev`.
+
+`scripts/ops-server.js` knows these runtime roots. If paths change, update that file or set:
+
+```text
+APP_ROOT_BASE
+APP_ROOT_DEV
+APP_ROOT_STAGING
+APP_ROOT_MAIN
+APP_ROOT_PROD
+```
+
+## Promotion Rule
+
+New feature work should appear first on:
+
+```text
+dev branch -> dev server -> port 3003
+```
+
+Production should change only after code is intentionally merged or promoted to:
+
+```text
+prod branch -> prod server -> port 3002
+```
+
+If `3002` shows uncommitted dev changes, production is running from the wrong folder.
+
+## Verification Commands
+
+Check live ports:
+
+```powershell
+netstat -ano | Select-String -Pattern ':(3001|3002|3003|3004|3010)\s'
+```
+
+Check Server Control:
+
+```powershell
+Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:3010/api/server-control/status'
+```
+
+Check code separation by app bundle:
+
+```powershell
+foreach ($port in 3001,3002,3003,3004) {
+  $r = Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:$port/app.js"
+  "$port length=$($r.Content.Length)"
+}
+```
+
+If only dev contains a new symbol or changed bundle length, isolation is working.
+
+## Cache Notes
+
+If two hostnames show different UI for the same port but raw `app.js` hashes match, suspect browser cache or local site data.
+
+Examples:
+
+```text
+http://localhost:3002
+http://192.168.0.13:3002
+http://100.100.187.79:3002
+```
+
+The server sends `Cache-Control: no-store` for `.html`, `.css`, and `.js`, but mobile browsers may still need site data cleared.

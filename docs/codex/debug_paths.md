@@ -13,18 +13,29 @@ Read this when a bug report arrives and you need the shortest useful inspection 
 
 ## Server Will Not Start
 
+- First read `branch_server_map.md` to confirm the intended checkout folder, branch, port, and data mode.
 - Start with `package.json` and `backend/server.js`.
 - Check port argument, `PORT`, or occupied port.
 - Check malformed JSON in `data/appData.json` or `data/recentInfo.json`.
 - Check Windows launcher if using `.bat` files.
+- If Server Control starts the wrong code, inspect `scripts/ops-server.js` target roots.
 
 ## Phone Cannot Reach App
 
+- First identify the intended port in `branch_server_map.md`.
 - Start with `README.md` network notes.
 - Confirm server binds to `0.0.0.0` in `backend/server.js`.
 - Check Windows Firewall for Node.js.
 - Check LAN IP or `phuongnamcuti` host mapping.
 - Try local desktop URL before phone URL.
+
+## Wrong Layout On Port
+
+- Start with `branch_server_map.md`.
+- Verify the port is running from the correct checkout folder.
+- Compare `http://localhost:<port>/app.js` length or hash across ports.
+- If raw files match but UI differs by hostname, clear browser site data/cache.
+- If prod `3002` shows dev-only code, stop it and restart from `TinyNewbornLogServers\prod`.
 
 ## Quick Tap Does Not Save
 

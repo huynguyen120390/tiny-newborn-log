@@ -10,6 +10,7 @@ Read this before repo navigation, setup, entry-point changes, or command discove
 - `data/`: local JSON app data and recent-state cache.
 - `scripts/`: one-off maintenance utilities.
 - `docs/codex/`: lightweight maps for future Codex sessions.
+- `C:\Users\Huy\Documents\TinyNewbornLogServers\`: dedicated runtime checkouts for dev/staging/main/prod servers. See `branch_server_map.md`.
 
 ## Entry Points
 
@@ -39,8 +40,17 @@ Read this before repo navigation, setup, entry-point changes, or command discove
 - Run default: `npm start`.
 - Run direct: `node backend/server.js`.
 - Run app port: `node backend/server.js 3002`.
+- Run data mode: `node scripts/start-mode.js dev 3003`, `node scripts/start-mode.js staging 3004`, or `node scripts/start-mode.js prod 3002`.
+- Server Control: `node scripts/ops-server.js 3010`.
 - Windows run: `start.bat`.
 - Friendly-name run: `start-phuongnamcuti.bat`.
+
+## Branch/Server Warning
+
+- Do not assume the current editing checkout is the live production checkout.
+- `3002` must run from `C:\Users\Huy\Documents\TinyNewbornLogServers\prod`.
+- `3003` must run from `C:\Users\Huy\Documents\TinyNewbornLogServers\dev`.
+- Read `branch_server_map.md` before changing branch/server behavior.
 
 ## Generated/Do-Not-Scan
 
