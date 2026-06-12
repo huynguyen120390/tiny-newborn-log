@@ -27,6 +27,8 @@ const state = {
   activeLogsCard: null,
   selectedCareIssue: "troubleshoot",
   selectedCareSubtab: {},
+  childProofProgress: {},
+  diaperBagProgress: {},
   careInfo: {},
   lastCareGuidanceNotificationKey: localStorage.getItem("tinyNewborn.care.lastGuidanceNotificationKey") || "",
   scheduleTemplates: [],
@@ -534,6 +536,8 @@ async function refreshData() {
   applyUnitSettings(appData.unit_settings);
   state.overviewSettings = cleanOverviewSettings(appData.overview_settings);
   state.milestoneProgress = appData.milestone_progress || (Array.isArray(appData.milestones) ? {} : appData.milestones || {});
+  state.childProofProgress = appData.child_proof_progress || {};
+  state.diaperBagProgress = appData.diaper_bag_progress || {};
   syncDashboardOverviewHistory(appData.overview_history);
   if (!state.dashboardOverview.publishedReview) applyDashboardOverviewHistorySelection();
 
@@ -884,7 +888,7 @@ function renderActivities() {
   });
 
   document.querySelectorAll("[data-care-shortcut]").forEach((button) => {
-    button.addEventListener("click", () => openCareShortcut(button.dataset.careShortcut, button.dataset.careSubtabShortcut));
+    button.addEventListener("click", () => openCareShortcut(button.dataset.careShortcut, button.dataset.careSubtabShortcut, button.dataset.careAnchorShortcut));
   });
 
   document.querySelectorAll("[data-bath-sound-toggle]").forEach((button) => {
@@ -896,13 +900,15 @@ function renderActivities() {
   });
 }
 
-function openCareShortcut(issueKey, subtabKey = "") {
+function openCareShortcut(issueKey, subtabKey = "", anchorId = "") {
   if (!careIssues.some((issue) => issue.key === issueKey)) return;
   state.selectedCareIssue = issueKey;
   if (subtabKey) state.selectedCareSubtab[issueKey] = subtabKey;
   activateTab("care");
   renderCare();
-  document.getElementById("care")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const anchor = anchorId ? document.getElementById(anchorId) : null;
+  if (anchor && "open" in anchor) anchor.open = true;
+  (anchor || document.getElementById("care"))?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function renderCare() {
@@ -936,6 +942,12 @@ function renderCare() {
       state.selectedCareSubtab[selected.key] = button.dataset.careSubtab;
       renderCare();
     });
+  });
+  panel.querySelectorAll("[data-child-proof-check]").forEach((input) => {
+    input.addEventListener("change", () => updateChildProofProgress(input.dataset.childProofCheck, input.checked));
+  });
+  panel.querySelectorAll("[data-diaper-bag-check]").forEach((input) => {
+    input.addEventListener("change", () => updateDiaperBagProgress(input.dataset.diaperBagCheck, input.checked));
   });
   panel.querySelector("[data-baby-cries-gpt]")?.addEventListener("click", () => {
     state.babyCriesAssistant.open = true;
@@ -2381,6 +2393,7 @@ function renderCareIssueView(issue, options = {}) {
   if (issue.key === "sleep") return renderSleepCareView(issue, options);
   if (issue.key === "routines") return renderRoutinesCareView(issue, options);
   if (issue.key === "hygiene") return renderHygieneCareView(issue, options);
+  if (issue.key === "safety") return renderChildProofCareView(issue, options);
   const showBack = options.showBack !== false;
 
   return `
@@ -2394,6 +2407,230 @@ function renderCareIssueView(issue, options = {}) {
       <div class="care-detail-body"></div>
     </section>
   `;
+}
+
+function renderChildProofCareView(issue, options = {}) {
+  const showBack = options.showBack !== false;
+  const rooms = [
+    {
+      icon: "&#128719;",
+      title: "Nursery",
+      text: "Sleep space, furniture, cords, outlets, and room setup",
+      items: [
+        { icon: "&#129523;", title: "Anchor Furniture", text: "Secure dressers and furniture to walls to prevent tip-overs." },
+        { icon: "&#128268;", title: "Outlet Covers", text: "Prevent access to electrical outlets." },
+        { icon: "&#128682;", title: "Safety Gates", text: "Block access to unsafe rooms or stairs." },
+        { icon: "&#128680;", title: "Smoke Detector", text: "Detect smoke and provide early fire warnings." },
+        { icon: "&#128719;", title: "Safe Crib", text: "Use a crib that meets current safety standards." },
+        { icon: "&#129681;", title: "Firm Mattress", text: "Reduce suffocation and entrapment risks." },
+        { icon: "&#11093;", title: "Empty Crib", text: "Keep pillows, blankets, bumpers, and toys out of the crib." },
+        { icon: "&#127912;", title: "Mobile Safety", text: "Remove mobiles when baby can reach or stand." },
+        { icon: "&#128257;", title: "Cord-Free Zone", text: "Keep cords away from the crib area." },
+        { icon: "&#128205;", title: "Safe Crib Location", text: "Keep crib away from windows, heaters, and furniture." },
+        { icon: "&#127788;", title: "Room Ventilation", text: "Maintain comfortable airflow and temperature." },
+        { icon: "&#129528;", title: "Secure Rug", text: "Use non-slip pads under rugs." },
+        { icon: "&#129681;", title: "Safe Rocker & Glider", text: "Prevent pinched fingers and tipping hazards." }
+      ]
+    },
+    {
+      icon: "&#127859;",
+      title: "Kitchen",
+      text: "Cabinets, heat, chemicals, sharp tools, and pull-down hazards",
+      items: [
+        { icon: "&#128274;", title: "Cabinet Locks", text: "Restrict access to dangerous items." },
+        { icon: "&#127860;", title: "Dishwasher Lock", text: "Prevent opening and access to sharp utensils." },
+        { icon: "&#129524;", title: "Cleaning Agent Storage", text: "Keep chemicals locked away." },
+        { icon: "&#128298;", title: "Knives Out of Reach", text: "Prevent cuts and injuries." },
+        { icon: "&#128268;", title: "Small Appliances Unplugged", text: "Eliminate electrical and cord hazards." },
+        { icon: "&#127859;", title: "Stove Knob Covers", text: "Prevent accidental burner activation." },
+        { icon: "&#127858;", title: "Pot Handle Safety", text: "Turn handles inward to prevent spills." },
+        { icon: "&#129482;", title: "Refrigerator Lock", text: "Limit access to food and containers." },
+        { icon: "&#129522;", title: "Magnet Safety", text: "Prevent choking hazards from loose magnets." },
+        { icon: "&#128306;", title: "Sharp Corner Protection", text: "Reduce injury from falls." },
+        { icon: "&#129533;", title: "No Tablecloths", text: "Prevent children from pulling objects down." },
+        { icon: "&#129371;", title: "Glassware Storage", text: "Keep breakable items out of reach." }
+      ]
+    },
+    {
+      icon: "&#128715;",
+      title: "Living Room",
+      text: "Stairs, outlets, lamps, fireplace, cords, corners, and decor",
+      items: [
+        { icon: "&#128682;", title: "Baby Gate", text: "Restrict access to stairs and hazards." },
+        { icon: "&#128268;", title: "Outlet Covers", text: "Cover unused electrical outlets." },
+        { icon: "&#128161;", title: "Floor Lamp Safety", text: "Prevent lamps from being pulled over." },
+        { icon: "&#128293;", title: "Fireplace Screen", text: "Protect against burns and hot surfaces." },
+        { icon: "&#129521;", title: "Fireplace Edge Padding", text: "Cushion hard fireplace edges." },
+        { icon: "&#129695;", title: "Blind Cord Safety", text: "Reduce strangulation hazards." },
+        { icon: "&#128682;", title: "Door Knob Covers", text: "Prevent access to unsafe areas." },
+        { icon: "&#128306;", title: "Sharp Corner Guards", text: "Cushion furniture corners." },
+        { icon: "&#127994;", title: "Decorative Object Safety", text: "Remove breakable or heavy objects." },
+        { icon: "&#129716;", title: "Houseplant Safety", text: "Keep toxic plants out of reach." }
+      ]
+    },
+    {
+      icon: "&#128705;",
+      title: "Bathroom",
+      text: "Water, medicine, outlets, appliances, chemicals, and slipping",
+      items: [
+        { icon: "&#128701;", title: "Toilet Lock", text: "Prevent drowning and contamination risks." },
+        { icon: "&#128268;", title: "Outlet Covers", text: "Protect against electrical shock." },
+        { icon: "&#128138;", title: "Medication Storage", text: "Keep medicine inaccessible to children." },
+        { icon: "&#128274;", title: "Medicine Cabinet Lock", text: "Add extra protection for medications." },
+        { icon: "&#128268;", title: "Appliance Safety", text: "Unplug and store electrical devices." },
+        { icon: "&#129524;", title: "Cleaning Agent Storage", text: "Secure toxic chemicals." },
+        { icon: "&#129528;", title: "Non-Slip Mat", text: "Reduce slipping and fall risks." },
+        { icon: "&#128688;", title: "Faucet Cover", text: "Protect from bumps and injuries." },
+        { icon: "&#9832;", title: "Hot Water Safety", text: "Prevent scalding from hot water." }
+      ]
+    },
+    {
+      icon: "&#127795;",
+      title: "Backyard",
+      text: "Fire, water, plants, gates, chemicals, tools, vehicles, and grills",
+      items: [
+        { icon: "&#128293;", title: "Fire Pit Cover", text: "Prevent burns and falls into fire pits." },
+        { icon: "&#128306;", title: "Patio Corner Guards", text: "Cushion sharp outdoor furniture edges." },
+        { icon: "&#127946;", title: "Pool Fence", text: "Restrict access to pools and water hazards." },
+        { icon: "&#128274;", title: "Pool Gate Lock", text: "Prevent unsupervised pool entry." },
+        { icon: "&#9752;", title: "Toxic Plant Check", text: "Remove poisonous plants." },
+        { icon: "&#128682;", title: "Yard Fence", text: "Prevent wandering into unsafe areas." },
+        { icon: "&#129514;", title: "Lawn Chemical Storage", text: "Secure fertilizers and pesticides." },
+        { icon: "&#128682;", title: "Garage Door Safety", text: "Prevent injury from automatic doors." },
+        { icon: "&#128663;", title: "Vehicle Safety", text: "Keep vehicles locked and inaccessible." },
+        { icon: "&#128736;", title: "Garden Tool Storage", text: "Secure sharp tools and equipment." },
+        { icon: "&#127860;", title: "BBQ Safety", text: "Keep children away from hot grills." }
+      ]
+    },
+    {
+      icon: "&#128733;",
+      title: "Playground",
+      text: "Supervision, age-appropriate equipment, surfaces, weather, and outdoor play rules",
+      items: [
+        { icon: "&#128065;", title: "Adult Supervision", text: "Always stay close and actively watch children." },
+        { icon: "&#128118;", title: "Age Appropriate Equipment", text: "Use playgrounds designed for your child's age group." },
+        { icon: "&#129682;", title: "Soft Landing Surface", text: "Play on mulch, rubber, sand, or other impact-absorbing surfaces." },
+        { icon: "&#128733;", title: "Safe Slide Use", text: "Go down feet first and one child at a time." },
+        { icon: "&#128171;", title: "Safe Swing Use", text: "Stay clear of moving swings and supervise use." },
+        { icon: "&#129521;", title: "Monkey Bar Safety", text: "Assist children on climbing equipment appropriate for their ability." },
+        { icon: "&#127777;", title: "Check Equipment Temperature", text: "Test slides and metal surfaces before use on hot days." },
+        { icon: "&#128085;", title: "Secure Clothing", text: "Avoid drawstrings, scarves, and loose clothing that can snag." },
+        { icon: "&#9937;", title: "Helmet Removal", text: "Remove bike helmets before using playground equipment." },
+        { icon: "&#128269;", title: "Equipment Inspection", text: "Check for broken, rusted, or damaged equipment." },
+        { icon: "&#128737;", title: "Guardrails Present", text: "Ensure elevated platforms have protective barriers." },
+        { icon: "&#129495;", title: "Safe Climbing", text: "Teach children to climb carefully and use handholds." },
+        { icon: "&#9995;", title: "No Pushing or Rough Play", text: "Prevent falls and collisions." },
+        { icon: "&#129529;", title: "Clear Play Area", text: "Remove toys, bags, and obstacles from walkways." },
+        { icon: "&#128167;", title: "Stay Hydrated", text: "Bring water during outdoor play." },
+        { icon: "&#9728;", title: "Sun Protection", text: "Use sunscreen, hats, and shade when appropriate." },
+        { icon: "&#128095;", title: "Safe Footwear", text: "Wear closed-toe shoes with good traction." },
+        { icon: "&#9995;", title: "Watch for Pinch Points", text: "Keep fingers away from moving parts." },
+        { icon: "&#128064;", title: "Stranger Awareness", text: "Stay within sight and supervise interactions with others." },
+        { icon: "&#128222;", title: "Emergency Contact Ready", text: "Keep phone and emergency contacts accessible." },
+        { icon: "&#127906;", title: "Older Toddler: Safe Zip Line Use", text: "Supervise and verify equipment is age appropriate." },
+        { icon: "&#129432;", title: "Older Toddler: Trampoline Safety", text: "One jumper at a time and use safety enclosures." },
+        { icon: "&#129495;", title: "Older Toddler: Climbing Wall Safety", text: "Stay below recommended heights and supervise closely." },
+        { icon: "&#9878;", title: "Older Toddler: Balance Beam Safety", text: "Assist beginners and use low-height equipment." },
+        { icon: "&#128166;", title: "Older Toddler: Water Play Supervision", text: "Closely supervise splash pads and water features." },
+        { icon: "&#128690;", title: "Older Toddler: Bicycle & Scooter Helmet", text: "Wear a properly fitted helmet when riding nearby." },
+        { icon: "&#128664;", title: "Older Toddler: Parking Lot Awareness", text: "Hold hands near roads and parking areas." },
+        { icon: "&#128054;", title: "Older Toddler: Dog Awareness", text: "Teach children not to approach unfamiliar dogs." },
+        { icon: "&#127781;", title: "Older Toddler: Weather Check", text: "Avoid playgrounds during storms, high heat, or icy conditions." },
+        { icon: "&#128027;", title: "Older Toddler: Bug & Plant Awareness", text: "Watch for bees, poison ivy, and other outdoor hazards." }
+      ]
+    },
+    {
+      icon: "&#9888;",
+      title: "Choking Hazards",
+      text: "Small objects, loose parts, button batteries, coins, toys, food shape",
+      items: [
+        { icon: "&#128270;", title: "Small Object Sweep", text: "Check floors, couches, and low shelves for anything baby could mouth." },
+        { icon: "&#128267;", title: "Button Batteries", text: "Keep remotes, scales, cards, and toys with batteries secured." },
+        { icon: "&#129528;", title: "Toy Part Check", text: "Remove loose, broken, or age-inappropriate toy parts." },
+        { icon: "&#127869;", title: "Food Shape", text: "Modify round, firm, sticky, or hard foods before serving." }
+      ]
+    },
+    {
+      icon: "&#128062;",
+      title: "Pets",
+      text: "Supervision, pet gates, bowls, litter, toys, calm introductions",
+      items: [
+        { icon: "&#128065;", title: "Supervised Contact", text: "Never leave baby alone with pets, even familiar ones." },
+        { icon: "&#128679;", title: "Pet Gates", text: "Create baby-free and pet-free zones when needed." },
+        { icon: "&#129379;", title: "Bowls & Food", text: "Keep pet food and water bowls away from crawling areas." },
+        { icon: "&#129532;", title: "Litter & Waste", text: "Keep litter boxes and waste areas inaccessible." },
+        { icon: "&#128054;", title: "Calm Introductions", text: "Reward calm behavior and separate pets when overstimulated." }
+      ]
+    }
+  ];
+  const itemId = (room, item) => `child-proof:${slugifyId(room.title)}:${slugifyId(item.title)}`;
+
+  return `
+    <section class="care-detail">
+      ${renderCareBackButton(showBack)}
+      <article class="eat-overview-card child-proof-overview-card">
+        <div class="care-detail-hero" style="--card-image: url('${careHeaderImage(issue.header)}')">
+          <h3>${escapeHtml(issue.title)}</h3>
+          <p>${escapeHtml(issue.helper)}</p>
+        </div>
+        ${renderCareIssueInfoPanel(issue)}
+        <section class="child-proof-grid" aria-label="Child proof home areas">
+          ${rooms.map((room) => `
+            <details class="child-proof-room-card child-proof-expander">
+              <summary class="child-proof-room-summary">
+                <span class="child-proof-room-icon" aria-hidden="true">${room.icon}</span>
+                <div>
+                  <h4>${escapeHtml(room.title)}</h4>
+                  <p>${escapeHtml(room.text)}</p>
+                </div>
+              </summary>
+              <ul class="child-proof-placeholder-list">
+                ${room.items.map((item) => `
+                  <li>
+                    <label class="child-proof-check-row">
+                      <input type="checkbox" data-child-proof-check="${escapeAttr(itemId(room, item))}" ${state.childProofProgress[itemId(room, item)]?.checked ? "checked" : ""}>
+                      <span class="child-proof-list-emoji" aria-hidden="true">${item.icon}</span>
+                      <span><strong>${escapeHtml(item.title)}</strong>${escapeHtml(item.text)}</span>
+                    </label>
+                  </li>
+                `).join("")}
+              </ul>
+            </details>
+          `).join("")}
+        </section>
+      </article>
+    </section>
+  `;
+}
+
+function slugifyId(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+async function updateChildProofProgress(id, checked) {
+  if (!id) return;
+  const previous = { ...state.childProofProgress };
+  if (checked) {
+    state.childProofProgress[id] = { checked: true, updatedAt: new Date().toISOString() };
+  } else {
+    delete state.childProofProgress[id];
+  }
+  try {
+    const result = await fetchJson("/api/child-proof-progress", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, checked })
+    });
+    state.childProofProgress = result.child_proof_progress || {};
+  } catch (error) {
+    state.childProofProgress = previous;
+    renderCare();
+    showToast(`Could not save checklist: ${error.message}`);
+  }
 }
 
 function renderRoutinesCareView(issue, options = {}) {
@@ -2588,9 +2825,12 @@ function renderHygieneCareView(issue, options = {}) {
           <p>${escapeHtml(issue.helper)}</p>
         </div>
         ${renderCareIssueInfoPanel(issue)}
+        ${renderCordCareHygieneSection()}
         ${renderSpongeBathSection()}
         ${renderTubBathSection()}
         ${renderDiaperChangingSection()}
+        ${renderNailTrimmingSection()}
+        ${renderDentalCareSection()}
       </article>
     </section>
   `;
@@ -2614,6 +2854,40 @@ function renderHygieneFlowIcon(step) {
     return `<span class="sponge-bath-icon" aria-hidden="true"><img src="${escapeAttr(step.iconSrc)}" alt=""></span>`;
   }
   return `<span class="sponge-bath-icon" aria-hidden="true">${step.icon || ""}</span>`;
+}
+
+function renderCordCareHygieneSection() {
+  const steps = [
+    { icon: "&#128167;", title: "Keep dry", text: "Sponge baths only until the stump falls off" },
+    { icon: "&#129514;", title: "Fold diaper", text: "Keep diaper below stump so air can circulate" },
+    { icon: "&#127811;", title: "Let go", text: "Do not pull, even if the stump looks loose" },
+    { icon: "&#128222;", title: "Call signs", text: "Redness, swelling, pus, bad smell, active bleeding, pain, or fever" },
+    { icon: "&#128308;", title: "Granuloma", text: "Small red bump after stump falls off can happen; ask pediatrician if it persists" },
+    { icon: "&#128118;", title: "Outie", text: "Outie shape is not caused by how the cord was cut or clamped" }
+  ];
+
+  return `
+    <details id="hygiene-cord-care" class="sponge-bath-card cord-care-card hygiene-expander" aria-label="Umbilical cord care">
+      <summary class="sponge-bath-header">
+        ${renderHygieneHeaderIcon("sponge-title", "&#129656;")}
+        <div>
+          <h4>Cord Care</h4>
+          <p>Keep the stump dry, open to air, and watched for infection signs.</p>
+        </div>
+      </summary>
+      <div class="sponge-bath-flow cord-care-flow" aria-label="Umbilical cord care basics">
+        ${steps.map((step, index) => `
+          <div class="sponge-bath-step" style="--step-index: ${index}">
+            ${renderHygieneFlowIcon(step)}
+            <strong>${escapeHtml(step.title)}</strong>
+            <small>${escapeHtml(step.text)}</small>
+          </div>
+        `).join("")}
+      </div>
+      <p class="sponge-bath-note">A tiny spot of blood when the stump separates can be normal. Active bleeding means another drop appears right after wiping.</p>
+      ${renderUmbilicalCordChecklist("hygiene")}
+    </details>
+  `;
 }
 
 function renderSpongeBathSection() {
@@ -2722,29 +2996,434 @@ function renderDiaperChangingSection() {
   `;
 }
 
+function renderNailTrimmingSection() {
+  const steps = [
+    { icon: "&#128269;", title: "Check first", text: "Trim when nails feel sharp or catch on fabric" },
+    { icon: "&#128161;", title: "Bright light", text: "Use daylight or a lamp so the nail edge is clear" },
+    { icon: "&#128564;", title: "Sleepy time", text: "Try while baby is asleep, feeding, calm, or distracted" },
+    { icon: "&#128204;", title: "0-4 weeks", text: "Use an emery board; newborn nails are soft" },
+    { icon: "&#9986;", title: "1+ month", text: "Baby scissors or clippers are usually easier once nails firm up" },
+    { icon: "&#9995;", title: "Trim tiny bits", text: "Hold the hand, pull fingertip pad back, and follow the nail curve" },
+    { icon: "&#129534;", title: "If nicked", text: "Rinse, press with gauze or cotton, and skip bandages on fingers" }
+  ];
+
+  return `
+    <details class="sponge-bath-card nail-trimming-card hygiene-expander" aria-label="Nail trimming guide">
+      <summary class="sponge-bath-header">
+        ${renderHygieneHeaderIcon("sponge-supplies", "&#9986;")}
+        <div>
+          <h4>Nail Trimming</h4>
+          <p>File early, trim tiny amounts, and choose a calm sleepy moment.</p>
+        </div>
+      </summary>
+      <div class="sponge-bath-flow nail-trimming-flow" aria-label="How to trim newborn nails safely">
+        ${steps.map((step, index) => `
+          <div class="sponge-bath-step" style="--step-index: ${index}">
+            ${renderHygieneFlowIcon(step)}
+            <strong>${escapeHtml(step.title)}</strong>
+            <small>${escapeHtml(step.text)}</small>
+          </div>
+        `).join("")}
+      </div>
+      <p class="sponge-bath-note">Fingernails usually need more attention than toenails. File rough edges after trimming to reduce face scratches.</p>
+    </details>
+  `;
+}
+
+function renderDentalCareSection() {
+  const steps = [
+    { icon: "&#128167;", title: "0-4 months", text: "No teeth yet; wipe gums with a clean damp washcloth if desired" },
+    { icon: "&#129463;", title: "4-10 months", text: "First tooth often appears; a wide range is normal" },
+    { icon: "&#129532;", title: "Brush choice", text: "Soft bristles, small round head, child-size handle; avoid adult brushes" },
+    { icon: "&#129489;", title: "Parents brush", text: "Use a soft cloth or infant brush; parents do the real brushing" },
+    { icon: "&#127806;", title: "Under 3", text: "Use fluoride toothpaste about the size of a grain of rice" },
+    { icon: "&#129372;", title: "Age 3+", text: "Use a pea-sized amount; supervise rinsing and spitting" },
+    { icon: "&#128269;", title: "Watch spots", text: "White spots, brown spots, or pits may need pediatrician or dentist guidance" },
+    { icon: "&#128513;", title: "Daddy hack", text: "Let baby brush your teeth first, then try their own brush" }
+  ];
+
+  return `
+    <details class="sponge-bath-card dental-care-card hygiene-expander" id="hygiene-dental-care" aria-label="Baby dental care guide">
+      <summary class="sponge-bath-header">
+        ${renderHygieneHeaderIcon("sponge-gentle-wash", "&#129463;")}
+        <div>
+          <h4>Dental Care</h4>
+          <p>Start at first tooth; keep toothpaste tiny and parent-led.</p>
+        </div>
+      </summary>
+      <div class="sponge-bath-flow dental-care-flow" aria-label="Baby dental care from first tooth through age three">
+        ${steps.map((step, index) => `
+          <div class="sponge-bath-step" style="--step-index: ${index}">
+            ${renderHygieneFlowIcon(step)}
+            <strong>${escapeHtml(step.title)}</strong>
+            <small>${escapeHtml(step.text)}</small>
+          </div>
+        `).join("")}
+      </div>
+      <p class="sponge-bath-note">After several teeth erupt, move toward morning and bedtime brushing. Bedtime brushing matters most.</p>
+    </details>
+  `;
+}
+
 function renderTroubleshootCareView(issue, options = {}) {
   const showBack = options.showBack !== false;
   return `
     <section class="care-detail">
       ${renderCareBackButton(showBack)}
-      <div class="care-detail-hero" style="--card-image: url('${careHeaderImage(issue.header)}')">
-        <h3>${escapeHtml(issue.title)}</h3>
-        <p>${escapeHtml(issue.helper)}</p>
-      </div>
-      ${renderCareIssueInfoPanel(issue)}
-      <div class="care-image-viewer">
-        ${renderBabyCriesCardClean()}
-        <div class="baby-cries-gpt-row">
-          <button class="baby-cries-gpt-button" type="button" data-baby-cries-gpt aria-expanded="${state.babyCriesAssistant.open ? "true" : "false"}">
-            <img src="/assets/chatgpt-icon.png" alt="">
-            <span>Ask GPT</span>
-          </button>
+      <article class="eat-overview-card troubleshoot-overview-card">
+        <div class="care-detail-hero" style="--card-image: url('${careHeaderImage(issue.header)}')">
+          <h3>${escapeHtml(issue.title)}</h3>
+          <p>${escapeHtml(issue.helper)}</p>
         </div>
-        <div id="baby-cries-assistant-slot">
-          ${state.babyCriesAssistant.open ? renderBabyCriesAssistantPanel() : ""}
+        ${renderCareIssueInfoPanel(issue)}
+        <div class="troubleshoot-card-stack">
+          ${renderClothingSizeTroubleshootCard()}
+          <details class="baby-cries-card troubleshoot-expander" open>
+            <summary class="troubleshoot-expander-title">
+              <span>Baby cries</span>
+              <small>Fast checks, soothing, and GPT review</small>
+            </summary>
+            ${renderBabyCriesCardClean({ embedded: true })}
+            <div class="baby-cries-gpt-row">
+              <button class="baby-cries-gpt-button" type="button" data-baby-cries-gpt aria-expanded="${state.babyCriesAssistant.open ? "true" : "false"}">
+                <img src="/assets/chatgpt-icon.png" alt="">
+                <span>GPT, Why my baby cries?</span>
+              </button>
+            </div>
+          <div id="baby-cries-assistant-slot">
+            ${state.babyCriesAssistant.open ? renderBabyCriesAssistantPanel() : ""}
+          </div>
+        </details>
+        ${renderPrepareDiaperBagSection()}
+        ${renderRestaurantSurvivalSection()}
+      </div>
+    </article>
+  </section>
+  `;
+}
+
+function diaperBagChecklistGroups() {
+  return [
+    {
+      title: "What You Need",
+      items: [
+        "3-4 diapers",
+        "1 bottle of milk",
+        "2 snacks",
+        "1 sippy cup of water",
+        "1 portable changing pad",
+        "1 pack of disposable wipes",
+        "2-3 plastic bags",
+        "1 diaper rash ointment",
+        "1 burping cloth",
+        "1 extra bib",
+        "1 baby personal care kit (nail clipper, comb, emery board)",
+        "1 change of clothes for baby",
+        "1 hat for baby",
+        "2-3 baby toys",
+        "1 pacifier and teether",
+        "1 bottle liner",
+        "Electric bottle warmer or hot water warmer and container",
+        "1 blanket or swaddle",
+        "1 emergency information list",
+        "1 first aid kit",
+        "Baby Tylenol or ibuprofen, only if pediatrician-approved"
+      ]
+    },
+    {
+      title: "If Breastfeeding",
+      items: [
+        "1 nursing cover",
+        "2 breast pads"
+      ]
+    }
+  ];
+}
+
+function diaperBagItemId(item) {
+  return `diaper-bag:${slugifyId(item)}`;
+}
+
+function renderPrepareDiaperBagSection() {
+  return `
+    <details class="baby-cries-card troubleshoot-expander diaper-bag-card">
+      <summary class="troubleshoot-expander-title">
+        <span>Prepare Diaper Bag</span>
+        <small>Prepack everything but perishables before leaving.</small>
+      </summary>
+      <div class="diaper-bag-body">
+        ${diaperBagChecklistGroups().map((group) => `
+          <section class="diaper-bag-group">
+            <h4>${escapeHtml(group.title)}</h4>
+            <ul class="diaper-bag-list">
+              ${group.items.map((item) => {
+                const id = diaperBagItemId(item);
+                return `
+                  <li>
+                    <label class="child-proof-check-row diaper-bag-check-row">
+                      <input type="checkbox" data-diaper-bag-check="${escapeAttr(id)}" ${state.diaperBagProgress[id]?.checked ? "checked" : ""}>
+                      <span class="child-proof-list-emoji" aria-hidden="true">${diaperBagIcon(item)}</span>
+                      <span><strong>${escapeHtml(item)}</strong></span>
+                    </label>
+                  </li>
+                `;
+              }).join("")}
+            </ul>
+          </section>
+        `).join("")}
+        <p class="diaper-bag-hack"><strong>Daddy Hack:</strong> Keep the diaper bag prepacked and ready with everything but perishables. An extra set of clothes for you is a smart backup too.</p>
+      </div>
+    </details>
+  `;
+}
+
+function diaperBagIcon(item) {
+  const text = String(item || "").toLowerCase();
+  if (text.includes("warmer") || text.includes("hot water")) return "&#9832;";
+  if (text.includes("diaper")) return "&#129514;";
+  if (text.includes("milk") || text.includes("bottle")) return "&#127868;";
+  if (text.includes("snack")) return "&#127838;";
+  if (text.includes("water") || text.includes("sippy")) return "&#128167;";
+  if (text.includes("wipe") || text.includes("changing")) return "&#129532;";
+  if (text.includes("bag")) return "&#128717;";
+  if (text.includes("ointment")) return "&#129658;";
+  if (text.includes("cloth") || text.includes("bib")) return "&#129507;";
+  if (text.includes("care kit") || text.includes("clipper")) return "&#9986;";
+  if (text.includes("clothes") || text.includes("hat")) return "&#128085;";
+  if (text.includes("toy")) return "&#129528;";
+  if (text.includes("pacifier") || text.includes("teether")) return "&#128118;";
+  if (text.includes("blanket") || text.includes("swaddle")) return "&#129509;";
+  if (text.includes("emergency") || text.includes("first aid")) return "&#128657;";
+  if (text.includes("tylenol") || text.includes("ibuprofen")) return "&#128138;";
+  if (text.includes("nursing") || text.includes("breast")) return "&#129329;";
+  return "&#10003;";
+}
+
+async function updateDiaperBagProgress(id, checked) {
+  if (!id) return;
+  const previous = { ...state.diaperBagProgress };
+  if (checked) {
+    state.diaperBagProgress[id] = { checked: true, updatedAt: new Date().toISOString() };
+  } else {
+    delete state.diaperBagProgress[id];
+  }
+  try {
+    const result = await fetchJson("/api/diaper-bag-progress", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, checked })
+    });
+    state.diaperBagProgress = result.diaper_bag_progress || {};
+  } catch (error) {
+    state.diaperBagProgress = previous;
+    renderCare();
+    showToast(`Could not save diaper bag checklist: ${error.message}`);
+  }
+}
+
+function restaurantSurvivalTips() {
+  return [
+    { icon: "&#128197;", title: "Reserve", text: "Skip the wait." },
+    { icon: "&#127769;", title: "Dine early", text: "Less crowd, less pressure." },
+    { icon: "&#127939;", title: "Reset first", text: "Let baby blow off steam." },
+    { icon: "&#127838;", title: "Pack snacks", text: "Bridge the wait for food." },
+    { icon: "&#129366;", title: "Use bread", text: "Warm bread buys calm minutes." },
+    { icon: "&#9889;", title: "Order fast", text: "Start with an appetizer." },
+    { icon: "&#128179;", title: "Check early", text: "Be ready to leave." },
+    { icon: "&#127890;", title: "Bag handy", text: "Keep supplies within reach." },
+    { icon: "&#128682;", title: "Seat smart", text: "Corner or exit-side table." },
+    { icon: "&#127860;", title: "Go casual", text: "Kid-friendly beats fancy." },
+    { icon: "&#9201;", title: "Keep it short", text: "Do not linger." },
+    { icon: "&#128241;", title: "Video backup", text: "Emergency tool only." },
+    { icon: "&#128176;", title: "Tip well", text: "Especially after messes." }
+  ];
+}
+
+function renderRestaurantSurvivalSection() {
+  return `
+    <details class="baby-cries-card troubleshoot-expander restaurant-survival-card">
+      <summary class="troubleshoot-expander-title">
+        <span>How to Survive in Restaurants</span>
+        <small>Low expectations, fast plan, easy exit.</small>
+      </summary>
+      <div class="restaurant-survival-body">
+        <p class="restaurant-survival-intro">Eating out with baby is training, not a performance. Plan for speed, snacks, and a graceful escape.</p>
+        <div class="restaurant-survival-grid">
+          ${restaurantSurvivalTips().map((tip) => `
+            <article class="restaurant-survival-tip">
+              <span aria-hidden="true">${tip.icon}</span>
+              <strong>${escapeHtml(tip.title)}</strong>
+              <small>${escapeHtml(tip.text)}</small>
+            </article>
+          `).join("")}
+        </div>
+        <p class="diaper-bag-hack"><strong>Daddy Hack:</strong> The first few trips may be chaotic. Keep expectations low and leave if things go sideways.</p>
+      </div>
+    </details>
+  `;
+}
+
+function babyClothingSizeChart() {
+  return [
+    { size: "Newborn", minWeightLb: 6, maxWeightLb: 9, minHeightIn: 0, maxHeightIn: 19 },
+    { size: "0-3M", minWeightLb: 9, maxWeightLb: 12, minHeightIn: 19, maxHeightIn: 23 },
+    { size: "3-6M", minWeightLb: 12, maxWeightLb: 17, minHeightIn: 23, maxHeightIn: 25 },
+    { size: "6-9M", minWeightLb: 17, maxWeightLb: 20, minHeightIn: 25, maxHeightIn: 27 },
+    { size: "9-12M", minWeightLb: 20, maxWeightLb: 22, minHeightIn: 27, maxHeightIn: 29 },
+    { size: "12-18M", minWeightLb: 22, maxWeightLb: 27, minHeightIn: 29, maxHeightIn: 31 },
+    { size: "18-24M", minWeightLb: 27, maxWeightLb: 30, minHeightIn: 31, maxHeightIn: 33 }
+  ];
+}
+
+function clothingSizeRecommendation(weightLb, lengthIn) {
+  const chart = babyClothingSizeChart();
+  const hasWeight = Number.isFinite(weightLb) && weightLb > 0;
+  const hasLength = Number.isFinite(lengthIn) && lengthIn > 0;
+  if (!hasWeight && !hasLength) {
+    return {
+      recommended: null,
+      outgrowing: null,
+      alert: "Log weight or length to get an automatic size suggestion."
+    };
+  }
+
+  const recommendedIndex = chart.findIndex((row) => {
+    const weightFits = !hasWeight || weightLb <= row.maxWeightLb;
+    const lengthFits = !hasLength || lengthIn <= row.maxHeightIn;
+    return weightFits && lengthFits;
+  });
+  const index = recommendedIndex >= 0 ? recommendedIndex : chart.length - 1;
+  const recommended = chart[index];
+  const previous = chart[index - 1] || null;
+  const next = chart[index + 1] || null;
+  const outgrowing = previous && ((hasWeight && weightLb > previous.maxWeightLb) || (hasLength && lengthIn > previous.maxHeightIn))
+    ? previous
+    : null;
+  const nearNext = next && (
+    (hasWeight && weightLb >= recommended.maxWeightLb - 0.5)
+    || (hasLength && lengthIn >= recommended.maxHeightIn - 0.5)
+  );
+
+  return {
+    recommended,
+    outgrowing,
+    alert: nearNext ? `Consider preparing ${next.size} clothing soon.` : "Use weight first, then length and brand fit."
+  };
+}
+
+function renderClothingSizeTroubleshootCard() {
+  const latestWeight = lastGrowthLog("weight");
+  const latestHeight = lastGrowthLog("height");
+  const weightLb = readWeightGrams(latestWeight) / weightUnits.lb.grams;
+  const lengthIn = readHeightMm(latestHeight) / heightUnits.in.mm;
+  const recommendation = clothingSizeRecommendation(weightLb, lengthIn);
+  const weightText = latestWeight ? formatMeasurement(weightLb, "lb") : "--";
+  const lengthText = latestHeight ? formatMeasurement(lengthIn, "in") : "--";
+  const recommendedText = recommendation.recommended?.size || "--";
+  const outgrowingText = recommendation.outgrowing ? `Outgrowing ${recommendation.outgrowing.size}` : "No smaller-size warning yet";
+
+  return `
+    <details class="baby-cries-card troubleshoot-expander clothing-size-card" open>
+      <summary class="troubleshoot-expander-title">
+        <span>How to Pick Baby Clothes</span>
+        <small>Uses latest weight and length logs</small>
+      </summary>
+      <div class="clothing-size-summary">
+        <div>
+          <small>Weight</small>
+          <strong>${escapeHtml(weightText)}</strong>
+        </div>
+        <div>
+          <small>Length</small>
+          <strong>${escapeHtml(lengthText)}</strong>
+        </div>
+        <div>
+          <small>Recommended</small>
+          <strong>${escapeHtml(recommendedText)}</strong>
         </div>
       </div>
-    </section>
+      <div class="clothing-size-alerts">
+        <span>${escapeHtml(outgrowingText)}</span>
+        <span>${escapeHtml(recommendation.alert)}</span>
+      </div>
+      ${renderBabyClothingSizeTable()}
+      <div class="clothing-size-guidance">
+        <section>
+          <strong>Real-world rule</strong>
+          <p>Buy by weight, not age. Brands vary, and babies often outgrow clothes by length first.</p>
+        </section>
+        <section>
+          <strong>July baby starter set</strong>
+          <p>Newborn: 5-7 outfits. 0-3M: 10-14 outfits. 3-6M: 10-14 outfits. Do not overbuy newborn sizes.</p>
+        </section>
+        <section>
+          <strong>Wash before wear</strong>
+          <p>Wash new clothes to remove residue, dust, and storage dirt. Baby skin is sensitive.</p>
+        </section>
+        <section>
+          <strong>Detergent</strong>
+          <p>Choose Free & Clear: fragrance-free, dye-free, hypoallergenic, paraben-free, phthalate-free, phosphate-free, nontoxic.</p>
+        </section>
+        <section>
+          <strong>Simple picks</strong>
+          <p>All Free Clear, Tide Free & Gentle, or Seventh Generation Free & Clear. One fragrance-free family detergent is usually enough.</p>
+        </section>
+      </div>
+    </details>
+  `;
+}
+
+function renderBabyClothingSizeTable() {
+  const rows = [
+    ["Newborn", "6–9 lb", "Up to 19 in"],
+    ["0–3 Months", "9–12 lb", "19–23 in"],
+    ["3–6 Months", "12–17 lb", "23–25 in"],
+    ["6–9 Months", "17–20 lb", "25–27 in"],
+    ["9–12 Months", "20–22 lb", "27–29 in"],
+    ["12–18 Months", "22–27 lb", "29–31 in"],
+    ["18–24 Months", "27–30 lb", "31–33 in"]
+  ];
+
+  return `
+    <div class="clothing-size-table-wrap">
+      <table class="clothing-size-table">
+        <thead>
+          <tr>
+            <th>Size</th>
+            <th>Weight</th>
+            <th>Height</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(([size, weight, height]) => `
+            <tr>
+              <td>${escapeHtml(size)}</td>
+              <td>${escapeHtml(weight)}</td>
+              <td>${escapeHtml(height)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderUmbilicalCordChecklist(context = "troubleshoot") {
+  const checklist = [
+    "Cord kept dry today",
+    "Sponge bath only",
+    "Diaper folded below stump",
+    "No redness or swelling",
+    "No foul smell",
+    "No yellow discharge",
+    "No active bleeding",
+    "Cord fell off: record the date"
+  ];
+
+  return `
+    <ul class="cord-troubleshoot-list cord-troubleshoot-list-${escapeAttr(context)}" aria-label="Umbilical cord care checklist">
+      ${checklist.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+    </ul>
   `;
 }
 
@@ -3049,7 +3728,8 @@ function renderHungerCuesQuickCardClean() {
   `;
 }
 
-function renderBabyCriesCardClean() {
+function renderBabyCriesCardClean(options = {}) {
+  const embedded = options.embedded === true;
   const steps = [
     { icon: "&#127868;", label: "Hungry?", note: "Time to feed" },
     { icon: "&#129527;", label: "Wet diaper?", note: "Check and change" },
@@ -3061,10 +3741,12 @@ function renderBabyCriesCardClean() {
   const soothing = ["Hold close (skin-to-skin)", "White noise", "Walk or gentle movement", "Shush (loud \"shhh\")", "Swaddle (if not rolling)", "Dim lights"];
 
   return `
-    <section class="baby-cries-card" aria-label="Baby cries algorithm">
-      <div class="baby-cries-title">
-        <strong>Baby cries?</strong>
-      </div>
+    <section class="${embedded ? "baby-cries-inner" : "baby-cries-card"}" aria-label="Baby cries algorithm">
+      ${embedded ? "" : `
+        <div class="baby-cries-title">
+          <strong>Baby cries?</strong>
+        </div>
+      `}
       <div class="baby-cries-body">
         <div class="baby-cries-flow">
           ${steps.map((step, index) => `
@@ -3284,6 +3966,12 @@ function openMilestoneDialog(id) {
   dialog.querySelectorAll("[data-exercise-open]").forEach((button) => {
     button.addEventListener("click", () => openExerciseEntry(button.dataset.exerciseOpen));
   });
+  dialog.querySelectorAll("[data-milestone-care-link]").forEach((button) => {
+    button.addEventListener("click", () => {
+      dialog.close();
+      openCareShortcut(button.dataset.careShortcut, button.dataset.careSubtabShortcut, button.dataset.careAnchorShortcut);
+    });
+  });
   if (!dialog.open) dialog.showModal();
 }
 
@@ -3308,6 +3996,7 @@ function renderMilestoneDialog(milestone) {
       ${behavior.length ? renderExerciseGroup("Baby Behavior Description", behavior) : ""}
       ${exercises.length ? renderExerciseGroup("Exercises", exercises) : ""}
       ${recommendations.length ? renderExerciseLinks("Exercise Library", recommendations) : ""}
+      ${renderMilestoneCareLink(milestone)}
       ${milestone.changedDate ? `<p class="achieved-note">Last changed on ${escapeHtml(formatDisplayDate(milestone.changedDate))}</p>` : ""}
       <label class="milestone-notes">
         <strong>Notes</strong>
@@ -3316,6 +4005,20 @@ function renderMilestoneDialog(milestone) {
     </div>
     <div class="modal-actions milestone-actions">
       ${milestoneStates.map((stateName) => `<button class="${stateName === milestone.status ? "primary" : "ghost"}" type="button" data-milestone-action="${escapeAttr(stateName)}">${escapeHtml(stateName)}</button>`).join("")}
+    </div>
+  `;
+}
+
+function renderMilestoneCareLink(milestone) {
+  const link = milestone.careLink || null;
+  if (!link?.issueKey) return "";
+  return `
+    <div class="milestone-care-link">
+      <strong>${escapeHtml(link.title || "Related Care")}</strong>
+      <p>${escapeHtml(link.description || "Open the related care guide for practical steps.")}</p>
+      <button class="ghost" type="button" data-milestone-care-link data-care-shortcut="${escapeAttr(link.issueKey)}" data-care-subtab-shortcut="${escapeAttr(link.subtabKey || "")}" data-care-anchor-shortcut="${escapeAttr(link.anchorId || "")}">
+        ${escapeHtml(link.buttonLabel || "Open Care Guide")}
+      </button>
     </div>
   `;
 }
@@ -4792,7 +5495,7 @@ async function saveProfile(event) {
 }
 
 async function clearData() {
-  if (!confirm("Clear all logs and milestones? This resets cards, history, today totals, milestone progress, and recent info.")) return;
+  if (!confirm("Clear all logs, milestones, and checklists? This resets cards, history, today totals, milestone progress, child proof checklist progress, and recent info.")) return;
   showSettingsStatus("Clearing data...");
 
   try {
@@ -4801,9 +5504,11 @@ async function clearData() {
     state.recent = result.recent || {};
     state.summary = result.todaySummary || {};
     state.milestoneProgress = result.milestone_progress || {};
+    state.childProofProgress = result.child_proof_progress || {};
+    state.diaperBagProgress = result.diaper_bag_progress || {};
     renderAll();
-    showSettingsStatus("All logs and milestones cleared.");
-    showReaction("Data cleared", "Logs and milestones reset.");
+    showSettingsStatus("All logs, milestones, and checklists cleared.");
+    showReaction("Data cleared", "Logs, milestones, and checklists reset.");
   } catch (error) {
     showSettingsStatus(`Clear failed: ${error.message}`);
   }

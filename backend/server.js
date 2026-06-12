@@ -2631,6 +2631,48 @@ async function handleUpdateOverviewSettings(req, res) {
   sendJson(res, 200, { overview_settings: data.overview_settings });
 }
 
+async function handleUpdateChildProofProgress(req, res) {
+  const input = objectMap(await readBody(req));
+  const id = cleanText(input.id);
+  if (!id) {
+    sendJson(res, 400, { error: "Child proof item id is required." });
+    return;
+  }
+  const data = loadData();
+  data.child_proof_progress = objectMap(data.child_proof_progress);
+  if (input.checked === true) {
+    data.child_proof_progress[id] = {
+      checked: true,
+      updatedAt: new Date().toISOString()
+    };
+  } else {
+    delete data.child_proof_progress[id];
+  }
+  saveData(data);
+  sendJson(res, 200, { child_proof_progress: data.child_proof_progress });
+}
+
+async function handleUpdateDiaperBagProgress(req, res) {
+  const input = objectMap(await readBody(req));
+  const id = cleanText(input.id);
+  if (!id) {
+    sendJson(res, 400, { error: "Diaper bag item id is required." });
+    return;
+  }
+  const data = loadData();
+  data.diaper_bag_progress = objectMap(data.diaper_bag_progress);
+  if (input.checked === true) {
+    data.diaper_bag_progress[id] = {
+      checked: true,
+      updatedAt: new Date().toISOString()
+    };
+  } else {
+    delete data.diaper_bag_progress[id];
+  }
+  saveData(data);
+  sendJson(res, 200, { diaper_bag_progress: data.diaper_bag_progress });
+}
+
 async function handleUpdateScheduleLog(req, res, date) {
   const input = objectMap(await readBody(req));
   const cleanDate = String(date || input.date || "").slice(0, 10);
@@ -2711,13 +2753,17 @@ async function handleClearLogs(req, res) {
   const data = loadData();
   data.baby_log = [];
   data.milestone_progress = {};
+  data.child_proof_progress = {};
+  data.diaper_bag_progress = {};
   const recent = rebuildRecent(data);
   saveData(data);
   saveRecent(recent);
   sendJson(res, 200, {
     recent,
     todaySummary: summarizeToday(data),
-    milestone_progress: data.milestone_progress
+    milestone_progress: data.milestone_progress,
+    child_proof_progress: data.child_proof_progress,
+    diaper_bag_progress: data.diaper_bag_progress
   });
 }
 
@@ -3091,6 +3137,16 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "PUT" && url.pathname === "/api/overview-settings") {
       await handleUpdateOverviewSettings(req, res);
+      return;
+    }
+
+    if (req.method === "PUT" && url.pathname === "/api/child-proof-progress") {
+      await handleUpdateChildProofProgress(req, res);
+      return;
+    }
+
+    if (req.method === "PUT" && url.pathname === "/api/diaper-bag-progress") {
+      await handleUpdateDiaperBagProgress(req, res);
       return;
     }
 

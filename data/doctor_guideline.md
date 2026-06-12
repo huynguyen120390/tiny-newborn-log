@@ -1,5 +1,5 @@
 # Doctor Guideline Care Notes
-Updated: 2026-06-04T05:03:57.334Z
+Updated: 2026-06-12T00:00:00.000Z
 
 This file is not a substitute for medical care. Parent concern, pediatrician guidance, and emergency services come first.
 
@@ -10,6 +10,14 @@ Use these notes for calm daily care, pattern review, and questions to ask the pe
 - Tummy time should be supervised and only while baby is awake.
   - What to do: Start with short sessions and build up gradually; by about 7 weeks, aim for 15 to 30 minutes total per day if tolerated.
   - Source: [Back to Sleep, Tummy to Play](https://www.healthychildren.org/English/ages-stages/baby/sleep/Pages/back-to-sleep-tummy-to-play.aspx)
+
+### Cord Care
+- Umbilical cord care is mostly clean-and-dry care while the stump dries and falls off naturally.
+  - What to do: Keep the stump dry, use sponge baths until it falls off, fold the diaper below the stump, expose it to air when practical, and do not pull it off.
+  - Source: Parent-provided pediatric guidance: Umbilical Cord Care Basics
+- Cord redness, swelling, continued bleeding, yellow discharge or pus, foul odor, pain when touched, or fever can be a doctor-call sign.
+  - What to do: Call the pediatrician if any cord infection signs appear. Seek urgent care for fever or if baby looks very sick.
+  - Source: Parent-provided pediatric guidance: Umbilical Cord Care Basics
 
 ### Daily logging
 - Daily review is stronger when sleep, feed duration or amount, breast side, pee, poop, and notes are logged together.
@@ -26,6 +34,17 @@ Use these notes for calm daily care, pattern review, and questions to ask the pe
 - Black stool is expected meconium in the first few days, but black stool after that may need review.
   - What to do: Call the pediatrician if baby is older than 3 days.
   - Source: [The Many Colors of Baby Poop](https://www.healthychildren.org/English/ages-stages/baby/Pages/The-Many-Colors-of-Poop.aspx)
+
+### Dental
+- Begin daily tooth cleaning when the first tooth appears, often around 4-10 months.
+  - What to do: Use a soft washcloth or infant toothbrush with a grain-of-rice smear of fluoride toothpaste.
+  - Source: Parent-provided pediatric guidance: Baby Dental Care From First Tooth Through Age 3
+- Fluoride toothpaste amount changes by age: grain-of-rice smear under 3 years, pea-sized amount at age 3 and older.
+  - What to do: Parents should control the toothpaste amount and supervise brushing.
+  - Source: Parent-provided pediatric guidance: Baby Dental Care From First Tooth Through Age 3
+- White spots, brown spots, or visible pits on teeth may be early tooth decay signs.
+  - What to do: Ask the pediatrician or dentist for guidance if spots or pits are seen.
+  - Source: Parent-provided pediatric guidance: Baby Dental Care From First Tooth Through Age 3
 
 ### Feeding
 - Many newborns breastfeed about 8 to 12 times in 24 hours.
@@ -171,9 +190,173 @@ Use these notes for calm daily care, pattern review, and questions to ask the pe
   - CDC milestones are age-based developmental tracking tools.
   - Unrecorded milestones mean not recorded yet, not failed.
   - Developmental concerns should be discussed with the pediatrician.
+- Parent-provided pediatric guidance: Umbilical Cord Care Basics
+  - Keep the umbilical cord stump dry, use sponge baths until it falls off, fold the diaper below the stump, and let it fall off naturally.
+  - A tiny spot of blood when the stump separates can be normal; active or continued bleeding needs pediatrician guidance.
+  - Call the doctor for redness, swelling, continued bleeding, yellow discharge or pus, foul odor, pain when touched, or fever.
+- Parent-provided pediatric guidance: Baby Dental Care From First Tooth Through Age 3
+  - Baby teeth support chewing, speech development, adult-tooth spacing, and jaw development.
+  - Most babies get a first tooth between 4 and 10 months, with a wide normal range.
+  - Use a grain-of-rice smear of fluoride toothpaste for children under 3 years and a pea-sized amount at age 3 and older.
+  - Parents should brush for babies and toddlers, then supervise as spitting and rinsing skills develop.
+- Parent-provided pediatric guidance: Baby Clothing Sizes and Washing Baby Clothes
+  - Baby clothing sizes vary by brand, so weight is often more reliable than age.
+  - Many babies outgrow clothing by length before weight.
+  - Wash new baby clothes before first wear to remove possible manufacturing residue, dust, and storage dirt.
+  - Choose fragrance-free, dye-free, hypoallergenic detergent when possible.
+  - A Free & Clear detergent for the whole family is usually sufficient if no one has sensitive skin.
 
 ## Parent-Provided PDF Notes
 These parent-provided PDFs are useful for routines, logging, sleep setup, and breastfeeding technique. For medical decisions, use pediatrician guidance and the trusted medical sources above.
+
+## Cord Care Guide
+Umbilical Cord Care
+
+### Cord Care Basics
+- The umbilical cord stump usually remains attached for about 1-2 weeks after birth before falling off naturally.
+- The stump can change color from purplish-blue to black as it dries out.
+- Do not pull on the stump, even if it looks loose.
+- A small spot of blood near the stump while it is separating can be normal.
+
+### Keep It Dry
+- During the first couple of weeks, avoid soaking the cord in water.
+- Give sponge baths until the cord falls off.
+- Fold the diaper down below the stump so air can circulate and help it dry faster.
+- Expose the stump to air whenever practical.
+- If cleaning is needed, follow the pediatrician's guidance. Some providers recommend simply keeping it clean and dry; others may advise a cotton swab dipped in 70% isopropyl alcohol.
+
+### Call The Doctor If You See Signs Of Infection
+- Redness or swelling around the cord.
+- Continued bleeding.
+- Yellow discharge or pus.
+- Foul odor.
+- Pain when touched.
+- Fever.
+
+### Minor Bleeding
+- A tiny spot of blood when the stump separates can be normal.
+- Active bleeding means you wipe away blood and another drop immediately appears.
+
+### Umbilical Cord Granuloma
+- After the stump falls off, some babies develop a small red bump called an umbilical granuloma.
+- It may produce a small amount of yellow-green drainage.
+- It is usually not an infection if there is no redness, swelling, or fever.
+- A pediatrician can treat persistent granulomas if needed.
+
+### Outie Belly Button
+- An outie belly button is not caused by how the cord was cut or clamped.
+- About 10% of people have an outie belly button.
+
+### Parent Checklist
+- Cord kept dry today
+- Sponge bath only
+- Diaper folded below stump
+- No redness or swelling
+- No foul smell
+- No yellow discharge
+- No active bleeding
+- Cord fell off: record the date
+
+## Baby Dental Care Guide
+Baby Dental Care
+
+### Why Baby Teeth Matter
+- Baby teeth help with chewing.
+- Baby teeth help with speech development.
+- Baby teeth hold space for adult teeth.
+- Baby teeth support proper jaw development.
+- Healthy baby teeth help healthy adult teeth.
+
+### When Teeth Usually Appear
+- Most babies get a first tooth between 4 and 10 months.
+- A wide range is normal.
+
+### Choosing A Toothbrush
+- Soft bristles.
+- Small round head.
+- Child-size brush.
+- Easy-to-hold handle.
+- Avoid adult toothbrushes.
+
+### Fluoride Toothpaste Guidelines
+| Age | Amount |
+| --- | --- |
+| Under 3 years | Tiny smear, about a grain of rice. |
+| Age 3+ | Pea-sized amount. |
+
+### Dental Hygiene Timeline
+| Age | Care |
+| --- | --- |
+| Around 6 months / first teeth | Clean once daily with a soft washcloth or infant toothbrush and a grain-of-rice smear of fluoride toothpaste. |
+| Around 9 months | Use a child-sized toothbrush and gently brush all erupted teeth; parents do all brushing. |
+| Around 18 months | Parents still brush; begin teaching spitting but do not expect rinsing yet. |
+| Around 3 years | Use pea-sized toothpaste; child may begin rinsing and spitting independently while parents supervise. |
+
+### Watch For Early Tooth Decay Signs
+- White spots.
+- Brown spots.
+- Visible pits.
+- Ask the pediatrician or dentist if these appear.
+
+### Brushing Cooperation Hack
+- If baby fights brushing, let baby brush the parent's teeth first.
+- Then let baby try their own toothbrush while the parent still handles the real brushing.
+
+### Practical 0-12 Month Schedule
+| Age | Care |
+| --- | --- |
+| 0-4 months | No teeth yet; wipe gums with a clean damp washcloth during bath time if desired. |
+| 4-10 months | When the first tooth appears, start once-daily brushing with a soft infant toothbrush and grain-of-rice fluoride toothpaste. |
+| After several teeth erupt | Move toward morning brushing plus bedtime brushing; bedtime brushing is the most important. |
+
+## Baby Clothing & Laundry Guide
+Baby Clothing & Laundry
+
+### Baby Clothing Size Chart
+| Size | Weight | Height |
+| --- | --- | --- |
+| Newborn | 6-9 lb | Up to 19 in |
+| 0-3 Months | 9-12 lb | 19-23 in |
+| 3-6 Months | 12-17 lb | 23-25 in |
+| 6-9 Months | 17-20 lb | 25-27 in |
+| 9-12 Months | 20-22 lb | 27-29 in |
+| 12-18 Months | 22-27 lb | 29-31 in |
+| 18-24 Months | 27-30 lb | 31-33 in |
+
+### Real-World Size Tips
+- Baby clothing sizes are notoriously inconsistent.
+- Buy based on weight, not age, when possible.
+- Expect some brands to run small or large.
+- Most babies outgrow clothing because of length before weight.
+
+### Practical Starter Outfits For A July Newborn
+Do not overbuy newborn sizes because babies can skip through them quickly.
+
+| Size | Suggested Amount |
+| --- | --- |
+| Newborn | 5-7 outfits |
+| 0-3M | 10-14 outfits |
+| 3-6M | 10-14 outfits |
+
+### Wash New Clothes Before Use
+- Manufacturing chemicals or residue may remain on fabrics.
+- Dirt and dust can accumulate during shipping and storage.
+- Babies have sensitive skin.
+
+### What To Look For In Baby Detergent
+- Fragrance-free.
+- Dye-free.
+- Hypoallergenic.
+- Paraben-free.
+- Phthalate-free.
+- Phosphate-free.
+- Nontoxic.
+
+### Practical Laundry Advice
+- A special baby detergent is not always necessary.
+- Many pediatricians simply recommend Free & Clear, fragrance-free, dye-free detergent.
+- Examples include All Free Clear, Tide Free & Gentle, and Seventh Generation Free & Clear.
+- If nobody in the household has sensitive skin, one fragrance-free detergent for the entire family is usually sufficient.
 
 ### Simplest Baby Plan: Baby Schedules & Log
 - Daily logs should capture start/end time, total sleep, total feed time, feeding amount, breast started with, pee, poop, and notes.
@@ -557,6 +740,9 @@ Parent-provided Simplest Baby sample schedules. Use as practical routine templat
   - Helpful play: Dangling toys, Soft rattles, Play gym, Bring toys to midline, Hand-to-hand toy transfer practice
 - Rolling Over (4–6 months)
   - Helpful play: Daily tummy time, Place toys slightly to the side, Encourage reaching across the body, Side-lying play
+- First Tooth / Dental Care (4-10 months)
+  - Helpful care: Look for the first tooth, start once-daily brushing when it appears, use a soft infant toothbrush or clean damp washcloth, and use a grain-of-rice smear of fluoride toothpaste under age 3.
+  - Hygiene link: Open Dental Care in Hygiene for toothbrush, toothpaste amount, brushing timeline, and early decay signs.
 - Army Crawling / Scooting (5–8 months)
   - Helpful play: Extended tummy time, Place favorite toy just out of reach, Mirror play, Encourage weight shifting on forearms
 - Sitting Up (7–9 months)

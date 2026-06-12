@@ -1618,6 +1618,21 @@ main {
   box-shadow: none;
 }
 
+.troubleshoot-overview-card {
+  display: grid;
+  gap: 0;
+}
+
+.troubleshoot-card-stack {
+  display: grid;
+  gap: 12px;
+  padding: 0 14px 14px;
+}
+
+.troubleshoot-card-stack .baby-cries-card {
+  margin: 0;
+}
+
 .eat-care-info {
   display: grid;
   gap: 8px;
@@ -1846,6 +1861,177 @@ main {
     linear-gradient(180deg, rgba(255, 253, 248, 0.96), rgba(246, 249, 255, 0.94));
 }
 
+.child-proof-overview-card {
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.96), rgba(241, 250, 247, 0.94));
+}
+
+.child-proof-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  margin: 0 10px 12px;
+}
+
+.child-proof-room-card {
+  padding: 12px;
+  border: 1px solid rgba(36, 117, 111, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 24px rgba(31, 41, 38, 0.07);
+}
+
+.child-proof-room-summary {
+  position: relative;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 24px;
+  gap: 10px;
+  align-items: start;
+  min-height: 80px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.child-proof-room-summary::-webkit-details-marker {
+  display: none;
+}
+
+.child-proof-room-summary::after {
+  content: "\203A";
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(233, 247, 240, 0.92);
+  color: #344140;
+  font-size: 22px;
+  font-weight: 950;
+  line-height: 1;
+  transform: rotate(90deg);
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.child-proof-expander[open] .child-proof-room-summary::after {
+  background: rgba(211, 239, 231, 0.96);
+  transform: rotate(-90deg);
+}
+
+.child-proof-room-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(233, 247, 240, 0.96);
+  color: #243a36;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.child-proof-room-card h4 {
+  margin: 0;
+  color: #344140;
+  font-size: 15px;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.child-proof-room-card p {
+  margin: 4px 0 0;
+  color: #526160;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.child-proof-placeholder-list {
+  display: grid;
+  gap: 7px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.child-proof-placeholder-list li {
+  min-height: 34px;
+  padding: 0;
+  border: 1px solid rgba(36, 117, 111, 0.14);
+  border-radius: 8px;
+  background: rgba(248, 253, 253, 0.92);
+  color: #172826;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.child-proof-placeholder-list li::before {
+  content: none;
+}
+
+.child-proof-list-emoji {
+  flex: 0 0 auto;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #fff7e8, #e9f8f1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 5px 12px rgba(31, 41, 38, 0.08);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.child-proof-check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.child-proof-check-row input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 6px 0 0;
+  accent-color: #24756f;
+}
+
+.child-proof-check-row input:checked + .child-proof-list-emoji {
+  background: linear-gradient(180deg, #dff5ec, #c9eee2);
+}
+
+.child-proof-check-row input:checked ~ span:last-child {
+  color: #526160;
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  text-decoration-color: rgba(36, 117, 111, 0.35);
+}
+
+.child-proof-check-row > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.child-proof-placeholder-list strong {
+  display: block;
+  color: #172826;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.child-proof-placeholder-note {
+  margin: 10px 0 0;
+  color: #526160;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
 .sponge-bath-card {
   display: grid;
   gap: 12px;
@@ -1860,6 +2046,14 @@ main {
 
 .diaper-changing-card {
   background: rgba(255, 253, 247, 0.93);
+}
+
+.nail-trimming-card {
+  background: rgba(250, 253, 255, 0.94);
+}
+
+.dental-care-card {
+  background: rgba(255, 252, 248, 0.94);
 }
 
 .sponge-bath-header {
@@ -3143,6 +3337,374 @@ main {
   color: var(--primary-dark);
   font-size: 12px;
   font-weight: 700;
+}
+
+.troubleshoot-expander {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.troubleshoot-expander-title {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) minmax(190px, 0.42fr);
+  gap: 10px;
+  align-items: center;
+  padding: 14px 16px;
+  cursor: pointer;
+  list-style: none;
+  color: #263534;
+}
+
+.troubleshoot-expander-title::-webkit-details-marker {
+  display: none;
+}
+
+.troubleshoot-expander-title::after {
+  content: "\203A";
+  display: grid;
+  grid-column: 1;
+  grid-row: 1;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(211, 239, 231, 0.96);
+  color: #263534;
+  font-size: 22px;
+  font-weight: 950;
+  line-height: 1;
+  transform: rotate(90deg);
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.troubleshoot-expander[open] .troubleshoot-expander-title::after {
+  background: rgba(174, 224, 210, 0.98);
+  transform: rotate(-90deg);
+}
+
+.troubleshoot-expander-title span {
+  display: block;
+  grid-column: 2;
+  color: #263534;
+  font-size: 16px;
+  font-weight: 950;
+  line-height: 1.14;
+}
+
+.troubleshoot-expander-title small {
+  display: block;
+  grid-column: 3;
+  justify-self: end;
+  max-width: 220px;
+  margin-top: 0;
+  color: #40504f;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.25;
+  text-align: right;
+  text-wrap: balance;
+}
+
+.clothing-size-card {
+  background: linear-gradient(180deg, #fffdf8, #f2fbf8);
+}
+
+.clothing-size-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 14px;
+}
+
+.clothing-size-summary div {
+  display: grid;
+  gap: 4px;
+  min-height: 62px;
+  padding: 10px;
+  border: 1px solid rgba(26, 95, 88, 0.16);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.clothing-size-summary small {
+  color: #526160;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.15;
+}
+
+.clothing-size-summary strong {
+  color: #172826;
+  font-size: 16px;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.clothing-size-alerts {
+  display: grid;
+  gap: 6px;
+  padding: 0 14px;
+}
+
+.clothing-size-alerts span {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 244, 231, 0.96);
+  color: #321f16;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.clothing-size-table-wrap {
+  margin: 0 14px;
+  overflow-x: auto;
+  border: 1px solid rgba(26, 95, 88, 0.16);
+  border-radius: 8px;
+  background: #ffffff;
+  -webkit-overflow-scrolling: touch;
+}
+
+.clothing-size-table {
+  width: 100%;
+  min-width: 420px;
+  border-collapse: collapse;
+  color: #263534;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.clothing-size-table th,
+.clothing-size-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(26, 95, 88, 0.12);
+  text-align: left;
+}
+
+.clothing-size-table th {
+  background: rgba(233, 247, 240, 0.96);
+  color: #183f3a;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.clothing-size-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.clothing-size-guidance {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 14px;
+}
+
+.clothing-size-guidance section {
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid rgba(26, 95, 88, 0.14);
+  border-radius: 8px;
+  background: rgba(248, 253, 253, 0.96);
+}
+
+.clothing-size-guidance strong {
+  color: #183f3a;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.clothing-size-guidance p {
+  margin: 0;
+  color: #526160;
+  font-size: 11px;
+  font-weight: 780;
+  line-height: 1.28;
+}
+
+.baby-cries-inner {
+  display: grid;
+  gap: 12px;
+}
+
+.diaper-bag-card {
+  background: linear-gradient(180deg, #fffdf8, #f2fbf7);
+}
+
+.diaper-bag-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 14px 14px;
+}
+
+.diaper-bag-group {
+  display: grid;
+  gap: 8px;
+}
+
+.diaper-bag-group h4 {
+  margin: 0;
+  color: #263534;
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.diaper-bag-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.diaper-bag-list li {
+  min-height: 38px;
+  padding: 0;
+  border: 1px solid rgba(36, 117, 111, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #172826;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.diaper-bag-list li::before {
+  content: none;
+}
+
+.diaper-bag-check-row {
+  min-height: 38px;
+}
+
+.diaper-bag-hack {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid rgba(245, 111, 117, 0.18);
+  border-radius: 8px;
+  background: #fff4e7;
+  color: #263534;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.restaurant-survival-card {
+  background: linear-gradient(180deg, #fffaf4, #f4fbf8);
+}
+
+.restaurant-survival-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 14px 14px;
+}
+
+.restaurant-survival-intro {
+  margin: 0;
+  color: #40504f;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.restaurant-survival-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.restaurant-survival-tip {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: center;
+  min-height: 54px;
+  padding: 9px;
+  border: 1px solid rgba(36, 117, 111, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.restaurant-survival-tip span {
+  grid-row: span 2;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #fff7e8, #e9f8f1);
+  font-size: 17px;
+}
+
+.restaurant-survival-tip strong {
+  color: #263534;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.restaurant-survival-tip small {
+  color: #526160;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.cord-troubleshoot-card {
+  margin-top: 12px;
+  background: linear-gradient(180deg, #fffef9, #eefaf6);
+}
+
+.cord-troubleshoot-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 14px 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.cord-troubleshoot-list li {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(26, 95, 88, 0.34);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #172826;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1.2;
+  box-shadow: 0 6px 14px rgba(31, 41, 38, 0.06);
+}
+
+.cord-troubleshoot-list li::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #1c756c;
+  border-radius: 3px;
+  background: #f7fffc;
+}
+
+.cord-troubleshoot-list-hygiene {
+  margin-top: 2px;
+}
+
+.cord-care-callout {
+  border-color: rgba(178, 68, 68, 0.32);
+  background: #fff1dc;
+  color: #321f16;
 }
 
 .baby-cries-gpt-row {
@@ -7051,6 +7613,25 @@ input[type="range"] {
   gap: 6px;
 }
 
+.milestone-care-link {
+  padding: 12px;
+  border: 1px solid rgba(36, 117, 111, 0.16);
+  border-radius: 8px;
+  background: rgba(248, 253, 253, 0.94);
+}
+
+.milestone-care-link p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.milestone-care-link .ghost {
+  justify-self: start;
+}
+
 .achieved-note {
   padding: 10px 12px;
   border-radius: var(--radius);
@@ -7636,6 +8217,38 @@ input[type="range"] {
 
   .baby-cries-flow {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .diaper-bag-list {
+    grid-template-columns: 1fr;
+  }
+
+  .restaurant-survival-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cord-troubleshoot-list {
+    grid-template-columns: 1fr;
+  }
+
+  .clothing-size-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .clothing-size-guidance {
+    grid-template-columns: 1fr;
+  }
+
+  .troubleshoot-expander-title {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .troubleshoot-expander-title small {
+    grid-column: 2;
+    justify-self: start;
+    max-width: none;
+    margin-top: 2px;
+    text-align: left;
   }
 
   .baby-cries-step:not(:last-child)::after {
