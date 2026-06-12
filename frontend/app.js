@@ -2589,6 +2589,7 @@ function renderHygieneCareView(issue, options = {}) {
         </div>
         ${renderCareIssueInfoPanel(issue)}
         ${renderSpongeBathSection()}
+        ${renderTubBathSection()}
         ${renderDiaperChangingSection()}
       </article>
     </section>
@@ -2626,6 +2627,42 @@ function renderSpongeBathSection() {
         `).join("")}
       </div>
       <p class="sponge-bath-note">Newborns usually only need 2-3 baths per week. Keep baby warm, supported, and dry promptly.</p>
+    </section>
+  `;
+}
+
+function renderTubBathSection() {
+  const steps = [
+    { icon: "&#9989;", title: "Ready", text: "Cord stump off; circumcision fully healed" },
+    { icon: "&#129532;", title: "Supplies", text: "Infant tub, cloths, mild soap, cup, towel, diaper" },
+    { icon: "&#127777;", title: "Warm water", text: "2-3 inches; test with elbow or wrist" },
+    { icon: "&#128099;", title: "Feet first", text: "Lower baby feet first; support neck and bottom" },
+    { icon: "&#128400;", title: "One hand", text: "Keep head above water and contact at all times" },
+    { icon: "&#128167;", title: "Face", text: "No soap near eyes; wipe inner corner outward" },
+    { icon: "&#129533;", title: "Wash", text: "Scalp, body, and folds with a little baby soap" },
+    { icon: "&#128166;", title: "Rinse warm", text: "Rinse well; pour warm water to maintain warmth" },
+    { icon: "&#129530;", title: "Wrap fast", text: "Lift carefully, wrap head and body, pat dry, dress" }
+  ];
+
+  return `
+    <section class="sponge-bath-card tub-bath-card" aria-label="Tub bath flow">
+      <div class="sponge-bath-header">
+        <span class="eat-info-icon icon-water" aria-hidden="true">&#128705;</span>
+        <div>
+          <h4>Tub Bath</h4>
+          <p>Start after healing; protect warmth, grip, and water safety.</p>
+        </div>
+      </div>
+      <div class="sponge-bath-flow tub-bath-flow" aria-label="How to give a baby tub bath">
+        ${steps.map((step, index) => `
+          <div class="sponge-bath-step" style="--step-index: ${index}">
+            <span class="sponge-bath-icon" aria-hidden="true">${step.icon}</span>
+            <strong>${escapeHtml(step.title)}</strong>
+            <small>${escapeHtml(step.text)}</small>
+          </div>
+        `).join("")}
+      </div>
+      <p class="sponge-bath-note">Never leave baby unattended, even for a few seconds. Wet skin is slippery, so keep one hand on baby and wrap immediately after lifting out.</p>
     </section>
   `;
 }
