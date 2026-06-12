@@ -51,6 +51,18 @@ pull origin/dev in C:\codelab\apps\TinyNewbornLogServers\dev
 restart or verify dev server on port 3003
 ```
 
+For ordinary dev tasks, after committing and pushing `dev`, always update the dev runtime checkout and restart the dev server:
+
+```powershell
+git -C C:\codelab\apps\TinyNewbornLogServers\dev pull --ff-only origin dev
+
+$node='C:\Users\Huy\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe'
+$devDir='C:\codelab\apps\TinyNewbornLogServers\dev'
+Start-Process -FilePath $node -ArgumentList @('scripts/start-mode.js','dev','3003') -WorkingDirectory $devDir -RedirectStandardOutput (Join-Path $devDir 'dev-server.out.log') -RedirectStandardError (Join-Path $devDir 'dev-server.err.log') -WindowStyle Hidden
+```
+
+If port `3003` is already listening, stop only that old dev-server PID first, then start it again from `C:\codelab\apps\TinyNewbornLogServers\dev`.
+
 Only sync staging/main/prod runtime checkouts after their matching branches are intentionally updated.
 
 ## Ports

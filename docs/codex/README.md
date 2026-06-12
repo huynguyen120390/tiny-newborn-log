@@ -8,6 +8,7 @@ Start here when you need a low-token guide to the Codex navigation maps.
 - Read `data_flow.md` when tracing how UI actions reach storage and re-render.
 - Read `debug_paths.md` when diagnosing a bug or deciding where to inspect first.
 - Read `branch_server_map.md` before changing branches, starting servers, or debugging dev/staging/prod differences.
+- Read `git_workflow_notes.md` before committing, pushing, or syncing runtime checkouts.
 
 ## Fast Paths
 
@@ -18,6 +19,7 @@ Start here when you need a low-token guide to the Codex navigation maps.
 - Styling/layout task: read `feature_map.md`, then inspect targeted selectors in `frontend/styles.css`.
 - Startup/network task: read `branch_server_map.md`, then `repo_map.md` and `debug_paths.md`.
 - Branch promotion task: read `branch_server_map.md` first.
+- Commit/push/sync task: read `git_workflow_notes.md`, then `branch_server_map.md`.
 
 ## Repo Rules
 
