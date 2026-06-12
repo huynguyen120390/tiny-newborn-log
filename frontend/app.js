@@ -2596,22 +2596,42 @@ function renderHygieneCareView(issue, options = {}) {
   `;
 }
 
+function hygieneIconPath(name) {
+  return `/assets/care/hygiene-icons/${name}.png`;
+}
+
+function renderHygieneHeaderIcon(name, fallback) {
+  return `
+    <span class="eat-info-icon icon-water hygiene-header-icon" aria-hidden="true">
+      <img src="${escapeAttr(hygieneIconPath(name))}" alt="">
+      <span>${fallback}</span>
+    </span>
+  `;
+}
+
+function renderHygieneFlowIcon(step) {
+  if (step.iconSrc) {
+    return `<span class="sponge-bath-icon" aria-hidden="true"><img src="${escapeAttr(step.iconSrc)}" alt=""></span>`;
+  }
+  return `<span class="sponge-bath-icon" aria-hidden="true">${step.icon || ""}</span>`;
+}
+
 function renderSpongeBathSection() {
   const steps = [
-    { icon: "&#128705;", title: "2-3x/week", text: "Sponge baths in the first weeks" },
-    { icon: "&#129532;", title: "Supplies", text: "Cloths, towel, diaper, mild unscented soap, 2 bowls warm water" },
-    { icon: "&#127777;", title: "Warm setup", text: "Warm room, towel, safe flat surface; strap changing table" },
-    { icon: "&#128400;", title: "One hand", text: "Keep one hand on baby at all times" },
-    { icon: "&#128167;", title: "Face first", text: "Plain warm water; eyes inner corner outward, then face and ears" },
-    { icon: "&#129533;", title: "Soapy wash", text: "Head and body; folds under arms, neck, ears, diaper area" },
-    { icon: "&#128166;", title: "Rinse", text: "Plain warm water removes soap residue" },
-    { icon: "&#129530;", title: "Dry + dress", text: "Pat dry, clean diaper, dress warmly" }
+    { iconSrc: hygieneIconPath("sponge-frequency"), title: "2-3x/week", text: "Sponge baths in the first weeks" },
+    { iconSrc: hygieneIconPath("sponge-supplies"), title: "Supplies", text: "Cloths, towel, diaper, mild unscented soap, 2 bowls warm water" },
+    { iconSrc: hygieneIconPath("sponge-warm-setup"), title: "Warm setup", text: "Warm room, towel, safe flat surface; strap changing table" },
+    { iconSrc: hygieneIconPath("sponge-one-hand"), title: "One hand", text: "Keep one hand on baby at all times" },
+    { iconSrc: hygieneIconPath("sponge-face-first"), title: "Face first", text: "Plain warm water; eyes inner corner outward, then face and ears" },
+    { iconSrc: hygieneIconPath("sponge-gentle-wash"), title: "Soapy wash", text: "Head and body; folds under arms, neck, ears, diaper area" },
+    { iconSrc: hygieneIconPath("sponge-rinse"), title: "Rinse", text: "Plain warm water removes soap residue" },
+    { iconSrc: hygieneIconPath("tub-wrap-fast"), title: "Dry + dress", text: "Pat dry, clean diaper, dress warmly" }
   ];
 
   return `
     <section class="sponge-bath-card" aria-label="Sponge bath flow">
       <div class="sponge-bath-header">
-        <span class="eat-info-icon icon-water" aria-hidden="true">&#128167;</span>
+        ${renderHygieneHeaderIcon("sponge-title", "&#128167;")}
         <div>
           <h4>Sponge Bath</h4>
           <p>Keep baby warm, supported, and gently clean skin folds.</p>
@@ -2620,7 +2640,7 @@ function renderSpongeBathSection() {
       <div class="sponge-bath-flow" aria-label="How to give a newborn sponge bath">
         ${steps.map((step, index) => `
           <div class="sponge-bath-step" style="--step-index: ${index}">
-            <span class="sponge-bath-icon" aria-hidden="true">${step.icon}</span>
+            ${renderHygieneFlowIcon(step)}
             <strong>${escapeHtml(step.title)}</strong>
             <small>${escapeHtml(step.text)}</small>
           </div>
@@ -2633,21 +2653,21 @@ function renderSpongeBathSection() {
 
 function renderTubBathSection() {
   const steps = [
-    { icon: "&#9989;", title: "Ready", text: "Cord stump off; circumcision fully healed" },
-    { icon: "&#129532;", title: "Supplies", text: "Infant tub, cloths, mild soap, cup, towel, diaper" },
-    { icon: "&#127777;", title: "Warm water", text: "2-3 inches; test with elbow or wrist" },
-    { icon: "&#128099;", title: "Feet first", text: "Lower baby feet first; support neck and bottom" },
-    { icon: "&#128400;", title: "One hand", text: "Keep head above water and contact at all times" },
-    { icon: "&#128167;", title: "Face", text: "No soap near eyes; wipe inner corner outward" },
-    { icon: "&#129533;", title: "Wash", text: "Scalp, body, and folds with a little baby soap" },
-    { icon: "&#128166;", title: "Rinse warm", text: "Rinse well; pour warm water to maintain warmth" },
-    { icon: "&#129530;", title: "Wrap fast", text: "Lift carefully, wrap head and body, pat dry, dress" }
+    { iconSrc: hygieneIconPath("tub-ready"), title: "Ready", text: "Cord stump off; circumcision fully healed" },
+    { iconSrc: hygieneIconPath("tub-supplies"), title: "Supplies", text: "Infant tub, cloths, mild soap, cup, towel, diaper" },
+    { iconSrc: hygieneIconPath("tub-warm-water"), title: "Warm water", text: "2-3 inches; test with elbow or wrist" },
+    { iconSrc: hygieneIconPath("tub-feet-first"), title: "Feet first", text: "Lower baby feet first; support neck and bottom" },
+    { iconSrc: hygieneIconPath("tub-one-hand"), title: "One hand", text: "Keep head above water and contact at all times" },
+    { iconSrc: hygieneIconPath("tub-face"), title: "Face", text: "No soap near eyes; wipe inner corner outward" },
+    { iconSrc: hygieneIconPath("tub-wash"), title: "Wash", text: "Scalp, body, and folds with a little baby soap" },
+    { iconSrc: hygieneIconPath("tub-rinse"), title: "Rinse warm", text: "Rinse well; pour warm water to maintain warmth" },
+    { iconSrc: hygieneIconPath("tub-wrap-fast"), title: "Wrap fast", text: "Lift carefully, wrap head and body, pat dry, dress" }
   ];
 
   return `
     <section class="sponge-bath-card tub-bath-card" aria-label="Tub bath flow">
       <div class="sponge-bath-header">
-        <span class="eat-info-icon icon-water" aria-hidden="true">&#128705;</span>
+        ${renderHygieneHeaderIcon("tub-title", "&#128705;")}
         <div>
           <h4>Tub Bath</h4>
           <p>Start after healing; protect warmth, grip, and water safety.</p>
@@ -2656,7 +2676,7 @@ function renderTubBathSection() {
       <div class="sponge-bath-flow tub-bath-flow" aria-label="How to give a baby tub bath">
         ${steps.map((step, index) => `
           <div class="sponge-bath-step" style="--step-index: ${index}">
-            <span class="sponge-bath-icon" aria-hidden="true">${step.icon}</span>
+            ${renderHygieneFlowIcon(step)}
             <strong>${escapeHtml(step.title)}</strong>
             <small>${escapeHtml(step.text)}</small>
           </div>
@@ -2669,20 +2689,20 @@ function renderTubBathSection() {
 
 function renderDiaperChangingSection() {
   const steps = [
-    { icon: "&#129514;", title: "Open first", text: "Open clean diaper and set it within reach" },
-    { icon: "&#129532;", title: "Wipes ready", text: "Put wipes, cream, and trash bag nearby" },
-    { icon: "&#128070;", title: "Cover bottom", text: "Slide clean diaper or menu holder under bottom before opening dirty diaper" },
-    { icon: "&#128167;", title: "Cover penis", text: "Place a cloth or wipe over penis before opening diaper" },
-    { icon: "&#129533;", title: "Open dirty", text: "Open dirty diaper slowly and use it to catch extra mess" },
-    { icon: "&#129530;", title: "Front to back", text: "Wipe front to back and clean skin folds gently" },
-    { icon: "&#9989;", title: "Clean diaper", text: "Remove dirty diaper, fasten clean diaper snugly" },
-    { icon: "&#11015;", title: "Point down", text: "Point penis down to help prevent leaks up the back" }
+    { iconSrc: hygieneIconPath("diaper-prepare"), title: "Open first", text: "Open clean diaper and set it within reach" },
+    { iconSrc: hygieneIconPath("diaper-wipes-ready"), title: "Wipes ready", text: "Put wipes, cream, and trash bag nearby" },
+    { iconSrc: hygieneIconPath("diaper-open"), title: "Cover bottom", text: "Slide clean diaper or menu holder under bottom before opening dirty diaper" },
+    { iconSrc: hygieneIconPath("diaper-splash-guard"), title: "Cover penis", text: "Place a cloth or wipe over penis before opening diaper" },
+    { iconSrc: hygieneIconPath("diaper-open"), title: "Open dirty", text: "Open dirty diaper slowly and use it to catch extra mess" },
+    { iconSrc: hygieneIconPath("diaper-clean"), title: "Front to back", text: "Wipe front to back and clean skin folds gently" },
+    { iconSrc: hygieneIconPath("diaper-fresh"), title: "Clean diaper", text: "Remove dirty diaper, fasten clean diaper snugly" },
+    { iconSrc: hygieneIconPath("diaper-fresh"), title: "Point down", text: "Point penis down to help prevent leaks up the back" }
   ];
 
   return `
     <section class="sponge-bath-card diaper-changing-card" aria-label="Diaper changing flow">
       <div class="sponge-bath-header">
-        <span class="eat-info-icon icon-diaper" aria-hidden="true">&#129514;</span>
+        ${renderHygieneHeaderIcon("diaper-title", "&#129514;")}
         <div>
           <h4>Diaper Changing</h4>
           <p>Set up first, cover before opening, then clean and close fast.</p>
@@ -2691,7 +2711,7 @@ function renderDiaperChangingSection() {
       <div class="sponge-bath-flow diaper-changing-flow" aria-label="How to change a newborn diaper">
         ${steps.map((step, index) => `
           <div class="sponge-bath-step" style="--step-index: ${index}">
-            <span class="sponge-bath-icon" aria-hidden="true">${step.icon}</span>
+            ${renderHygieneFlowIcon(step)}
             <strong>${escapeHtml(step.title)}</strong>
             <small>${escapeHtml(step.text)}</small>
           </div>

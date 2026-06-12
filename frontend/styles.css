@@ -2057,7 +2057,7 @@ main {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-rows: 44px auto auto;
+  grid-template-rows: 52px auto auto;
   gap: 5px;
   min-width: 118px;
   padding: 8px;
@@ -2078,8 +2078,8 @@ main {
 
 .sponge-bath-icon {
   display: grid;
-  width: 38px;
-  height: 38px;
+  width: 46px;
+  height: 46px;
   place-items: center;
   justify-self: center;
   border: 1px solid rgba(64, 120, 185, 0.16);
@@ -2088,6 +2088,7 @@ main {
   color: #4078b9;
   font-size: 20px;
   box-shadow: 0 8px 16px rgba(64, 120, 185, 0.12);
+  overflow: hidden;
 }
 
 .diaper-changing-card .sponge-bath-icon {
@@ -2095,6 +2096,27 @@ main {
   background: linear-gradient(180deg, #ffffff, #fff5d8);
   color: #9a6812;
   box-shadow: 0 8px 16px rgba(217, 154, 43, 0.12);
+}
+
+.hygiene-header-icon {
+  overflow: hidden;
+}
+
+.hygiene-header-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hygiene-header-icon span {
+  display: none;
+}
+
+.sponge-bath-icon img {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  object-fit: contain;
 }
 
 .sponge-bath-step strong {
