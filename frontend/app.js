@@ -2629,14 +2629,14 @@ function renderSpongeBathSection() {
   ];
 
   return `
-    <section class="sponge-bath-card" aria-label="Sponge bath flow">
-      <div class="sponge-bath-header">
+    <details class="sponge-bath-card hygiene-expander" aria-label="Sponge bath flow">
+      <summary class="sponge-bath-header">
         ${renderHygieneHeaderIcon("sponge-title", "&#128167;")}
         <div>
           <h4>Sponge Bath</h4>
           <p>Keep baby warm, supported, and gently clean skin folds.</p>
         </div>
-      </div>
+      </summary>
       <div class="sponge-bath-flow" aria-label="How to give a newborn sponge bath">
         ${steps.map((step, index) => `
           <div class="sponge-bath-step" style="--step-index: ${index}">
@@ -2647,7 +2647,7 @@ function renderSpongeBathSection() {
         `).join("")}
       </div>
       <p class="sponge-bath-note">Newborns usually only need 2-3 baths per week. Keep baby warm, supported, and dry promptly.</p>
-    </section>
+    </details>
   `;
 }
 
@@ -2665,14 +2665,14 @@ function renderTubBathSection() {
   ];
 
   return `
-    <section class="sponge-bath-card tub-bath-card" aria-label="Tub bath flow">
-      <div class="sponge-bath-header">
+    <details class="sponge-bath-card tub-bath-card hygiene-expander" aria-label="Tub bath flow">
+      <summary class="sponge-bath-header">
         ${renderHygieneHeaderIcon("tub-title", "&#128705;")}
         <div>
           <h4>Tub Bath</h4>
           <p>Start after healing; protect warmth, grip, and water safety.</p>
         </div>
-      </div>
+      </summary>
       <div class="sponge-bath-flow tub-bath-flow" aria-label="How to give a baby tub bath">
         ${steps.map((step, index) => `
           <div class="sponge-bath-step" style="--step-index: ${index}">
@@ -2683,7 +2683,7 @@ function renderTubBathSection() {
         `).join("")}
       </div>
       <p class="sponge-bath-note">Never leave baby unattended, even for a few seconds. Wet skin is slippery, so keep one hand on baby and wrap immediately after lifting out.</p>
-    </section>
+    </details>
   `;
 }
 
@@ -2700,14 +2700,14 @@ function renderDiaperChangingSection() {
   ];
 
   return `
-    <section class="sponge-bath-card diaper-changing-card" aria-label="Diaper changing flow">
-      <div class="sponge-bath-header">
+    <details class="sponge-bath-card diaper-changing-card hygiene-expander" aria-label="Diaper changing flow">
+      <summary class="sponge-bath-header">
         ${renderHygieneHeaderIcon("diaper-title", "&#129514;")}
         <div>
           <h4>Diaper Changing</h4>
           <p>Set up first, cover before opening, then clean and close fast.</p>
         </div>
-      </div>
+      </summary>
       <div class="sponge-bath-flow diaper-changing-flow" aria-label="How to change a newborn diaper">
         ${steps.map((step, index) => `
           <div class="sponge-bath-step" style="--step-index: ${index}">
@@ -2718,7 +2718,7 @@ function renderDiaperChangingSection() {
         `).join("")}
       </div>
       <p class="sponge-bath-note">Cold air can trigger a pee reflex. Covering first and keeping supplies close reduces surprises.</p>
-    </section>
+    </details>
   `;
 }
 

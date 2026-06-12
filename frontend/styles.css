@@ -1862,10 +1862,38 @@ main {
 }
 
 .sponge-bath-header {
+  position: relative;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-columns: 42px minmax(0, 1fr) 24px;
   gap: 10px;
   align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+
+.sponge-bath-header::-webkit-details-marker {
+  display: none;
+}
+
+.hygiene-expander .sponge-bath-header::after {
+  content: "\203A";
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(233, 247, 240, 0.92);
+  color: #344140;
+  font-size: 22px;
+  font-weight: 950;
+  line-height: 1;
+  transform: rotate(90deg);
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.hygiene-expander[open] .sponge-bath-header::after {
+  background: rgba(211, 239, 231, 0.96);
+  transform: rotate(-90deg);
 }
 
 .sponge-bath-header h4 {
