@@ -419,6 +419,7 @@ document.querySelectorAll("[data-settings-group]").forEach((button) => {
 
 document.getElementById("chatgpt-shortcut")?.addEventListener("click", openChatGptShortcut);
 document.getElementById("weather-shortcut")?.addEventListener("click", openWeatherShortcut);
+setupPageSearch();
 
 document.querySelector("[data-close-dialog]").addEventListener("click", () => {
   document.getElementById("bottle-dialog").close();
@@ -792,7 +793,10 @@ function renderAll() {
   
   const birthday = state.profile.birthday || "";
   const age = formatBabyAge(birthday);
-  document.getElementById("baby-summary").textContent = `${age}.`;
+  const babySummary = document.getElementById("baby-summary");
+  if (babySummary) {
+    babySummary.innerHTML = age ? `${renderCurrentHighlight(`Baby age: ${age}`, "age")}.` : "";
+  }
   updateTopbarBabyAge();
   renderTodaySummary();
   renderRecent();
@@ -806,8 +810,163 @@ function renderAll() {
   renderActivityStats();
   updateActivityButtons();
   updateBottleDefaults();
+  refreshPageSearch();
   checkCareGuidanceNotification();
   startTicker();
+}
+
+function setupPageSearch() {
+  const input = document.getElementById("page-search-input");
+  const clearButton = document.getElementById("page-search-clear");
+  const results = document.getElementById("page-search-results");
+  if (!input || !clearButton || !results) return;
+
+  input.addEventListener("input", () => updatePageSearch(input.value));
+  clearButton.addEventListener("click", () => {
+    input.value = "";
+    updatePageSearch("");
+    input.focus();
+  });
+  results.addEventListener("click", (event) => {
+    const link = event.target.closest("[data-search-target]");
+    if (!link) return;
+    event.preventDefault();
+    openPageSearchResult(link.dataset.searchTarget);
+  });
+}
+
+function refreshPageSearch() {
+  const input = document.getElementById("page-search-input");
+  if (input?.value.trim()) updatePageSearch(input.value);
+}
+
+function updatePageSearch(query) {
+  const input = document.getElementById("page-search-input");
+  const clearButton = document.getElementById("page-search-clear");
+  const results = document.getElementById("page-search-results");
+  if (!input || !clearButton || !results) return;
+
+  const cleanQuery = String(query || "").trim();
+  clearButton.hidden = !cleanQuery;
+  if (cleanQuery.length < 2) {
+    results.hidden = true;
+    results.innerHTML = "";
+    return;
+  }
+
+  const matches = pageSearchResults(cleanQuery).slice(0, 8);
+  results.hidden = false;
+  results.innerHTML = matches.length
+    ? matches.map((match) => `
+      <a class="page-search-result" href="#${escapeAttr(match.id)}" data-search-target="${escapeAttr(match.id)}">
+        <strong>${escapeHtml(match.title)}</strong>
+        <small>${escapeHtml(match.location)}</small>
+        <span>${escapeHtml(match.snippet)}</span>
+      </a>
+    `).join("")
+    : `<p class="page-search-empty">No matching sections found.</p>`;
+}
+
+function pageSearchResults(query) {
+  const terms = normalizeSearchText(query).split(/\s+/).filter(Boolean);
+  if (!terms.length) return [];
+  const seen = new Set();
+  return pageSearchCandidates()
+    .map((element) => {
+      const text = normalizeSearchText(element.innerText || element.textContent || "");
+      if (!terms.every((term) => text.includes(term))) return null;
+      const id = ensurePageSearchTargetId(element);
+      if (!id || seen.has(id)) return null;
+      seen.add(id);
+      return {
+        id,
+        title: pageSearchTitle(element),
+        location: pageSearchLocation(element),
+        snippet: pageSearchSnippet(element.innerText || element.textContent || "", terms[0])
+      };
+    })
+    .filter(Boolean);
+}
+
+function pageSearchCandidates() {
+  const selectors = [
+    ".page-title",
+    ".activity-card",
+    ".care-side-button",
+    ".baby-cries-card",
+    ".eat-info-row",
+    ".care-guide-card",
+    ".schedule-info",
+    ".schedule-slot",
+    ".milestone-card",
+    ".dashboard-overview-card",
+    ".dashboard-card",
+    ".settings-card",
+    ".quiz-card",
+    ".quiz-panel"
+  ];
+  return Array.from(document.querySelectorAll(selectors.join(",")))
+    .filter((element) => !element.closest(".page-search") && normalizeSearchText(element.innerText || element.textContent || "").length > 1);
+}
+
+function ensurePageSearchTargetId(element) {
+  if (!element.id) {
+    const title = pageSearchTitle(element);
+    element.id = `search-${slugifyId(title)}-${Array.from(document.querySelectorAll("[id^='search-']")).length + 1}`;
+  }
+  return element.id;
+}
+
+function pageSearchTitle(element) {
+  const titleElement = element.matches(".page-title")
+    ? element.querySelector("h2")
+    : element.querySelector(".troubleshoot-expander-title span, h2, h3, h4, strong");
+  const title = (titleElement?.textContent || element.getAttribute("aria-label") || "Section").trim();
+  return title || "Section";
+}
+
+function pageSearchLocation(element) {
+  const panel = element.closest(".panel");
+  if (!panel) return "Current page";
+  const panelNames = {
+    log: "Home / Log",
+    care: "Home / Care",
+    schedule: "Home / Schedule",
+    milestones: "Home / Milestones",
+    dashboard: "Home / Dashboard",
+    quiz: "Quiz",
+    settings: "Settings",
+    history: "Settings / History",
+    exports: "Settings / Exports"
+  };
+  return panelNames[panel.id] || panel.id;
+}
+
+function pageSearchSnippet(text, firstTerm) {
+  const cleanText = String(text || "").replace(/\s+/g, " ").trim();
+  const normalized = normalizeSearchText(cleanText);
+  const index = normalized.indexOf(firstTerm);
+  if (index < 0) return cleanText.slice(0, 150);
+  const start = Math.max(0, index - 55);
+  return `${start > 0 ? "... " : ""}${cleanText.slice(start, start + 150)}${start + 150 < cleanText.length ? " ..." : ""}`;
+}
+
+function normalizeSearchText(value) {
+  return String(value || "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function openPageSearchResult(id) {
+  let target = document.getElementById(id);
+  if (!target) return;
+  const panel = target.closest(".panel");
+  if (panel) activateTab(panel.id);
+
+  target = document.getElementById(id) || target;
+  if ("open" in target) target.open = true;
+  target.closest("details")?.setAttribute("open", "");
+  target.classList.add("search-spotlight");
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+  window.setTimeout(() => target.classList.remove("search-spotlight"), 1800);
 }
 
 function renderActivities() {
@@ -1241,6 +1400,7 @@ function renderScheduleSlot(row, index, rows = [], locked = false) {
           <img src="${escapeAttr(scheduleActivityIcon(row))}" alt="">
           <div>
             <h3><span class="schedule-goal-check ${escapeAttr(goalState.state)}" title="${escapeAttr(goalState.label)}">✓</span>${escapeHtml(row.activity || "Activity")}</h3>
+            ${timeState === "current" ? `<div class="schedule-current-context">${renderCurrentHighlight("Current schedule slot")}</div>` : ""}
             <div class="schedule-card-time-controls">
               ${renderScheduleTimePicker(row, index, locked)}
               <span class="schedule-duration-display" aria-label="Calculated slot duration">${escapeHtml(scheduleSlotDurationLabel(row))}</span>
@@ -1906,6 +2066,15 @@ function renderCareIssueCardInfo(issue) {
   return `<ul class="care-card-bullets">${bullets.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
 }
 
+function renderCurrentHighlight(text, tone = "live") {
+  const label = tone === "age" ? "Currently age-based" : tone === "weather" ? "Currently outdoor" : "Currently";
+  return `<span class="current-context-highlight current-context-${escapeAttr(tone)}"><span>${label}</span>${escapeHtml(text)}</span>`;
+}
+
+function renderCurrentOrPlain(text, isCurrent = false, tone = "live") {
+  return isCurrent ? renderCurrentHighlight(text, tone) : escapeHtml(text);
+}
+
 function sleepCardBullets() {
   const data = state.careInfo.sleep;
   if (!data) {
@@ -1968,6 +2137,8 @@ function eatInfoRows() {
       icon: "star",
       title: "Milestones",
       text: row ? `${row.age}; ${row.howOften}; ${row.amountPerFeed}` : "Set birthday for age-based guidance",
+      current: Boolean(row),
+      currentTone: "age",
       details: [
         "Typical bottle amounts: first week 1-2 oz, 0-1 month 2-3 oz, 1-3 months 3-5 oz, 3-6 months 4-6 oz.",
         "Amount increases as baby grows. Use hunger and fullness cues with age guidance."
@@ -1995,6 +2166,8 @@ function eatInfoRows() {
       icon: "bottle",
       title: "Bottle Feeding",
       text: `${bottleReminder(data, row)} Formula 8-12 feeds/day.`,
+      current: Boolean(row || relevantNippleSize(data)),
+      currentTone: "age",
       details: [
         "Formula feeding is usually 8-12 feeds/day; amount increases as baby grows.",
         "Stop when baby turns away, closes mouth, or stops sucking.",
@@ -2027,6 +2200,7 @@ function eatInfoRows() {
       icon: "diaper",
       title: "Diaper / Red Flags",
       text: `${loggedWet} wet logged today; ${wetDiaperReminder(data)}`,
+      current: true,
       details: [
         "Expected wet diapers: Day 1: 1+, Day 2: 2+, Day 3: 3+, Day 4+: 6+ per day.",
         "By Day 5, too few wet diapers with poor feeding or excess sleepiness means contact pediatrician or lactation support.",
@@ -2061,6 +2235,8 @@ function sleepInfoRows() {
       icon: "moon",
       title: "Milestones",
       text: ageGuidance,
+      current: Boolean(row),
+      currentTone: "age",
       details: [
         "Sleep needs change quickly by age; use the current row as a guide, not a strict rule.",
         "Wake window means the time baby can usually stay awake between sleeps.",
@@ -2077,6 +2253,8 @@ function sleepInfoRows() {
       icon: "star",
       title: "Naps",
       text: napGuidance,
+      current: Boolean(row),
+      currentTone: "age",
       details: [
         "Keep naps in a dark, quiet room when possible.",
         "Newborn naps vary. For older babies, many naps land around 30 minutes to 2 hours.",
@@ -2103,6 +2281,8 @@ function sleepInfoRows() {
       icon: "clothes",
       title: "Clothing",
       text: `${data.indoorClothing || "Keep room comfortable and avoid overheating"} ${outdoorClothingRecommendation(data)}`,
+      current: Number.isFinite(state.weather?.temperature),
+      currentTone: "weather",
       details: [
         "Check baby chest or neck, not hands or feet, to judge warmth.",
         "Signs of overheating can include sweating, hot red skin, rapid breathing, or restlessness.",
@@ -2233,7 +2413,7 @@ function outdoorClothingRecommendation(data) {
   const temperature = state.weather?.temperature;
   if (!Number.isFinite(temperature)) return "Waiting for local weather";
   const rule = (data.outdoorClothingRules || []).find((item) => temperature <= item.maxF);
-  return `${temperature}°F: ${rule?.text || "Dress in light layers and check baby often."}`;
+  return `${temperature}F outdoor: ${rule?.text || "Dress in light layers and check baby often."}`;
 }
 
 function renderCareBackButton(showBack = true) {
@@ -2278,7 +2458,7 @@ function renderEatInfoRow(item) {
     <span class="eat-info-icon icon-${escapeAttr(item.icon)}" aria-hidden="true">${eatInfoIcon(item.icon)}</span>
     <span class="eat-info-copy">
       <strong>${escapeHtml(item.title)}</strong>
-      <small>${escapeHtml(item.text)}</small>
+      <small>${renderCurrentOrPlain(item.text, item.current, item.currentTone)}</small>
     </span>
     <span class="eat-info-chevron" aria-hidden="true">&#8250;</span>
   `;
@@ -2316,7 +2496,7 @@ function renderSleepInfoRow(item) {
     <span class="eat-info-icon icon-${escapeAttr(item.icon)}" aria-hidden="true">${eatInfoIcon(item.icon)}</span>
     <span class="eat-info-copy">
       <strong>${escapeHtml(item.title)}</strong>
-      <small>${escapeHtml(item.text)}</small>
+      <small>${renderCurrentOrPlain(item.text, item.current, item.currentTone)}</small>
     </span>
     <span class="eat-info-chevron" aria-hidden="true">&#8250;</span>
   `;
@@ -3078,7 +3258,7 @@ function renderTroubleshootCareView(issue, options = {}) {
         ${renderCareIssueInfoPanel(issue)}
         <div class="troubleshoot-card-stack">
           ${renderClothingSizeTroubleshootCard()}
-          <details class="baby-cries-card troubleshoot-expander" open>
+          <details id="troubleshoot-baby-cries" class="baby-cries-card troubleshoot-expander" open>
             <summary class="troubleshoot-expander-title">
               <span>Baby cries</span>
               <small>Fast checks, soothing, and GPT review</small>
@@ -3146,7 +3326,7 @@ function diaperBagItemId(item) {
 
 function renderPrepareDiaperBagSection() {
   return `
-    <details class="baby-cries-card troubleshoot-expander diaper-bag-card">
+    <details id="troubleshoot-diaper-bag" class="baby-cries-card troubleshoot-expander diaper-bag-card">
       <summary class="troubleshoot-expander-title">
         <span>Prepare Diaper Bag</span>
         <small>Prepack everything but perishables before leaving.</small>
@@ -3221,43 +3401,113 @@ async function updateDiaperBagProgress(id, checked) {
   }
 }
 
-function restaurantSurvivalTips() {
+function restaurantDiningPhases() {
   return [
-    { icon: "&#128197;", title: "Reserve", text: "Skip the wait." },
-    { icon: "&#127769;", title: "Dine early", text: "Less crowd, less pressure." },
-    { icon: "&#127939;", title: "Reset first", text: "Let baby blow off steam." },
-    { icon: "&#127838;", title: "Pack snacks", text: "Bridge the wait for food." },
-    { icon: "&#129366;", title: "Use bread", text: "Warm bread buys calm minutes." },
-    { icon: "&#9889;", title: "Order fast", text: "Start with an appetizer." },
-    { icon: "&#128179;", title: "Check early", text: "Be ready to leave." },
-    { icon: "&#127890;", title: "Bag handy", text: "Keep supplies within reach." },
-    { icon: "&#128682;", title: "Seat smart", text: "Corner or exit-side table." },
-    { icon: "&#127860;", title: "Go casual", text: "Kid-friendly beats fancy." },
-    { icon: "&#9201;", title: "Keep it short", text: "Do not linger." },
-    { icon: "&#128241;", title: "Video backup", text: "Emergency tool only." },
-    { icon: "&#128176;", title: "Tip well", text: "Especially after messes." }
+    {
+      age: "0-2 months",
+      title: "Sleepy Potato Phase",
+      icon: "&#128164;",
+      before: ["Feed completely before departure", "Fresh diaper before loading car seat", "Leave immediately after feeding"],
+      restaurant: ["Keep baby in car seat if comfortable", "Choose a booth if possible", "Sit near an exit", "One parent orders for everyone"],
+      expect: ["Sleep", "Looking around", "Maybe another feed"],
+      avoid: ["Loud sports bars", "Long waits", "90-minute dinners"]
+    },
+    {
+      age: "2-4 months",
+      title: "Alert Observer Phase",
+      icon: "&#128064;",
+      before: ["Pacifier", "Lightweight blanket", "White noise app", "Toy that clips onto stroller"],
+      restaurant: ["If baby fusses: Parent A eats, Parent B walks baby, then switch"],
+      expect: ["Best window: after nap, after feed, before next nap"],
+      avoid: ["Right before bedtime"]
+    },
+    {
+      age: "4-6 months",
+      title: "Bored Easily Phase",
+      icon: "&#129528;",
+      before: ["Pacifier", "Teether", "Crinkle toy", "Small soft toy"],
+      restaurant: ["Rotate items; a toy hidden for 20 minutes can feel new again", "If fussing, walk stroller near the restaurant entrance, then come back"],
+      expect: ["More entertainment needed", "Stroller motion may reset fussiness"],
+      avoid: ["Showing every toy at once"]
+    }
   ];
+}
+
+function restaurantDiningSupportTips() {
+  return [
+    {
+      title: "Breastfeeding",
+      icon: "&#129329;",
+      items: ["Ask for a corner booth or quiet section", "Nursing-friendly tops reduce stress", "Feed at early hunger cues: rooting, hand sucking, lip smacking"]
+    },
+    {
+      title: "Bottle Feeding",
+      icon: "&#127868;",
+      items: ["For Seattle weather around 44F, pack bottle, milk, and portable warmer or thermos", "Pre-warm water in a thermos, then place bottle in warm water", "Usually warms in 2-5 minutes"]
+    },
+    {
+      title: "Blowout Kit",
+      icon: "&#129514;",
+      items: ["Keep one separate ziplock with 1 diaper, wipes, disposable changing pad, and spare onesie", "You do not want to dig through the whole diaper bag during an emergency"]
+    }
+  ];
+}
+
+function renderRestaurantPhaseCard(phase) {
+  return `
+    <article class="restaurant-phase-card">
+      <div class="restaurant-phase-title">
+        <span aria-hidden="true">${phase.icon}</span>
+        <div>
+          <small>${escapeHtml(phase.age)}</small>
+          <strong>${escapeHtml(phase.title)}</strong>
+        </div>
+      </div>
+      <div class="restaurant-phase-grid">
+        ${renderRestaurantList("Before Leaving", phase.before)}
+        ${renderRestaurantList("At Restaurant", phase.restaurant)}
+        ${renderRestaurantList("Expect", phase.expect)}
+        ${renderRestaurantList("Avoid", phase.avoid, "avoid")}
+      </div>
+    </article>
+  `;
+}
+
+function renderRestaurantList(title, items, tone = "ok") {
+  return `
+    <section class="restaurant-list restaurant-list-${escapeAttr(tone)}">
+      <h4>${escapeHtml(title)}</h4>
+      <ul>
+        ${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+      </ul>
+    </section>
+  `;
 }
 
 function renderRestaurantSurvivalSection() {
   return `
-    <details class="baby-cries-card troubleshoot-expander restaurant-survival-card">
+    <details id="troubleshoot-dine-out" class="baby-cries-card troubleshoot-expander restaurant-survival-card">
       <summary class="troubleshoot-expander-title">
-        <span>How to Survive in Restaurants</span>
-        <small>Low expectations, fast plan, easy exit.</small>
+        <span>How to dine out</span>
+        <small>0-6 month restaurant survival plan.</small>
       </summary>
       <div class="restaurant-survival-body">
-        <p class="restaurant-survival-intro">Eating out with baby is training, not a performance. Plan for speed, snacks, and a graceful escape.</p>
-        <div class="restaurant-survival-grid">
-          ${restaurantSurvivalTips().map((tip) => `
-            <article class="restaurant-survival-tip">
+        <p class="restaurant-survival-intro">Babies under 6 months are usually the easiest age to take out: they do not crawl, run, or throw food yet.</p>
+        <div class="restaurant-phase-stack">
+          ${restaurantDiningPhases().map(renderRestaurantPhaseCard).join("")}
+        </div>
+        <div class="restaurant-support-grid">
+          ${restaurantDiningSupportTips().map((tip) => `
+            <article class="restaurant-support-card">
               <span aria-hidden="true">${tip.icon}</span>
               <strong>${escapeHtml(tip.title)}</strong>
-              <small>${escapeHtml(tip.text)}</small>
+              <ul>
+                ${tip.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+              </ul>
             </article>
           `).join("")}
         </div>
-        <p class="diaper-bag-hack"><strong>Daddy Hack:</strong> The first few trips may be chaotic. Keep expectations low and leave if things go sideways.</p>
+        <p class="diaper-bag-hack"><strong>45-Minute Rule:</strong> Plan newborn restaurant trips around 45 minutes. Success means seated quickly, warm food, no major meltdown, and leaving before things go south.</p>
       </div>
     </details>
   `;
@@ -3323,7 +3573,7 @@ function renderClothingSizeTroubleshootCard() {
   const outgrowingText = recommendation.outgrowing ? `Outgrowing ${recommendation.outgrowing.size}` : "No smaller-size warning yet";
 
   return `
-    <details class="baby-cries-card troubleshoot-expander clothing-size-card" open>
+    <details id="troubleshoot-clothing-size" class="baby-cries-card troubleshoot-expander clothing-size-card" open>
       <summary class="troubleshoot-expander-title">
         <span>How to Pick Baby Clothes</span>
         <small>Uses latest weight and length logs</small>
@@ -3331,15 +3581,15 @@ function renderClothingSizeTroubleshootCard() {
       <div class="clothing-size-summary">
         <div>
           <small>Weight</small>
-          <strong>${escapeHtml(weightText)}</strong>
+          <strong>${latestWeight ? renderCurrentHighlight(weightText) : escapeHtml(weightText)}</strong>
         </div>
         <div>
           <small>Length</small>
-          <strong>${escapeHtml(lengthText)}</strong>
+          <strong>${latestHeight ? renderCurrentHighlight(lengthText) : escapeHtml(lengthText)}</strong>
         </div>
         <div>
           <small>Recommended</small>
-          <strong>${escapeHtml(recommendedText)}</strong>
+          <strong>${renderCurrentHighlight(recommendedText, "age")}</strong>
         </div>
       </div>
       <div class="clothing-size-alerts">
@@ -5722,7 +5972,7 @@ function renderPoopColorCard(color) {
     <button class="poop-color-card status-${escapeAttr(status)}" type="button" data-poop-color-id="${escapeAttr(color.id)}">
       <span class="poop-card-topline">
         <img class="poop-color-swatch" src="${escapeAttr(color.swatch)}" alt="">
-        <span class="poop-status-badge">${escapeHtml(statusLabel(status))}</span>
+        <span class="poop-status-badge">${renderCurrentHighlight(statusLabel(status), "age")}</span>
       </span>
       <strong>${escapeHtml(color.label)}</strong>
       <span>${escapeHtml(color.parentAction)}</span>
@@ -5873,7 +6123,7 @@ function updateTopbarBabyAge() {
   const ageElement = document.getElementById("topbar-baby-age");
   if (!ageElement) return;
   const age = formatBabyAge(state.profile.birthday || "");
-  ageElement.textContent = age ? `Baby age: ${age}` : "";
+  ageElement.innerHTML = age ? renderCurrentHighlight(`Baby age: ${age}`, "age") : "";
   updateTopbarBabyStats();
 }
 
@@ -5885,7 +6135,7 @@ function updateTopbarBabyStats() {
   const parts = [];
   if (weight) parts.push(formatWeightLog(weight));
   if (height) parts.push(formatHeightLog(height));
-  element.textContent = parts.length ? parts.join(" / ") : "Stats: --";
+  element.innerHTML = parts.length ? renderCurrentHighlight(parts.join(" / ")) : "Stats: --";
 }
 
 async function refreshWeather() {
@@ -5960,7 +6210,7 @@ function updateWeatherDisplay() {
 
   const weather = state.weather;
   icon.textContent = weather?.icon || "--";
-  temp.textContent = Number.isFinite(weather?.temperature) ? `${weather.temperature}°F` : "Weather";
+  temp.innerHTML = Number.isFinite(weather?.temperature) ? renderCurrentHighlight(`${weather.temperature}F outdoor`, "weather") : "Weather";
   button.title = weather?.description || "Local weather";
   button.setAttribute("aria-label", `Open weather${weather?.description ? `, ${weather.description}` : ""}`);
 }
@@ -6035,7 +6285,7 @@ function renderActivityStats() {
     if (!element) return;
     element.innerHTML = `
       ${stat.html || `
-        <span>${stat.label}</span>
+        <span>${renderCurrentOrPlain(stat.label, stat.current)}</span>
         <strong>${stat.value}</strong>
         <small>${stat.helper}</small>
       `}
@@ -6121,11 +6371,13 @@ function getActivityStats() {
     sleep: {
       label: `${sleepLabel} ${formatDuration(elapsedTodaySince(sleep.log))}${formatSince(sleep.log)}`,
       value: formatTotalDuration(totalToday("sleep", "asleep", "awake")),
-      helper: "Total sleep today"
+      helper: "Total sleep today",
+      current: true
     },
     boobie: {
       label: "Breast feeds",
       value: todaySummary.breastFeeds,
+      current: true,
       helper: `<small>${lastLogSummary("feeding")}</small>
               <br>
               <small>Next time ${String(state.recent.nextBreastSide || "left").replace(/^./, (letter) => letter.toUpperCase())}</small>
@@ -6136,11 +6388,13 @@ function getActivityStats() {
     bottle: {
       label: "Bottle total",
       value: formatMilkVolume(todaySummary.bottleOunces),
-      helper: lastLogSummary("bottle")
+      helper: lastLogSummary("bottle"),
+      current: true
     },
     routine: {
       html: `
         <div class="hygiene-list stats-list">
+          <span>${renderCurrentHighlight("Today routine totals")}</span>
           <span><img src="/assets/activity/icon-routine-morning.png" alt="">${todaySummary.morningRoutines} morning</span>
           <span><img src="/assets/activity/icon-routine-naptime.png" alt="">${todaySummary.naptimeRoutines} nap</span>
           <span><img src="/assets/activity/icon-routine-bedtime.png" alt="">${todaySummary.bedtimeRoutines} bedtime</span>
@@ -6151,6 +6405,7 @@ function getActivityStats() {
     diaper: {
       html: `
         <div class="hygiene-list">
+          <span>${renderCurrentHighlight("Today diaper totals")}</span>
           <span><img src="/assets/activity/icon-pee.png" alt="">${todaySummary.wetDiapers} wee</span>
           <span><img src="/assets/activity/icon-poop.png" alt="">${todaySummary.poops} poo</span>
           <span>${lastLogSummary("diaper")}</span>
@@ -6163,22 +6418,26 @@ function getActivityStats() {
     bath: {
       label: bathLabel,
       value: formatTotalDuration(totalToday("bath", "start", "end")),
-      helper: `Sound ${state.bathSoundEnabled ? "on" : "off"} - every ${formatReminderPeriod(state.bathReminderSeconds)}`
+      helper: `Sound ${state.bathSoundEnabled ? "on" : "off"} - every ${formatReminderPeriod(state.bathReminderSeconds)}`,
+      current: true
     },
     tummy: {
       label: tummyLabel,
       value: formatTotalDuration(totalToday("tummy_time", "start", "end")),
-      helper: `Sound ${state.tummySoundEnabled ? "on" : "off"} - every ${formatReminderPeriod(state.tummyReminderSeconds)}`
+      helper: `Sound ${state.tummySoundEnabled ? "on" : "off"} - every ${formatReminderPeriod(state.tummyReminderSeconds)}`,
+      current: true
     },
     outdoor: {
       label: outdoorLabel,
       value: formatTotalDuration(totalToday("outdoor_time", "start", "end")),
-      helper: `${todaySummary.outdoorTimeEvents} start/end taps today`
+      helper: `${todaySummary.outdoorTimeEvents} start/end taps today`,
+      current: true
     },
     gym: {
       label: "Baby gym",
       value: todaySummary.babyGymEvents,
-      helper: lastLogSummary("baby_gym")
+      helper: lastLogSummary("baby_gym"),
+      current: true
     }
   };
 }

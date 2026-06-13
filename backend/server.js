@@ -84,6 +84,7 @@ const MIME_TYPES = {
   ".js": "application/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".png": "image/png",
+  ".webp": "image/webp",
   ".pdf": "application/pdf",
   ".csv": "text/csv; charset=utf-8",
   ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -293,9 +294,9 @@ function postJson(targetUrl, payload, timeoutMs = 7000, extraHeaders = {}) {
   });
 }
 
-function sendFile(res, filePath, download = false) {
+function sendFile(res, filePath, download = false, extraHeaders = {}) {
   const ext = path.extname(filePath);
-  const headers = { "Content-Type": MIME_TYPES[ext] || "application/octet-stream" };
+  const headers = { "Content-Type": MIME_TYPES[ext] || "application/octet-stream", ...extraHeaders };
   if (download) headers["Content-Disposition"] = `attachment; filename="${path.basename(filePath)}"`;
   if ([".html", ".css", ".js"].includes(ext)) {
     headers["Cache-Control"] = "no-store, max-age=0";
@@ -2854,6 +2855,16 @@ function serveStatic(req, res) {
   if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
     sendJson(res, 404, { error: "Not found" });
     return;
+  }
+
+  const ext = path.extname(filePath).toLowerCase();
+  const acceptsWebp = (req.headers.accept || "").includes("image/webp");
+  if (acceptsWebp && [".png", ".jpg", ".jpeg"].includes(ext)) {
+    const webpPath = filePath.replace(/\.(png|jpe?g)$/i, ".webp");
+    if (fs.existsSync(webpPath)) {
+      sendFile(res, webpPath, false, { Vary: "Accept" });
+      return;
+    }
   }
 
   sendFile(res, filePath);
