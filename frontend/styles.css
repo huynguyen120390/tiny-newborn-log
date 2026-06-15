@@ -2067,6 +2067,91 @@ main {
     linear-gradient(180deg, rgba(255, 253, 248, 0.96), rgba(255, 246, 246, 0.94));
 }
 
+.health-product-list {
+  display: grid;
+  gap: 14px;
+  padding: 12px;
+}
+
+.health-product-group {
+  display: grid;
+  gap: 8px;
+}
+
+.health-product-group h4 {
+  margin: 0;
+  color: #183f3a;
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.health-product-items {
+  display: grid;
+  gap: 8px;
+}
+
+.health-product-card {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  border: 1px solid rgba(223, 211, 192, 0.78);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(255, 253, 248, 0.96);
+}
+
+.health-product-card img {
+  display: block;
+  width: 92px;
+  height: 92px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.health-product-copy {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.health-product-copy strong {
+  color: #344140;
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.health-product-copy dl {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.health-product-copy dl div {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 7px;
+}
+
+.health-product-copy dt {
+  color: #2f6f4c;
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1.25;
+}
+
+.health-product-copy dd {
+  margin: 0;
+  color: #526160;
+  font-size: 11px;
+  font-weight: 760;
+  line-height: 1.28;
+}
+
 .child-proof-overview-card {
   background:
     linear-gradient(180deg, rgba(255, 253, 248, 0.96), rgba(241, 250, 247, 0.94));

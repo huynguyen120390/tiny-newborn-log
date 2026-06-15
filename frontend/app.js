@@ -2330,6 +2330,18 @@ function healthInfoRows() {
 
   return [
     {
+      icon: "medicine",
+      title: "Must Have For Health",
+      text: "Everyday essentials and optional helpers with product photos",
+      details: [
+        "Product images and care notes were extracted from the provided health essentials guide.",
+        "Use medicine, supplements, and optional drops only as directed by the pediatrician or product label."
+      ],
+      tabs: [
+        { key: "health-products", label: "Products" }
+      ]
+    },
+    {
       icon: "thermometer",
       title: "Temperature",
       text: "Rectal 100.4F or higher needs pediatric guidance",
@@ -2682,7 +2694,9 @@ function renderHealthInfoTabImage(tabKey) {
   if (!tab) return "";
   return `
     <div class="eat-info-image-frame health-info-image-frame">
-      ${tab.key === "baby-cries" ? renderBabyCriesCardClean({ embedded: true }) : `<img src="${escapeAttr(tab.image)}" alt="${escapeAttr(tab.alt)}">`}
+      ${tab.key === "baby-cries" ? renderBabyCriesCardClean({ embedded: true }) : ""}
+      ${tab.key === "health-products" ? renderHealthProductList() : ""}
+      ${tab.image ? `<img src="${escapeAttr(tab.image)}" alt="${escapeAttr(tab.alt)}">` : ""}
     </div>
   `;
 }
@@ -4008,9 +4022,169 @@ function sleepReferenceTabs() {
   ];
 }
 
+function healthMustHaveProducts() {
+  const base = "/assets/care/health-products";
+  return [
+    {
+      group: "Must Have",
+      name: "Digital thermometer",
+      image: `${base}/digital-thermometer.png`,
+      why: "To check your baby's temperature. Fever in newborns can be a sign of infection.",
+      when: "If your baby feels warm, is fussy, lethargic, not feeding well, or as advised by your doctor.",
+      how: "Use rectally for the most accurate reading in infants under 3 months. Clean before and after with soap and water or alcohol."
+    },
+    {
+      group: "Must Have",
+      name: "Saline drops",
+      image: `${base}/saline-drops.png`,
+      why: "Helps loosen thick mucus so it is easier to remove. Keeps baby's nose moist.",
+      when: "When your baby sounds congested, has a stuffy nose, or before using a nose aspirator.",
+      how: "Put 1-2 drops in each nostril, wait a few seconds, then gently suction or let mucus loosen and drain."
+    },
+    {
+      group: "Must Have",
+      name: "Nose aspirator",
+      image: `${base}/nose-aspirator.png`,
+      why: "Clears mucus so your baby can breathe, feed, and sleep more comfortably.",
+      when: "Whenever your baby has a stuffy or runny nose, especially before feeds and sleep.",
+      how: "Use after saline drops. Gently insert the tip just inside the nostril, create suction, and remove mucus. Clean after each use."
+    },
+    {
+      group: "Must Have",
+      name: "Cool-mist humidifier",
+      image: `${base}/cool-mist-humidifier.png`,
+      why: "Adds moisture to the air to help with congestion, coughing, and dry air.",
+      when: "During colds, in dry weather, or when your baby's room feels dry or stuffy.",
+      how: "Use cool, not warm, mist. Place on a flat surface out of baby's reach. Clean daily to prevent mold and bacteria."
+    },
+    {
+      group: "Must Have",
+      name: "Infant Tylenol",
+      image: `${base}/infant-tylenol.png`,
+      why: "Reduces fever and relieves minor pain from teething, shots, or discomfort.",
+      when: "Only if advised by your pediatrician or if your baby has a fever of 100.4F / 38C or higher.",
+      how: "Use the correct dose for your baby's weight. Use the included syringe or dose tool. Never give without guidance."
+    },
+    {
+      group: "Must Have",
+      name: "Gauze pads",
+      image: `${base}/gauze-pads.png`,
+      why: "For cleaning small wounds, applying ointments, or umbilical cord care if advised.",
+      when: "For minor cuts, scrapes, cord care, or when applying medications or petroleum jelly.",
+      how: "Use clean hands. Gently hold the pad in place or clean the area. Dispose after each use."
+    },
+    {
+      group: "Must Have",
+      name: "Nail file / baby nail trimmer",
+      image: `${base}/baby-nail-trimmer.png`,
+      why: "Keeps baby's nails short and smooth to prevent scratches on their face and skin.",
+      when: "1-2 times per week, or when nails look sharp or long.",
+      how: "Gently file or trim while baby is calm or sleeping. Go slowly and avoid cutting too short."
+    },
+    {
+      group: "Must Have",
+      name: "Fragrance-free baby lotion",
+      image: `${base}/fragrance-free-lotion.png`,
+      why: "Keeps baby's skin moisturized and helps prevent dryness and irritation.",
+      when: "After baths or anytime skin feels dry.",
+      how: "Apply a small amount and gently massage into skin. Use gentle, fragrance-free products."
+    },
+    {
+      group: "Must Have",
+      name: "Petroleum jelly / diaper cream",
+      image: `${base}/petroleum-jelly.png`,
+      why: "Helps protect irritated diaper skin and creates a moisture barrier.",
+      when: "For diaper rash, irritated skin, or as advised by your doctor.",
+      how: "Apply a thin layer to clean, dry skin during diaper changes."
+    },
+    {
+      group: "Must Have",
+      name: "Medicine syringe",
+      image: `${base}/medicine-syringe.png`,
+      why: "Helps you give the right dose of liquid medications safely and accurately.",
+      when: "Whenever giving liquid medicine, such as Tylenol or vitamin D.",
+      how: "Draw up the prescribed amount. Give slowly into the cheek. Rinse and wash after use."
+    },
+    {
+      group: "As Needed",
+      name: "Gas drops",
+      image: `${base}/gas-drops.png`,
+      why: "Helps relieve gas bubbles and discomfort from gas.",
+      when: "If your baby is fussy, gassy, or has trouble passing gas.",
+      how: "Use as directed on the label for your baby's age and weight."
+    },
+    {
+      group: "As Needed",
+      name: "Probiotic drops",
+      image: `${base}/probiotic-drops.png`,
+      why: "Supports healthy gut bacteria and digestion. May help with colic or irregular stools.",
+      when: "If recommended by your pediatrician.",
+      how: "Add the drops to breast milk, formula, or breast, or give directly by mouth."
+    },
+    {
+      group: "As Needed",
+      name: "Gripe water",
+      image: `${base}/gripe-water.png`,
+      why: "Traditionally used to soothe gas, colic, and fussiness.",
+      when: "If your baby is fussy from gas or colic. Ask your pediatrician if unsure.",
+      how: "Shake well. Give the amount for your baby's age as directed on the label."
+    },
+    {
+      group: "As Needed",
+      name: "Teether",
+      image: `${base}/teether.png`,
+      why: "Soothes sore gums during teething.",
+      when: "When teething symptoms start, usually around 4-6 months.",
+      how: "Wash before use. Chill in the fridge, not the freezer. Inspect regularly and replace if damaged."
+    }
+  ];
+}
+
+function renderHealthProductList() {
+  const products = healthMustHaveProducts();
+  return `
+    <section class="health-product-list" aria-label="Must Have For Health products">
+      ${["Must Have", "As Needed"].map((group) => `
+        <div class="health-product-group">
+          <h4>${escapeHtml(group)}${group === "Must Have" ? " For Health" : " Optional"}</h4>
+          <div class="health-product-items">
+            ${products.filter((product) => product.group === group).map(renderHealthProductCard).join("")}
+          </div>
+        </div>
+      `).join("")}
+    </section>
+  `;
+}
+
+function renderHealthProductCard(product) {
+  return `
+    <article class="health-product-card">
+      <img src="${escapeAttr(product.image)}" alt="${escapeAttr(product.name)}">
+      <div class="health-product-copy">
+        <strong>${escapeHtml(product.name)}</strong>
+        <dl>
+          <div>
+            <dt>Why</dt>
+            <dd>${escapeHtml(product.why)}</dd>
+          </div>
+          <div>
+            <dt>When</dt>
+            <dd>${escapeHtml(product.when)}</dd>
+          </div>
+          <div>
+            <dt>How</dt>
+            <dd>${escapeHtml(product.how)}</dd>
+          </div>
+        </dl>
+      </div>
+    </article>
+  `;
+}
+
 function healthReferenceTabs() {
   return [
     { key: "health-overview", label: "Overview", image: "/assets/care/health.png", alt: "Baby health guidance" },
+    { key: "health-products", label: "Products" },
     { key: "baby-cries", label: "Cries Check" },
     { key: "wet-diapers-poop-guide", label: "Diaper / Poop", image: "/assets/care/wet-diapers-poop-guide.png", alt: "Wet diapers and poop guide" }
   ];
