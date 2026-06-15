@@ -28,6 +28,7 @@ const state = {
   selectedCareIssue: "troubleshoot",
   selectedCareSubtab: {},
   selectedDentalTooth: "lower-central-incisors",
+  selectedHealthSyndrome: "",
   childProofProgress: {},
   diaperBagProgress: {},
   careInfo: {},
@@ -1109,6 +1110,24 @@ function renderCare() {
       state.selectedCareSubtab.health = "health:dental-guide";
       renderCare();
     });
+  });
+  panel.querySelectorAll("[data-health-syndrome]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedHealthSyndrome = button.dataset.healthSyndrome;
+      renderCare();
+    });
+  });
+  panel.querySelectorAll("[data-health-syndrome-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedHealthSyndrome = "";
+      renderCare();
+    });
+  });
+  panel.querySelector("[data-health-syndrome-popup]")?.addEventListener("click", (event) => {
+    if (event.target?.dataset?.healthSyndromePopup === "true") {
+      state.selectedHealthSyndrome = "";
+      renderCare();
+    }
   });
   panel.querySelectorAll("[data-child-proof-check]").forEach((input) => {
     input.addEventListener("change", () => updateChildProofProgress(input.dataset.childProofCheck, input.checked));
@@ -2367,15 +2386,8 @@ function healthInfoRows() {
     {
       icon: "health",
       title: "Common Syndromes",
-      text: "Quick checks for everyday symptom patterns",
-      details: [
-        "Congestion or runny nose: use saline, gentle suction, humidity, and watch feeding and breathing.",
-        "Gas or colic: try burping, bicycle legs, tummy time while awake, and paced feeding; call if belly is hard or baby cannot be consoled.",
-        "Rash or diaper irritation: keep skin clean and dry, use barrier cream, and call for blisters, spreading redness, fever, or pus.",
-        "Spit-up or vomiting: small spit-ups can be common; call for green vomit, blood, repeated forceful vomiting, poor feeding, or fewer wet diapers.",
-        "Constipation or stool changes: watch comfort, feeding, and wet diapers; call for blood, white/gray/black stool, or hard belly.",
-        "Teething discomfort: offer a chilled teether and gum massage; avoid numbing gels unless the pediatrician says to use them."
-      ]
+      text: "Tap a syndrome image for parent-friendly details",
+      syndromes: true
     },
     {
       icon: "thermometer",
@@ -2588,6 +2600,7 @@ function renderHealthCareInfoPanel(issue) {
     <section class="care-detail-info eat-care-info health-care-info" aria-label="${escapeAttr(issue.title)} information">
       ${topRows.map(renderHealthInfoRow).join("")}
       ${renderHealthBasicsGroup(basics)}
+      ${renderHealthSyndromePopup()}
     </section>
   `;
 }
@@ -2692,6 +2705,7 @@ function renderHealthInfoRow(item) {
           ${item.details.map((detail) => `<li>${escapeHtml(detail)}</li>`).join("")}
         </ul>
       ` : ""}
+      ${item.syndromes ? renderHealthSyndromeCards() : ""}
       ${item.tabs?.length ? `
         <div class="eat-info-tabs" role="tablist" aria-label="${escapeAttr(item.title)} references">
           ${item.tabs.map((tab) => `
@@ -4419,6 +4433,247 @@ function renderDentalDoctorGuide() {
         </ul>
       </article>
     </section>
+  `;
+}
+
+function healthSyndromeCards() {
+  const base = "/assets/care/health-syndromes";
+  return [
+    {
+      key: "jaundice",
+      number: 1,
+      name: "Jaundice",
+      tone: "monitor",
+      image: `${base}/jaundice.png`,
+      why: "Bilirubin buildup",
+      when: "Often days 2-5",
+      care: "Frequent feeds and follow-up",
+      details: [
+        "Yellow skin or eyes can happen when bilirubin builds up after birth.",
+        "Feed often and keep pediatric follow-up appointments for bilirubin checks.",
+        "Call the doctor urgently if baby is very sleepy, feeding poorly, looks more yellow, or has fewer wet diapers."
+      ]
+    },
+    {
+      key: "cradle-cap",
+      number: 2,
+      name: "Cradle Cap",
+      tone: "harmless",
+      image: `${base}/cradle-cap.png`,
+      why: "Scaly scalp patches",
+      when: "First weeks to months",
+      care: "Gentle shampoo and soft brush",
+      details: [
+        "Cradle cap is common and usually harmless.",
+        "Wash gently with mild shampoo and loosen scales with a soft brush.",
+        "Ask the doctor if it spreads, cracks, bleeds, smells bad, or looks infected."
+      ]
+    },
+    {
+      key: "baby-acne",
+      number: 3,
+      name: "Baby Acne",
+      tone: "harmless",
+      image: `${base}/baby-acne.png`,
+      why: "Maternal hormones",
+      when: "Often 2-6 weeks",
+      care: "Gentle cleansing; leave it alone",
+      details: [
+        "Baby acne is common and often clears without treatment.",
+        "Wash with water or gentle cleanser. Do not scrub or use acne medicines.",
+        "Call if rash has blisters, crusting, fever, or baby seems unwell."
+      ]
+    },
+    {
+      key: "milia",
+      number: 4,
+      name: "Milia",
+      tone: "harmless",
+      image: `${base}/milia.png`,
+      why: "Tiny trapped skin flakes",
+      when: "Common on nose and cheeks",
+      care: "No squeezing; gentle washing",
+      details: [
+        "Milia are tiny white bumps, often on the nose, cheeks, or chin.",
+        "They usually go away on their own. Do not squeeze or pick them.",
+        "Ask the pediatrician if bumps become red, swollen, draining, or widespread."
+      ]
+    },
+    {
+      key: "diaper-rash",
+      number: 5,
+      name: "Diaper Rash",
+      tone: "monitor",
+      image: `${base}/diaper-rash.png`,
+      why: "Moisture and irritation",
+      when: "Diaper area looks red",
+      care: "Frequent changes and barrier cream",
+      details: [
+        "Keep the diaper area clean and dry, change often, and use a thick barrier cream.",
+        "Give diaper-free air time when practical.",
+        "Call for blisters, open sores, pus, fever, spreading redness, or no improvement after a few days."
+      ]
+    },
+    {
+      key: "umbilical-cord-care",
+      number: 6,
+      name: "Umbilical Cord Care",
+      tone: "monitor",
+      image: `${base}/umbilical-cord-care.png`,
+      why: "Stump is healing",
+      when: "Until cord falls off",
+      care: "Keep dry and fold diaper below",
+      details: [
+        "Keep the cord stump dry and fold the diaper below it.",
+        "Use sponge baths until it falls off unless your doctor says otherwise.",
+        "Call for spreading redness, swelling, bad smell, yellow drainage, fever, or active bleeding."
+      ]
+    },
+    {
+      key: "blocked-tear-duct",
+      number: 7,
+      name: "Blocked Tear Duct",
+      tone: "harmless",
+      image: `${base}/blocked-tear-duct.png`,
+      why: "Tear duct not fully open",
+      when: "Watery or crusty eye",
+      care: "Warm compress and gentle massage",
+      details: [
+        "A blocked tear duct can cause watery eyes or mild crusting.",
+        "Use a warm compress and ask your pediatrician to show tear duct massage.",
+        "Call for red swollen eyelids, fever, green discharge, or baby seeming unwell."
+      ]
+    },
+    {
+      key: "teething",
+      number: 8,
+      name: "Teething",
+      tone: "monitor",
+      image: `${base}/teething.png`,
+      why: "Teeth moving through gums",
+      when: "Often around 4-6 months+",
+      care: "Chilled teether and gum massage",
+      details: [
+        "Teething can cause drooling, chewing, and sore gums.",
+        "Use a clean chilled teether from the fridge, not freezer, and gentle gum massage.",
+        "Avoid numbing gels unless the pediatrician says to use them. Fever over 100.4F is not just teething."
+      ]
+    },
+    {
+      key: "gas-colic",
+      number: 9,
+      name: "Gas & Colic",
+      tone: "monitor",
+      image: `${base}/gas-colic.png`,
+      why: "Swallowed air or immature digestion",
+      when: "Fussy crying and gas",
+      care: "Burp, bicycle legs, tummy massage",
+      details: [
+        "Try burping, bicycle legs, gentle tummy massage, paced feeding, and supervised tummy time while awake.",
+        "Colic can peak around 6-8 weeks and often improves by 3-4 months.",
+        "Call for hard swollen belly, green vomit, blood in stool, fever, poor feeding, or crying that feels different."
+      ]
+    },
+    {
+      key: "spit-up-reflux",
+      number: 10,
+      name: "Spit-Up / Reflux",
+      tone: "monitor",
+      image: `${base}/spit-up-reflux.png`,
+      why: "Immature stomach valve",
+      when: "Spit-up after feeds",
+      care: "Smaller feeds and upright hold",
+      details: [
+        "Small spit-ups can be common if baby is feeding well and gaining weight.",
+        "Try burping, paced feeds, and holding baby upright after feeds.",
+        "Call for green vomit, blood, repeated forceful vomiting, choking, poor feeding, weight concerns, or fewer wet diapers."
+      ]
+    },
+    {
+      key: "fever",
+      number: 11,
+      name: "Fever",
+      tone: "call",
+      image: `${base}/fever.png`,
+      why: "Infection or vaccine response",
+      when: "Any age, urgent under 3 months",
+      care: "Check rectal temperature",
+      details: [
+        "For babies under 3 months, rectal temperature of 100.4F / 38C or higher means call the doctor right away.",
+        "Do not give fever medicine unless the pediatrician gives dosing guidance.",
+        "Call immediately for poor feeding, trouble breathing, blue lips, unusual sleepiness, seizure, or signs of dehydration."
+      ]
+    },
+    {
+      key: "thrush",
+      number: 12,
+      name: "Thrush",
+      tone: "monitor",
+      image: `${base}/thrush.png`,
+      why: "Yeast in mouth",
+      when: "White patches that do not wipe off",
+      care: "Call pediatrician for treatment",
+      details: [
+        "Thrush can look like white patches on tongue, cheeks, or lips that do not wipe away easily.",
+        "Baby may be fussy with feeding, and breastfeeding parents may have nipple pain.",
+        "Call the pediatrician; treatment may be needed for baby and sometimes breastfeeding parent."
+      ]
+    }
+  ];
+}
+
+function renderHealthSyndromeCards() {
+  return `
+    <section class="health-syndrome-grid" aria-label="Common baby syndromes">
+      ${healthSyndromeCards().map(renderHealthSyndromeCard).join("")}
+    </section>
+  `;
+}
+
+function renderHealthSyndromeCard(item) {
+  return `
+    <article class="health-syndrome-card syndrome-${escapeAttr(item.tone)}">
+      <button type="button" class="health-syndrome-image-button" data-health-syndrome="${escapeAttr(item.key)}" aria-label="Open ${escapeAttr(item.name)} details">
+        <img src="${escapeAttr(item.image)}" alt="${escapeAttr(item.name)}">
+      </button>
+      <div class="health-syndrome-copy">
+        <h4><span>${item.number}.</span> ${escapeHtml(item.name)}</h4>
+        <dl>
+          <div>
+            <dt>Why</dt>
+            <dd>${escapeHtml(item.why)}</dd>
+          </div>
+          <div>
+            <dt>When</dt>
+            <dd>${escapeHtml(item.when)}</dd>
+          </div>
+          <div>
+            <dt>Care</dt>
+            <dd>${escapeHtml(item.care)}</dd>
+          </div>
+        </dl>
+      </div>
+    </article>
+  `;
+}
+
+function renderHealthSyndromePopup() {
+  const item = healthSyndromeCards().find((syndrome) => syndrome.key === state.selectedHealthSyndrome);
+  if (!item) return "";
+  return `
+    <div class="health-syndrome-popup" data-health-syndrome-popup="true" role="presentation">
+      <article class="health-syndrome-popup-card syndrome-${escapeAttr(item.tone)}" role="dialog" aria-modal="true" aria-label="${escapeAttr(item.name)} details">
+        <button type="button" class="health-syndrome-popup-close" data-health-syndrome-close aria-label="Close syndrome details">x</button>
+        <img src="${escapeAttr(item.image)}" alt="${escapeAttr(item.name)}">
+        <div>
+          <h3>${escapeHtml(item.name)}</h3>
+          <p>${escapeHtml(item.care)}</p>
+          <ul>
+            ${item.details.map((detail) => `<li>${escapeHtml(detail)}</li>`).join("")}
+          </ul>
+        </div>
+      </article>
+    </div>
   `;
 }
 
