@@ -740,12 +740,13 @@ async function loadCareInfo() {
 }
 
 function activateTab(tab) {
-  const homeViews = ["log", "care", "schedule", "milestones", "dashboard"];
+  const homeViews = ["log", "troubleshoot", "care", "schedule", "milestones", "dashboard"];
   const settingsViews = ["settings", "history", "exports"];
 
   if (homeViews.includes(tab)) {
     state.activeTab = "home";
     state.activeHomeTab = tab;
+    if (tab === "troubleshoot") state.selectedCareIssue = "troubleshoot";
   } else if (settingsViews.includes(tab)) {
     state.activeTab = "settings";
     state.activeSettingsView = tab;
@@ -766,12 +767,14 @@ function activateTab(tab) {
   });
 
   document.querySelectorAll(".panel").forEach((panel) => {
-    const isHomePanel = state.activeTab === "home" && homeViews.includes(panel.id) && panel.id === state.activeHomeTab;
+    const activeHomePanelId = state.activeHomeTab === "troubleshoot" ? "care" : state.activeHomeTab;
+    const isHomePanel = state.activeTab === "home" && homeViews.includes(panel.id) && panel.id === activeHomePanelId;
     const isSettingsPanel = state.activeTab === "settings" && settingsViews.includes(panel.id) && panel.id === state.activeSettingsView;
     const isTopPanel = !homeViews.includes(panel.id) && !settingsViews.includes(panel.id) && panel.id === state.activeTab;
     panel.classList.toggle("active", isHomePanel || isSettingsPanel || isTopPanel);
   });
 
+  if (state.activeTab === "home" && state.activeHomeTab === "troubleshoot") renderCare();
   if (state.activeTab === "home" && state.activeHomeTab === "dashboard") renderDashboard();
   if (state.activeTab === "settings" && state.activeSettingsView === "settings") activateSettingsGroup(state.activeSettingsGroup);
 }
@@ -795,7 +798,7 @@ function renderAll() {
   const age = formatBabyAge(birthday);
   const babySummary = document.getElementById("baby-summary");
   if (babySummary) {
-    babySummary.innerHTML = age ? `${renderCurrentHighlight(`Baby age: ${age}`, "age")}.` : "";
+    babySummary.textContent = age ? `${age}.` : "";
   }
   updateTopbarBabyAge();
   renderTodaySummary();
@@ -1092,7 +1095,11 @@ function renderCare() {
   panel.querySelectorAll("[data-care-issue]").forEach((button) => {
     button.addEventListener("click", () => {
       state.selectedCareIssue = button.dataset.careIssue;
+      if (state.activeTab === "home") state.activeHomeTab = state.selectedCareIssue === "troubleshoot" ? "troubleshoot" : "care";
       renderCare();
+      document.querySelectorAll("[data-home-tab]").forEach((homeButton) => {
+        homeButton.classList.toggle("active", homeButton.dataset.homeTab === state.activeHomeTab);
+      });
     });
   });
 
@@ -2321,6 +2328,92 @@ function sleepInfoRows() {
   ];
 }
 
+function healthInfoRows() {
+  const wetDiapers = summarizeLogsToday().wetDiapers;
+  const latestWeight = lastGrowthLog("weight");
+  const latestHeight = lastGrowthLog("height");
+  const latestWeightText = latestWeight ? formatMeasurement(readWeightGrams(latestWeight) / weightUnits.lb.grams, "lb") : "No weight logged";
+  const latestHeightText = latestHeight ? formatMeasurement(readHeightMm(latestHeight) / heightUnits.in.mm, "in") : "No length logged";
+
+  return [
+    {
+      icon: "thermometer",
+      title: "Temperature",
+      text: "Rectal 100.4F or higher needs pediatric guidance",
+      details: [
+        "For babies under 3 months, a rectal temperature of 100.4F or higher is urgent.",
+        "Call the pediatrician for fever, low temperature, unusual sleepiness, poor feeding, or breathing concerns.",
+        "Use a rectal thermometer when accuracy matters for a newborn."
+      ],
+      tabs: [
+        { key: "health-overview", label: "Health" }
+      ]
+    },
+    {
+      icon: "warning",
+      title: "Call Now Signs",
+      text: "Breathing trouble, blue lips, dehydration, or hard-to-wake",
+      details: [
+        "Seek urgent help for trouble breathing, blue lips or face, seizure, limpness, or hard-to-wake behavior.",
+        "Call for no wet diapers, very poor feeding, repeated vomiting, blood in stool, or signs of dehydration.",
+        "Trust parent instinct when baby looks very different from normal."
+      ],
+      tabs: [
+        { key: "baby-cries", label: "Cries Check" }
+      ]
+    },
+    {
+      icon: "diaper",
+      title: "Hydration",
+      text: `${wetDiapers} wet logged today; watch diapers and feeding`,
+      current: true,
+      details: [
+        "Wet diapers are one of the clearest daily signs baby is getting enough fluid.",
+        "Dry mouth, no tears, sunken soft spot, or no urine for 8+ hours can be dehydration signs.",
+        "Pair diaper counts with feeding quality and baby's alertness."
+      ],
+      tabs: [
+        { key: "wet-diapers-poop-guide", label: "Diaper / Poop" }
+      ]
+    },
+    {
+      icon: "heart",
+      title: "Comfort Check",
+      text: "Try feed, diaper, burp, temperature, sleep, then sick check",
+      details: [
+        "Start with the common causes: hungry, wet diaper, gas, too hot or cold, overstimulated, or overtired.",
+        "If comfort steps do not help and baby seems unwell, call the pediatrician.",
+        "Crying peaks around 6-8 weeks for many babies and often improves after that."
+      ],
+      tabs: [
+        { key: "baby-cries", label: "Cries Check" }
+      ]
+    },
+    {
+      icon: "growth",
+      title: "Growth",
+      text: `Latest: ${latestWeightText}; ${latestHeightText}`,
+      current: Boolean(latestWeight || latestHeight),
+      currentTone: "age",
+      details: [
+        "Use logged weight and length trends instead of one-off measurements.",
+        "Bring feeding, diaper, sleep, and growth notes to checkups.",
+        "Ask the pediatrician before changing feeding plans for weight concerns."
+      ]
+    },
+    {
+      icon: "doctor",
+      title: "Checkups",
+      text: "Track questions before appointments",
+      details: [
+        "Write down questions as they come up so they are ready for the visit.",
+        "Mention fever, feeding changes, diaper changes, rash, breathing, sleepiness, or unusual crying.",
+        "Keep emergency contacts and pediatrician instructions easy to find."
+      ]
+    }
+  ];
+}
+
 function relevantFeedingRow(data) {
   const ageMonths = babyAgeMonths();
   if (!Number.isFinite(ageMonths)) return null;
@@ -2423,6 +2516,7 @@ function renderCareBackButton(showBack = true) {
 function renderCareIssueInfoPanel(issue) {
   if (issue.key === "eat") return renderEatCareInfoPanel(issue);
   if (issue.key === "sleep") return renderSleepCareInfoPanel(issue);
+  if (issue.key === "health") return renderHealthCareInfoPanel(issue);
   const info = renderCareIssueCardInfo(issue);
   return `
     <section class="care-detail-info" aria-label="${escapeAttr(issue.title)} information">
@@ -2443,6 +2537,14 @@ function renderSleepCareInfoPanel(issue) {
   return `
     <section class="care-detail-info eat-care-info sleep-care-info" aria-label="${escapeAttr(issue.title)} information">
       ${sleepInfoRows().map(renderSleepInfoRow).join("")}
+    </section>
+  `;
+}
+
+function renderHealthCareInfoPanel(issue) {
+  return `
+    <section class="care-detail-info eat-care-info health-care-info" aria-label="${escapeAttr(issue.title)} information">
+      ${healthInfoRows().map(renderHealthInfoRow).join("")}
     </section>
   `;
 }
@@ -2523,6 +2625,44 @@ function renderSleepInfoRow(item) {
   `;
 }
 
+function renderHealthInfoRow(item) {
+  const activeKey = state.selectedCareSubtab.health || "overview";
+  const activeSubviewKey = activeKey.startsWith("health:") ? activeKey.slice("health:".length) : activeKey;
+  const activeItemTab = (item.tabs || []).find((tab) => tab.key === activeSubviewKey) || null;
+  const defaultItemTab = (item.tabs || [])[0] || null;
+  const selectedItemTab = activeItemTab || defaultItemTab;
+  const isOpen = Boolean(activeItemTab);
+  const rowFace = `
+    <span class="eat-info-icon icon-${escapeAttr(item.icon)}" aria-hidden="true">${eatInfoIcon(item.icon)}</span>
+    <span class="eat-info-copy">
+      <strong>${escapeHtml(item.title)}</strong>
+      <small>${renderCurrentOrPlain(item.text, item.current, item.currentTone)}</small>
+    </span>
+    <span class="eat-info-chevron" aria-hidden="true">&#8250;</span>
+  `;
+
+  return `
+    <details class="eat-info-row health-info-row" ${isOpen ? "open" : ""}>
+      <summary>${rowFace}</summary>
+      ${Array.isArray(item.details) && item.details.length ? `
+        <ul class="eat-info-details">
+          ${item.details.map((detail) => `<li>${escapeHtml(detail)}</li>`).join("")}
+        </ul>
+      ` : ""}
+      ${item.tabs?.length ? `
+        <div class="eat-info-tabs" role="tablist" aria-label="${escapeAttr(item.title)} references">
+          ${item.tabs.map((tab) => `
+            <button class="${selectedItemTab?.key === tab.key ? "active" : ""}" type="button" role="tab" aria-selected="${selectedItemTab?.key === tab.key ? "true" : "false"}" data-care-subtab="health:${escapeAttr(tab.key)}">
+              ${escapeHtml(tab.label)}
+            </button>
+          `).join("")}
+        </div>
+        ${selectedItemTab ? renderHealthInfoTabImage(selectedItemTab.key) : ""}
+      ` : ""}
+    </details>
+  `;
+}
+
 function renderEatInfoTabImage(tabKey) {
   const tab = eatReferenceTabs().find((item) => item.key === tabKey);
   if (!tab) return "";
@@ -2540,6 +2680,16 @@ function renderSleepInfoTabImage(tabKey) {
   return `
     <div class="eat-info-image-frame sleep-info-image-frame">
       <img src="${escapeAttr(tab.image)}" alt="${escapeAttr(tab.alt)}">
+    </div>
+  `;
+}
+
+function renderHealthInfoTabImage(tabKey) {
+  const tab = healthReferenceTabs().find((item) => item.key === tabKey);
+  if (!tab) return "";
+  return `
+    <div class="eat-info-image-frame health-info-image-frame">
+      ${tab.key === "baby-cries" ? renderBabyCriesCardClean({ embedded: true }) : `<img src="${escapeAttr(tab.image)}" alt="${escapeAttr(tab.alt)}">`}
     </div>
   `;
 }
@@ -2562,6 +2712,10 @@ function eatInfoIcon(icon) {
     eyes: "&#128064;",
     diaper: "&#129514;",
     water: "&#128167;",
+    thermometer: "&#127777;",
+    doctor: "&#9877;",
+    medicine: "&#128138;",
+    growth: "&#128200;",
     warning: "!"
   };
   return icons[icon] || "&#8226;";
@@ -2574,6 +2728,7 @@ function renderCareIssueView(issue, options = {}) {
   if (issue.key === "routines") return renderRoutinesCareView(issue, options);
   if (issue.key === "hygiene") return renderHygieneCareView(issue, options);
   if (issue.key === "safety") return renderChildProofCareView(issue, options);
+  if (issue.key === "health") return renderHealthCareView(issue, options);
   const showBack = options.showBack !== false;
 
   return `
@@ -3737,7 +3892,7 @@ function renderBabyCriesAssistantPanel() {
 }
 
 function isBabyCriesAssistantVisible() {
-  return state.activeTab === "home" && state.activeHomeTab === "care" && state.selectedCareIssue === "troubleshoot";
+  return state.activeTab === "home" && ["care", "troubleshoot"].includes(state.activeHomeTab) && state.selectedCareIssue === "troubleshoot";
 }
 
 function babyCriesAssistantSignature() {
@@ -3860,6 +4015,14 @@ function sleepReferenceTabs() {
   ];
 }
 
+function healthReferenceTabs() {
+  return [
+    { key: "health-overview", label: "Overview", image: "/assets/care/health.png", alt: "Baby health guidance" },
+    { key: "baby-cries", label: "Cries Check" },
+    { key: "wet-diapers-poop-guide", label: "Diaper / Poop", image: "/assets/care/wet-diapers-poop-guide.png", alt: "Wet diapers and poop guide" }
+  ];
+}
+
 function renderEatCareView(issue, options = {}) {
   const showBack = options.showBack !== false;
 
@@ -3884,6 +4047,23 @@ function renderSleepCareView(issue, options = {}) {
     <section class="care-detail">
       ${renderCareBackButton(showBack)}
       <article class="eat-overview-card sleep-overview-card">
+        <div class="care-detail-hero" style="--card-image: url('${careHeaderImage(issue.header)}')">
+          <h3>${escapeHtml(issue.title)}</h3>
+          <p>${escapeHtml(issue.helper)}</p>
+        </div>
+        ${renderCareIssueInfoPanel(issue)}
+      </article>
+    </section>
+  `;
+}
+
+function renderHealthCareView(issue, options = {}) {
+  const showBack = options.showBack !== false;
+
+  return `
+    <section class="care-detail">
+      ${renderCareBackButton(showBack)}
+      <article class="eat-overview-card health-overview-card">
         <div class="care-detail-hero" style="--card-image: url('${careHeaderImage(issue.header)}')">
           <h3>${escapeHtml(issue.title)}</h3>
           <p>${escapeHtml(issue.helper)}</p>
@@ -5972,7 +6152,7 @@ function renderPoopColorCard(color) {
     <button class="poop-color-card status-${escapeAttr(status)}" type="button" data-poop-color-id="${escapeAttr(color.id)}">
       <span class="poop-card-topline">
         <img class="poop-color-swatch" src="${escapeAttr(color.swatch)}" alt="">
-        <span class="poop-status-badge">${renderCurrentHighlight(statusLabel(status), "age")}</span>
+        <span class="poop-status-badge">${escapeHtml(statusLabel(status))}</span>
       </span>
       <strong>${escapeHtml(color.label)}</strong>
       <span>${escapeHtml(color.parentAction)}</span>
@@ -6123,7 +6303,7 @@ function updateTopbarBabyAge() {
   const ageElement = document.getElementById("topbar-baby-age");
   if (!ageElement) return;
   const age = formatBabyAge(state.profile.birthday || "");
-  ageElement.innerHTML = age ? renderCurrentHighlight(`Baby age: ${age}`, "age") : "";
+  ageElement.textContent = age ? `Baby age: ${age}` : "";
   updateTopbarBabyStats();
 }
 
@@ -6135,7 +6315,7 @@ function updateTopbarBabyStats() {
   const parts = [];
   if (weight) parts.push(formatWeightLog(weight));
   if (height) parts.push(formatHeightLog(height));
-  element.innerHTML = parts.length ? renderCurrentHighlight(parts.join(" / ")) : "Stats: --";
+  element.textContent = parts.length ? parts.join(" / ") : "Stats: --";
 }
 
 async function refreshWeather() {
@@ -6210,7 +6390,7 @@ function updateWeatherDisplay() {
 
   const weather = state.weather;
   icon.textContent = weather?.icon || "--";
-  temp.innerHTML = Number.isFinite(weather?.temperature) ? renderCurrentHighlight(`${weather.temperature}F outdoor`, "weather") : "Weather";
+  temp.textContent = Number.isFinite(weather?.temperature) ? `${weather.temperature}F outdoor` : "Weather";
   button.title = weather?.description || "Local weather";
   button.setAttribute("aria-label", `Open weather${weather?.description ? `, ${weather.description}` : ""}`);
 }
@@ -6285,7 +6465,7 @@ function renderActivityStats() {
     if (!element) return;
     element.innerHTML = `
       ${stat.html || `
-        <span>${renderCurrentOrPlain(stat.label, stat.current)}</span>
+        <span>${escapeHtml(stat.label)}</span>
         <strong>${stat.value}</strong>
         <small>${stat.helper}</small>
       `}
@@ -6394,7 +6574,7 @@ function getActivityStats() {
     routine: {
       html: `
         <div class="hygiene-list stats-list">
-          <span>${renderCurrentHighlight("Today routine totals")}</span>
+          <span>Today routine totals</span>
           <span><img src="/assets/activity/icon-routine-morning.png" alt="">${todaySummary.morningRoutines} morning</span>
           <span><img src="/assets/activity/icon-routine-naptime.png" alt="">${todaySummary.naptimeRoutines} nap</span>
           <span><img src="/assets/activity/icon-routine-bedtime.png" alt="">${todaySummary.bedtimeRoutines} bedtime</span>
@@ -6405,7 +6585,7 @@ function getActivityStats() {
     diaper: {
       html: `
         <div class="hygiene-list">
-          <span>${renderCurrentHighlight("Today diaper totals")}</span>
+          <span>Today diaper totals</span>
           <span><img src="/assets/activity/icon-pee.png" alt="">${todaySummary.wetDiapers} wee</span>
           <span><img src="/assets/activity/icon-poop.png" alt="">${todaySummary.poops} poo</span>
           <span>${lastLogSummary("diaper")}</span>

@@ -1949,6 +1949,26 @@ main {
   color: #c23a45;
 }
 
+.eat-info-icon.icon-thermometer {
+  background: #fff0e8;
+  color: #c95f35;
+}
+
+.eat-info-icon.icon-doctor {
+  background: #eaf7f3;
+  color: #24756f;
+}
+
+.eat-info-icon.icon-medicine {
+  background: #f2f5ff;
+  color: #6978a7;
+}
+
+.eat-info-icon.icon-growth {
+  background: #eef8f0;
+  color: #3f8e66;
+}
+
 .eat-info-copy {
   display: grid;
   min-width: 0;
@@ -2040,6 +2060,11 @@ main {
 .routines-overview-card {
   background:
     linear-gradient(180deg, rgba(255, 253, 248, 0.96), rgba(246, 249, 255, 0.94));
+}
+
+.health-overview-card {
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.96), rgba(255, 246, 246, 0.94));
 }
 
 .child-proof-overview-card {
