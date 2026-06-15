@@ -740,13 +740,12 @@ async function loadCareInfo() {
 }
 
 function activateTab(tab) {
-  const homeViews = ["log", "troubleshoot", "care", "schedule", "milestones", "dashboard"];
+  const homeViews = ["log", "care", "schedule", "milestones", "dashboard"];
   const settingsViews = ["settings", "history", "exports"];
 
   if (homeViews.includes(tab)) {
     state.activeTab = "home";
     state.activeHomeTab = tab;
-    if (tab === "troubleshoot") state.selectedCareIssue = "troubleshoot";
   } else if (settingsViews.includes(tab)) {
     state.activeTab = "settings";
     state.activeSettingsView = tab;
@@ -767,14 +766,12 @@ function activateTab(tab) {
   });
 
   document.querySelectorAll(".panel").forEach((panel) => {
-    const activeHomePanelId = state.activeHomeTab === "troubleshoot" ? "care" : state.activeHomeTab;
-    const isHomePanel = state.activeTab === "home" && homeViews.includes(panel.id) && panel.id === activeHomePanelId;
+    const isHomePanel = state.activeTab === "home" && homeViews.includes(panel.id) && panel.id === state.activeHomeTab;
     const isSettingsPanel = state.activeTab === "settings" && settingsViews.includes(panel.id) && panel.id === state.activeSettingsView;
     const isTopPanel = !homeViews.includes(panel.id) && !settingsViews.includes(panel.id) && panel.id === state.activeTab;
     panel.classList.toggle("active", isHomePanel || isSettingsPanel || isTopPanel);
   });
 
-  if (state.activeTab === "home" && state.activeHomeTab === "troubleshoot") renderCare();
   if (state.activeTab === "home" && state.activeHomeTab === "dashboard") renderDashboard();
   if (state.activeTab === "settings" && state.activeSettingsView === "settings") activateSettingsGroup(state.activeSettingsGroup);
 }
@@ -1095,11 +1092,7 @@ function renderCare() {
   panel.querySelectorAll("[data-care-issue]").forEach((button) => {
     button.addEventListener("click", () => {
       state.selectedCareIssue = button.dataset.careIssue;
-      if (state.activeTab === "home") state.activeHomeTab = state.selectedCareIssue === "troubleshoot" ? "troubleshoot" : "care";
       renderCare();
-      document.querySelectorAll("[data-home-tab]").forEach((homeButton) => {
-        homeButton.classList.toggle("active", homeButton.dataset.homeTab === state.activeHomeTab);
-      });
     });
   });
 
@@ -3892,7 +3885,7 @@ function renderBabyCriesAssistantPanel() {
 }
 
 function isBabyCriesAssistantVisible() {
-  return state.activeTab === "home" && ["care", "troubleshoot"].includes(state.activeHomeTab) && state.selectedCareIssue === "troubleshoot";
+  return state.activeTab === "home" && state.activeHomeTab === "care" && state.selectedCareIssue === "troubleshoot";
 }
 
 function babyCriesAssistantSignature() {
