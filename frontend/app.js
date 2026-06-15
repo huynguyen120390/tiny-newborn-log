@@ -2677,7 +2677,7 @@ function renderHealthBasicsGroup(rows) {
   const rowFace = `
     <span class="eat-info-icon icon-health" aria-hidden="true">${eatInfoIcon("health")}</span>
     <span class="eat-info-copy">
-      <strong>Basics</strong>
+      <strong>General</strong>
       <small>Temperature, urgent signs, hydration, comfort, growth, and checkups</small>
     </span>
     <span class="eat-info-chevron" aria-hidden="true">&#8250;</span>
