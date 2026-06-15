@@ -2349,9 +2349,6 @@ function healthInfoRows() {
         "For babies under 3 months, a rectal temperature of 100.4F or higher is urgent.",
         "Call the pediatrician for fever, low temperature, unusual sleepiness, poor feeding, or breathing concerns.",
         "Use a rectal thermometer when accuracy matters for a newborn."
-      ],
-      tabs: [
-        { key: "health-overview", label: "Health" }
       ]
     },
     {
@@ -4183,7 +4180,6 @@ function renderHealthProductCard(product) {
 
 function healthReferenceTabs() {
   return [
-    { key: "health-overview", label: "Overview", image: "/assets/care/health.png", alt: "Baby health guidance" },
     { key: "health-products", label: "Products" },
     { key: "baby-cries", label: "Cries Check" },
     { key: "wet-diapers-poop-guide", label: "Diaper / Poop", image: "/assets/care/wet-diapers-poop-guide.png", alt: "Wet diapers and poop guide" }
