@@ -1969,6 +1969,11 @@ main {
   color: #3f8e66;
 }
 
+.eat-info-icon.icon-health {
+  background: #eaf7f3;
+  color: #24756f;
+}
+
 .eat-info-copy {
   display: grid;
   min-width: 0;
@@ -2065,6 +2070,30 @@ main {
 .health-overview-card {
   background:
     linear-gradient(180deg, rgba(255, 253, 248, 0.96), rgba(255, 246, 246, 0.94));
+}
+
+.health-basics-group {
+  background:
+    linear-gradient(180deg, rgba(240, 250, 246, 0.94), rgba(255, 253, 248, 0.94));
+}
+
+.health-basics-group > summary {
+  border-bottom: 0;
+}
+
+.health-basics-group[open] > summary {
+  border-bottom: 1px solid rgba(223, 211, 192, 0.7);
+}
+
+.health-basics-list {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  background: rgba(244, 249, 247, 0.68);
+}
+
+.health-basics-list .health-info-row {
+  box-shadow: none;
 }
 
 .health-product-list {

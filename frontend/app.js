@@ -2544,9 +2544,14 @@ function renderSleepCareInfoPanel(issue) {
 }
 
 function renderHealthCareInfoPanel(issue) {
+  const rows = healthInfoRows();
+  const essentials = rows.slice(0, 1);
+  const basics = rows.slice(1);
+
   return `
     <section class="care-detail-info eat-care-info health-care-info" aria-label="${escapeAttr(issue.title)} information">
-      ${healthInfoRows().map(renderHealthInfoRow).join("")}
+      ${essentials.map(renderHealthInfoRow).join("")}
+      ${renderHealthBasicsGroup(basics)}
     </section>
   `;
 }
@@ -2665,6 +2670,29 @@ function renderHealthInfoRow(item) {
   `;
 }
 
+function renderHealthBasicsGroup(rows) {
+  const activeKey = state.selectedCareSubtab.health || "overview";
+  const activeSubviewKey = activeKey.startsWith("health:") ? activeKey.slice("health:".length) : activeKey;
+  const hasActiveChild = rows.some((row) => (row.tabs || []).some((tab) => tab.key === activeSubviewKey));
+  const rowFace = `
+    <span class="eat-info-icon icon-health" aria-hidden="true">${eatInfoIcon("health")}</span>
+    <span class="eat-info-copy">
+      <strong>Basics</strong>
+      <small>Temperature, urgent signs, hydration, comfort, growth, and checkups</small>
+    </span>
+    <span class="eat-info-chevron" aria-hidden="true">&#8250;</span>
+  `;
+
+  return `
+    <details class="eat-info-row health-info-row health-basics-group" ${hasActiveChild ? "open" : ""}>
+      <summary>${rowFace}</summary>
+      <div class="health-basics-list">
+        ${rows.map(renderHealthInfoRow).join("")}
+      </div>
+    </details>
+  `;
+}
+
 function renderEatInfoTabImage(tabKey) {
   const tab = eatReferenceTabs().find((item) => item.key === tabKey);
   if (!tab) return "";
@@ -2720,6 +2748,7 @@ function eatInfoIcon(icon) {
     doctor: "&#9877;",
     medicine: "&#128138;",
     growth: "&#128200;",
+    health: "&#9877;",
     warning: "!"
   };
   return icons[icon] || "&#8226;";
