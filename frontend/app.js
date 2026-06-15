@@ -27,6 +27,7 @@ const state = {
   activeLogsCard: null,
   selectedCareIssue: "troubleshoot",
   selectedCareSubtab: {},
+  selectedDentalTooth: "lower-central-incisors",
   childProofProgress: {},
   diaperBagProgress: {},
   careInfo: {},
@@ -1099,6 +1100,13 @@ function renderCare() {
   panel.querySelectorAll("[data-care-subtab]").forEach((button) => {
     button.addEventListener("click", () => {
       state.selectedCareSubtab[selected.key] = button.dataset.careSubtab;
+      renderCare();
+    });
+  });
+  panel.querySelectorAll("[data-dental-tooth]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedDentalTooth = button.dataset.dentalTooth;
+      state.selectedCareSubtab.health = "health:dental-guide";
       renderCare();
     });
   });
@@ -2342,6 +2350,34 @@ function healthInfoRows() {
       ]
     },
     {
+      icon: "tooth",
+      title: "Dental",
+      text: "Tap baby teeth to see eruption timing and care steps",
+      details: [
+        "Most babies get a first tooth around 6-10 months, but timing varies.",
+        "Start brushing as soon as the first tooth appears.",
+        "Schedule the first dental visit around 12 months or within 6 months of the first tooth."
+      ],
+      tabs: [
+        { key: "dental-guide", label: "Teeth" },
+        { key: "dental-doctor", label: "Doctor" },
+        { key: "baby-teeth-eruption-chart", label: "Chart" }
+      ]
+    },
+    {
+      icon: "health",
+      title: "Common Syndromes",
+      text: "Quick checks for everyday symptom patterns",
+      details: [
+        "Congestion or runny nose: use saline, gentle suction, humidity, and watch feeding and breathing.",
+        "Gas or colic: try burping, bicycle legs, tummy time while awake, and paced feeding; call if belly is hard or baby cannot be consoled.",
+        "Rash or diaper irritation: keep skin clean and dry, use barrier cream, and call for blisters, spreading redness, fever, or pus.",
+        "Spit-up or vomiting: small spit-ups can be common; call for green vomit, blood, repeated forceful vomiting, poor feeding, or fewer wet diapers.",
+        "Constipation or stool changes: watch comfort, feeding, and wet diapers; call for blood, white/gray/black stool, or hard belly.",
+        "Teething discomfort: offer a chilled teether and gum massage; avoid numbing gels unless the pediatrician says to use them."
+      ]
+    },
+    {
       icon: "thermometer",
       title: "Temperature",
       text: "Rectal 100.4F or higher needs pediatric guidance",
@@ -2545,12 +2581,12 @@ function renderSleepCareInfoPanel(issue) {
 
 function renderHealthCareInfoPanel(issue) {
   const rows = healthInfoRows();
-  const essentials = rows.slice(0, 1);
-  const basics = rows.slice(1);
+  const topRows = rows.slice(0, 3);
+  const basics = rows.slice(3);
 
   return `
     <section class="care-detail-info eat-care-info health-care-info" aria-label="${escapeAttr(issue.title)} information">
-      ${essentials.map(renderHealthInfoRow).join("")}
+      ${topRows.map(renderHealthInfoRow).join("")}
       ${renderHealthBasicsGroup(basics)}
     </section>
   `;
@@ -2721,6 +2757,8 @@ function renderHealthInfoTabImage(tabKey) {
     <div class="eat-info-image-frame health-info-image-frame">
       ${tab.key === "baby-cries" ? renderBabyCriesCardClean({ embedded: true }) : ""}
       ${tab.key === "health-products" ? renderHealthProductList() : ""}
+      ${tab.key === "dental-guide" ? renderDentalTeethGuide() : ""}
+      ${tab.key === "dental-doctor" ? renderDentalDoctorGuide() : ""}
       ${tab.image ? `<img src="${escapeAttr(tab.image)}" alt="${escapeAttr(tab.alt)}">` : ""}
     </div>
   `;
@@ -2749,6 +2787,7 @@ function eatInfoIcon(icon) {
     medicine: "&#128138;",
     growth: "&#128200;",
     health: "&#9877;",
+    tooth: "&#129463;",
     warning: "!"
   };
   return icons[icon] || "&#8226;";
@@ -4207,9 +4246,188 @@ function renderHealthProductCard(product) {
   `;
 }
 
+function dentalToothGroups() {
+  return [
+    {
+      key: "lower-central-incisors",
+      number: "1",
+      name: "Lower central incisors",
+      shortName: "Bottom front teeth",
+      jaw: "Lower teeth",
+      erupts: "6-10 months",
+      note: "Often the first tiny teeth to pop through.",
+      care: "Brush twice daily once visible with a rice-grain smear of fluoride toothpaste."
+    },
+    {
+      key: "upper-central-incisors",
+      number: "2",
+      name: "Upper central incisors",
+      shortName: "Top front teeth",
+      jaw: "Upper teeth",
+      erupts: "8-10 months",
+      note: "These make the baby grin look very official.",
+      care: "Lift the lip during brushing so milk residue does not hide along the gumline."
+    },
+    {
+      key: "upper-lateral-incisors",
+      number: "3",
+      name: "Upper lateral incisors",
+      shortName: "Side front teeth",
+      jaw: "Upper teeth",
+      erupts: "8-13 months",
+      note: "These fill in beside the top front teeth.",
+      care: "Keep brushing gentle; swollen gums can make this stage dramatic."
+    },
+    {
+      key: "lower-lateral-incisors",
+      number: "4",
+      name: "Lower lateral incisors",
+      shortName: "Side front teeth",
+      jaw: "Lower teeth",
+      erupts: "9-13 months",
+      note: "These usually arrive soon after the front pair.",
+      care: "Offer a chilled teether or clean wet washcloth for gum pressure."
+    },
+    {
+      key: "first-molars",
+      number: "5",
+      name: "First molars",
+      shortName: "Back teeth",
+      jaw: "Upper and lower teeth",
+      erupts: "13-19 months",
+      note: "Molars are wider, so chewing and night waking may increase.",
+      care: "Brush the chewing surfaces carefully; food can sit in the grooves."
+    },
+    {
+      key: "canines",
+      number: "6-7",
+      name: "Canines",
+      shortName: "Pointy teeth",
+      jaw: "Upper and lower teeth",
+      erupts: "16-23 months",
+      note: "Upper canines often show around 16-22 months; lower canines around 17-23 months.",
+      care: "Use playful brushing names like tiger teeth or sparkle teeth to keep it fun."
+    },
+    {
+      key: "second-molars",
+      number: "8-10",
+      name: "Second molars",
+      shortName: "Very back teeth",
+      jaw: "Upper and lower teeth",
+      erupts: "23-31 months",
+      note: "These usually complete the baby-tooth set.",
+      care: "By around 30 months, many children have all 20 baby teeth."
+    }
+  ];
+}
+
+function dentalToothPositions() {
+  return [
+    { key: "second-molars", label: "10", x: 15, y: 32 },
+    { key: "first-molars", label: "5", x: 23, y: 18 },
+    { key: "canines", label: "7", x: 36, y: 10 },
+    { key: "upper-lateral-incisors", label: "3", x: 46, y: 7 },
+    { key: "upper-central-incisors", label: "2", x: 56, y: 6 },
+    { key: "upper-central-incisors", label: "2", x: 66, y: 6 },
+    { key: "upper-lateral-incisors", label: "3", x: 76, y: 7 },
+    { key: "canines", label: "7", x: 86, y: 10 },
+    { key: "first-molars", label: "5", x: 99, y: 18 },
+    { key: "second-molars", label: "10", x: 107, y: 32 },
+    { key: "second-molars", label: "8-10", x: 18, y: 82 },
+    { key: "canines", label: "6-7", x: 30, y: 94 },
+    { key: "first-molars", label: "5", x: 44, y: 99 },
+    { key: "lower-lateral-incisors", label: "4", x: 55, y: 102 },
+    { key: "lower-central-incisors", label: "1", x: 63, y: 103 },
+    { key: "lower-central-incisors", label: "1", x: 71, y: 103 },
+    { key: "lower-lateral-incisors", label: "4", x: 79, y: 102 },
+    { key: "first-molars", label: "5", x: 90, y: 99 },
+    { key: "canines", label: "6-7", x: 104, y: 94 },
+    { key: "second-molars", label: "8-10", x: 116, y: 82 }
+  ];
+}
+
+function selectedDentalToothGroup() {
+  const groups = dentalToothGroups();
+  return groups.find((group) => group.key === state.selectedDentalTooth) || groups[0];
+}
+
+function renderDentalTeethGuide() {
+  const selected = selectedDentalToothGroup();
+  return `
+    <section class="dental-guide" aria-label="Baby teeth eruption guide">
+      <div class="dental-mouth-card">
+        <div class="dental-mouth-title">
+          <strong>Baby Teeth</strong>
+          <span>Tap a tooth</span>
+        </div>
+        <div class="dental-mouth" aria-label="Interactive baby teeth chart">
+          ${dentalToothPositions().map((tooth) => `
+            <button class="dental-tooth ${tooth.key === selected.key ? "active" : ""}" type="button" data-dental-tooth="${escapeAttr(tooth.key)}" style="--tooth-x:${tooth.x}%; --tooth-y:${tooth.y}%;" aria-pressed="${tooth.key === selected.key ? "true" : "false"}">
+              ${escapeHtml(tooth.label)}
+            </button>
+          `).join("")}
+          <div class="dental-baby-face" aria-hidden="true">:)</div>
+        </div>
+      </div>
+      <article class="dental-selected-card">
+        <span class="dental-pill">${escapeHtml(selected.jaw)}</span>
+        <h4>${escapeHtml(selected.name)}</h4>
+        <p class="dental-erupts">Usually erupts: <strong>${escapeHtml(selected.erupts)}</strong></p>
+        <p>${escapeHtml(selected.note)}</p>
+        <p>${escapeHtml(selected.care)}</p>
+      </article>
+      <div class="dental-timeline">
+        ${dentalToothGroups().map((group) => `
+          <button class="${group.key === selected.key ? "active" : ""}" type="button" data-dental-tooth="${escapeAttr(group.key)}">
+            <span>${escapeHtml(group.number)}</span>
+            <strong>${escapeHtml(group.erupts)}</strong>
+            <small>${escapeHtml(group.shortName)}</small>
+          </button>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderDentalDoctorGuide() {
+  return `
+    <section class="dental-doctor-guide" aria-label="Dental doctor guideline">
+      <article class="dental-guideline-card">
+        <h4>Dental Care Milestones</h4>
+        <ul>
+          <li><strong>First tooth:</strong> begin brushing twice daily.</li>
+          <li><strong>Toothpaste:</strong> use a rice-grain sized smear of fluoride toothpaste.</li>
+          <li><strong>Around 12 months:</strong> first dental visit is recommended.</li>
+          <li><strong>Around 30 months:</strong> many children have all 20 baby teeth.</li>
+        </ul>
+      </article>
+      <article class="dental-guideline-card warn">
+        <h4>Call The Doctor</h4>
+        <ul>
+          <li>Fever over 100.4F / 38C, severe diarrhea, persistent vomiting, or significant lethargy.</li>
+          <li>Signs of dehydration, poor feeding, or fewer wet diapers.</li>
+          <li>Mouth injury, bleeding that will not stop, pus, swelling, or white/brown spots on teeth.</li>
+          <li>If symptoms feel bigger than normal teething, treat it as illness until a clinician says otherwise.</li>
+        </ul>
+      </article>
+      <article class="dental-guideline-card">
+        <h4>What Teething Can Look Like</h4>
+        <ul>
+          <li>Drooling, chewing on everything, irritability, swollen gums, and waking more at night.</li>
+          <li>Temporary decreased interest in feeding can happen, but baby should still hydrate.</li>
+          <li>High fever, severe diarrhea, persistent vomiting, and major lethargy are not usually caused by teething.</li>
+        </ul>
+      </article>
+    </section>
+  `;
+}
+
 function healthReferenceTabs() {
   return [
     { key: "health-products", label: "Products" },
+    { key: "dental-guide", label: "Teeth" },
+    { key: "dental-doctor", label: "Doctor" },
+    { key: "baby-teeth-eruption-chart", label: "Chart", image: "/assets/care/baby-teeth-eruption-chart.png", alt: "Baby teeth eruption chart" },
     { key: "baby-cries", label: "Cries Check" },
     { key: "wet-diapers-poop-guide", label: "Diaper / Poop", image: "/assets/care/wet-diapers-poop-guide.png", alt: "Wet diapers and poop guide" }
   ];
